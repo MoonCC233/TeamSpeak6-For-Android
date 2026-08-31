@@ -17,6 +17,8 @@ room = "2.6.1"
 datastore = "1.1.1"
 coroutines = "1.9.0"
 webrtc = "125.6422.07"
+ts3j = "db57d60c989e399626aa16d921390f5033e6cdeb"
+concentus = "6c2328dc19"
 junit = "4.13.2"
 androidxJunit = "1.2.1"
 espresso = "3.6.1"
@@ -52,6 +54,8 @@ okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor",
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-kotlinx-serialization = { group = "com.jakewharton.retrofit", name = "retrofit2-kotlinx-serialization-converter", version.ref = "retrofitSerialization" }
 webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
+ts3j = { group = "com.github.Manevolent", name = "ts3j", version.ref = "ts3j" }
+concentus = { group = "com.github.lostromb.Concentus", name = "Concentus", version.ref = "concentus" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxJunit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }

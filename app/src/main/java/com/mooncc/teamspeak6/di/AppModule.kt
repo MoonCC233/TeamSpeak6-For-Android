@@ -10,6 +10,7 @@ import com.mooncc.teamspeak6.data.repository.BookmarkRepositoryImpl
 import com.mooncc.teamspeak6.data.repository.TeamSpeakRepositoryImpl
 import com.mooncc.teamspeak6.domain.repository.BookmarkRepository
 import com.mooncc.teamspeak6.domain.repository.TeamSpeakRepository
+import com.mooncc.teamspeak6.voice.identity.IdentityStore
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -88,6 +89,11 @@ object AppModule {
     @Singleton
     fun provideSettingsStore(@ApplicationContext context: Context): SettingsStore =
         SettingsStore(context)
+
+    @Provides
+    @Singleton
+    fun provideIdentityStore(@ApplicationContext context: Context): IdentityStore =
+        IdentityStore(context)
 }
 
 @Module

@@ -88,6 +88,8 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.webrtc)
+    implementation(libs.ts3j)
+    implementation(libs.concentus)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

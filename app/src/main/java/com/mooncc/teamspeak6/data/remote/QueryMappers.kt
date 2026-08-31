@@ -8,6 +8,7 @@ import com.mooncc.teamspeak6.data.remote.WebQueryClient.Companion.str
 import com.mooncc.teamspeak6.domain.model.Channel
 import com.mooncc.teamspeak6.domain.model.ChannelCodec
 import com.mooncc.teamspeak6.domain.model.ChannelGroup
+import com.mooncc.teamspeak6.domain.model.ChannelSpacer
 import com.mooncc.teamspeak6.domain.model.Client
 import com.mooncc.teamspeak6.domain.model.ClientType
 import com.mooncc.teamspeak6.domain.model.GroupType
@@ -43,7 +44,7 @@ object QueryMappers {
 
     fun toChannel(row: JsonObject): Channel {
         val rawName = row.str("channel_name")
-        val spacer = parseSpacer(rawName, row.int("channel_order"), row.int("cid"))
+        val spacer = ChannelSpacer.parse(rawName)
         return Channel(
             id = row.int("cid", row.int("channel_id")),
             parentId = row.int("pid", row.int("cpid")),
@@ -153,23 +154,4 @@ object QueryMappers {
         isRead = row.bool("flag_read"),
     )
 
-    private data class SpacerInfo(val alignment: SpacerAlignment, val label: String)
-
-    /**
-     * TeamSpeak marks spacer channels by prefixing the name with
-     * `[*spacerN]`, `[cspacerN]`, `[lspacerN]`, or `[rspacerN]`.
-     */
-    private fun parseSpacer(name: String, order: Int, cid: Int): SpacerInfo? {
-        val match = SPACER_REGEX.matchEntire(name) ?: return null
-        val alignment = when (match.groupValues[1].lowercase()) {
-            "*" -> SpacerAlignment.REPEAT
-            "c" -> SpacerAlignment.CENTER
-            "r" -> SpacerAlignment.RIGHT
-            "l" -> SpacerAlignment.LEFT
-            else -> SpacerAlignment.LEFT
-        }
-        return SpacerInfo(alignment, match.groupValues[3])
-    }
-
-    private val SPACER_REGEX = Regex("""^\[([*clr])spacer(\d*)](.*)$""")
 }
