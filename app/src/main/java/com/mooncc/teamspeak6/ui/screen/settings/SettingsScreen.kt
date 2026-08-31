@@ -139,6 +139,23 @@ fun SettingsScreen(
 
             item {
                 SectionTitle("屏幕共享")
+                OutlinedTextField(
+                    value = settings.signalingUrl,
+                    onValueChange = { value ->
+                        viewModel.update { it.copy(signalingUrl = value.trim()) }
+                    },
+                    label = { Text("信令服务地址") },
+                    placeholder = { Text("wss://example.com/mss") },
+                    supportingText = {
+                        Text(
+                            "屏幕共享使用本项目自有协议（见 docs/screenshare-protocol.md），" +
+                                "无法与 TeamSpeak 官方客户端互看。留空则禁用屏幕共享。",
+                        )
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 SliderRow(
                     title = "码率",
                     valueLabel = "${settings.screenShareBitrateKbps} kbps",
@@ -158,6 +175,12 @@ fun SettingsScreen(
                     onValueChange = { value ->
                         viewModel.update { it.copy(screenShareFps = value.toInt()) }
                     },
+                )
+                Text(
+                    text = "连接模式、分辨率、隐私等其余选项在服务器界面的“屏幕”标签页里调整。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
 

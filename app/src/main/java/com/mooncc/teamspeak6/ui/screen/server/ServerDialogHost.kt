@@ -160,6 +160,13 @@ fun ServerDialogHost(
             onDismiss = dismiss,
             onConfirm = viewModel::setAway,
         )
+
+        ServerDialog.ScreenShareOptions -> ScreenShareOptionsDialog(
+            config = state.screenShare.config,
+            serverModeAvailable = state.screenShare.serverModeAvailable,
+            onDismiss = dismiss,
+            onConfirm = viewModel::applyScreenShareConfig,
+        )
     }
 }
 

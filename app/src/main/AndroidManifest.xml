@@ -46,6 +46,11 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".screenshare.service.ScreenShareService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
     </application>
 
 </manifest>

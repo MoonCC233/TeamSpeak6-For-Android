@@ -11,9 +11,17 @@ import com.mooncc.teamspeak6.domain.model.Client
 import com.mooncc.teamspeak6.domain.model.ConnectionState
 import com.mooncc.teamspeak6.domain.model.Conversation
 import com.mooncc.teamspeak6.domain.model.LocalMediaState
+import com.mooncc.teamspeak6.domain.model.ScreenShareConfig
+import com.mooncc.teamspeak6.domain.model.ScreenShareMode
+import com.mooncc.teamspeak6.domain.model.ScreenSharePrivacy
+import com.mooncc.teamspeak6.domain.model.ScreenShareResolution
+import com.mooncc.teamspeak6.domain.model.ScreenShareState
 import com.mooncc.teamspeak6.domain.model.ServerEvent
 import com.mooncc.teamspeak6.domain.repository.BookmarkRepository
 import com.mooncc.teamspeak6.domain.repository.TeamSpeakRepository
+import com.mooncc.teamspeak6.data.local.AppSettings
+import com.mooncc.teamspeak6.data.local.SettingsStore
+import com.mooncc.teamspeak6.screenshare.ScreenShareManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +30,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -49,6 +60,9 @@ sealed interface ServerDialog {
     data class ServerGroups(val client: Client) : ServerDialog
     data object Nickname : ServerDialog
     data object AwayMessage : ServerDialog
+
+    /** Pre-share options: mode, resolution, bitrate, privacy. */
+    data object ScreenShareOptions : ServerDialog
 }
 
 data class ServerUiState(
@@ -61,6 +75,7 @@ data class ServerUiState(
     val activeConversationKey: String? = null,
     val dialog: ServerDialog = ServerDialog.None,
     val statusMessage: String? = null,
+    val screenShare: ScreenShareState = ScreenShareState(),
 ) {
     val totalUnread: Int get() = conversations.sumOf { it.unreadCount }
     val activeConversation: Conversation?
@@ -72,6 +87,8 @@ data class ServerUiState(
 class ServerViewModel @Inject constructor(
     private val repository: TeamSpeakRepository,
     private val bookmarkRepository: BookmarkRepository,
+    private val screenShareManager: ScreenShareManager,
+    private val settingsStore: SettingsStore,
 ) : ViewModel() {
 
     private val collapsedChannelIds = MutableStateFlow<Set<Int>>(emptySet())
@@ -100,23 +117,39 @@ class ServerViewModel @Inject constructor(
         PanelState(tab, currentDialog, conversationKey, status)
     }
 
+    /** Remote video tracks keyed by publisher id, consumed by the renderers. */
+    val remoteScreenTracks = screenShareManager.remoteTracks
+    val eglBaseContext get() = screenShareManager.eglBaseContext
+
+    /** Signals the Activity to show the MediaProjection consent dialog. */
+    val screenSharePermissionRequests: SharedFlow<Unit> = screenShareManager.permissionRequests
+
     val uiState: StateFlow<ServerUiState> = combine(
         repository.connectionState,
         treeState,
         repository.localMediaState,
         repository.conversations,
         panelState,
-    ) { connection, rows, media, conversations, panel ->
+        screenShareManager.state,
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val connection = values[0] as ConnectionState
+        val rows = values[1] as List<ChannelTreeRow>
+        val media = values[2] as LocalMediaState
+        val conversations = values[3] as List<Conversation>
+        val panel = values[4] as PanelState
+        val screenShare = values[5] as ScreenShareState
         ServerUiState(
             connection = connection,
             rows = rows,
             selectedTab = panel.tab,
             collapsedChannelIds = collapsedChannelIds.value,
-            media = media,
+            media = media.copy(isSharingScreen = screenShare.isSharing),
             conversations = conversations,
             activeConversationKey = panel.conversationKey,
             dialog = panel.dialog,
             statusMessage = panel.status,
+            screenShare = screenShare,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ServerUiState())
 
@@ -129,6 +162,43 @@ class ServerViewModel @Inject constructor(
 
     private val _isConnecting = MutableStateFlow(false)
     val isConnecting: StateFlow<Boolean> = _isConnecting.asStateFlow()
+
+    init {
+        // The signaling room is derived from the TeamSpeak channel, so re-dial on
+        // every channel change and drop out when the connection goes away.
+        viewModelScope.launch {
+            repository.connectionState
+                .map { RoomKey(it.isConnected, it.server?.uniqueIdentifier.orEmpty(), it.currentChannelId, it.localClientId) }
+                .distinctUntilChanged()
+                .collect { key ->
+                    if (!key.connected || key.channelId == 0) {
+                        screenShareManager.leaveRoom()
+                        return@collect
+                    }
+                    val settings = settingsStore.settings.first()
+                    screenShareManager.updateConfig { settings.toShareConfig() }
+                    val local = repository.clients.value.firstOrNull { it.id == key.localClientId }
+                    screenShareManager.enterRoom(
+                        signalingUrl = settings.signalingUrl,
+                        serverUid = key.serverUid,
+                        channelId = key.channelId,
+                        clientUid = local?.uniqueIdentifier.orEmpty(),
+                        tsClientId = key.localClientId,
+                        nickname = local?.nickname ?: settings.defaultNickname,
+                    )
+                }
+        }
+        viewModelScope.launch {
+            screenShareManager.messages.collect { statusMessage.value = it }
+        }
+    }
+
+    private data class RoomKey(
+        val connected: Boolean,
+        val serverUid: String,
+        val channelId: Int,
+        val localClientId: Int,
+    )
 
     // ----------------------------------------------------------- connection
 
@@ -411,4 +481,78 @@ class ServerViewModel @Inject constructor(
     fun showStatus(message: String) {
         statusMessage.value = message
     }
+
+    // --------------------------------------------------------- screen share
+
+    /** Toggles the local share, going through the system consent dialog when starting. */
+    fun onToggleScreenShare() {
+        screenShareManager.requestSharing()
+    }
+
+    fun showScreenShareOptions() {
+        dialog.value = ServerDialog.ScreenShareOptions
+    }
+
+    /** Persists the picked options so they survive restarts, then applies them. */
+    fun applyScreenShareConfig(config: ScreenShareConfig) {
+        dismissDialog()
+        screenShareManager.applyLiveConfig(config)
+        viewModelScope.launch {
+            settingsStore.update { it.withShareConfig(config) }
+        }
+    }
+
+    fun onScreenSharePermissionGranted(intent: android.content.Intent) {
+        screenShareManager.onPermissionGranted(intent)
+    }
+
+    fun onScreenSharePermissionDenied() {
+        screenShareManager.onPermissionDenied()
+    }
+
+    fun watchShare(publisherId: String) {
+        screenShareManager.watch(publisherId)
+    }
+
+    fun stopWatchingShare(publisherId: String) {
+        screenShareManager.stopWatching(publisherId)
+    }
+
+    fun approveViewer(peerId: String) {
+        screenShareManager.approveViewer(peerId)
+    }
+
+    fun denyViewer(peerId: String) {
+        screenShareManager.denyViewer(peerId)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        screenShareManager.leaveRoom()
+    }
 }
+
+private fun AppSettings.toShareConfig() = ScreenShareConfig(
+    mode = runCatching { ScreenShareMode.valueOf(screenShareMode) }
+        .getOrDefault(ScreenShareMode.P2P),
+    privacy = runCatching { ScreenSharePrivacy.valueOf(screenSharePrivacy) }
+        .getOrDefault(ScreenSharePrivacy.PUBLIC),
+    resolution = runCatching { ScreenShareResolution.valueOf(screenShareResolution) }
+        .getOrDefault(ScreenShareResolution.P720),
+    fps = screenShareFps,
+    videoBitrateKbps = screenShareBitrateKbps,
+    captureAudio = screenShareAudio,
+    audioBitrateKbps = screenShareAudioBitrateKbps,
+    viewerLimit = screenShareViewerLimit,
+)
+
+private fun AppSettings.withShareConfig(config: ScreenShareConfig) = copy(
+    screenShareMode = config.mode.name,
+    screenSharePrivacy = config.privacy.name,
+    screenShareResolution = config.resolution.name,
+    screenShareFps = config.fps,
+    screenShareBitrateKbps = config.videoBitrateKbps,
+    screenShareAudio = config.captureAudio,
+    screenShareAudioBitrateKbps = config.audioBitrateKbps,
+    screenShareViewerLimit = config.viewerLimit,
+)

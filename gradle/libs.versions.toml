@@ -47,6 +47,7 @@ hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-com
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
 ts3j = { group = "com.github.Manevolent", name = "ts3j", version.ref = "ts3j" }

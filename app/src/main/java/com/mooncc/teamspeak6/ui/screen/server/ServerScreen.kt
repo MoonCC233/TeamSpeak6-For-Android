@@ -1,5 +1,9 @@
 package com.mooncc.teamspeak6.ui.screen.server
 
+import android.app.Activity
+import android.media.projection.MediaProjectionManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -65,9 +70,32 @@ fun ServerScreen(
     val state by viewModel.uiState.collectAsState()
     val serverGroups by viewModel.serverGroups.collectAsState()
     val channelTree by viewModel.channelTree.collectAsState()
-    val clients by viewModel.clients.collectAsState()
+    val remoteTracks by viewModel.remoteScreenTracks.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
+
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == Activity.RESULT_OK && data != null) {
+            viewModel.onScreenSharePermissionGranted(data)
+        } else {
+            viewModel.onScreenSharePermissionDenied()
+        }
+    }
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.screenSharePermissionRequests.collect {
+            val manager = context.getSystemService(MediaProjectionManager::class.java)
+            if (manager == null) {
+                viewModel.onScreenSharePermissionDenied()
+            } else {
+                screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+            }
+        }
+    }
 
     LaunchedEffect(bookmarkId) {
         if (bookmarkId > 0) viewModel.connectToBookmark(bookmarkId)
@@ -182,9 +210,7 @@ fun ServerScreen(
                     onToggleSpeaker = viewModel::toggleSpeaker,
                     onTogglePushToTalk = viewModel::togglePushToTalk,
                     onPushToTalkPressed = viewModel::setPushToTalkActive,
-                    onToggleScreenShare = {
-                        viewModel.showStatus("屏幕共享需要配置 WebRTC 桥，将在下一阶段接入")
-                    },
+                    onToggleScreenShare = viewModel::onToggleScreenShare,
                     onToggleChannelCommander = viewModel::toggleChannelCommander,
                 )
                 NavigationBar {
@@ -242,7 +268,14 @@ fun ServerScreen(
                 )
 
                 ServerTab.SCREEN_SHARE -> ScreenSharePane(
-                    sharingClients = clients.filter { it.isSharingScreen },
+                    state = state.screenShare,
+                    remoteTracks = remoteTracks,
+                    eglBaseContext = viewModel.eglBaseContext,
+                    onWatch = viewModel::watchShare,
+                    onStopWatching = viewModel::stopWatchingShare,
+                    onApproveViewer = viewModel::approveViewer,
+                    onDenyViewer = viewModel::denyViewer,
+                    onOpenOptions = viewModel::showScreenShareOptions,
                 )
             }
         }
