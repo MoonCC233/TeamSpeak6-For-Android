@@ -71,44 +71,19 @@ fun BookmarkEditorDialog(
                                 it.copy(voicePort = value.toIntOrNull() ?: it.voicePort)
                             }
                         },
-                        label = { Text("语音端口") },
+                        label = { Text("端口") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
-                        value = draft.queryPort.toString(),
-                        onValueChange = { value ->
-                            onDraftChange {
-                                it.copy(queryPort = value.toIntOrNull() ?: it.queryPort)
-                            }
-                        },
-                        label = { Text("查询端口") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        value = draft.nickname,
+                        onValueChange = { value -> onDraftChange { it.copy(nickname = value) } },
+                        label = { Text("昵称") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                     )
                 }
-                CheckboxRow(
-                    checked = draft.useTls,
-                    label = "查询接口使用 HTTPS",
-                    onCheckedChange = { value -> onDraftChange { it.copy(useTls = value) } },
-                )
-                OutlinedTextField(
-                    value = draft.nickname,
-                    onValueChange = { value -> onDraftChange { it.copy(nickname = value) } },
-                    label = { Text("昵称") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = draft.apiKey,
-                    onValueChange = { value -> onDraftChange { it.copy(apiKey = value.trim()) } },
-                    label = { Text("WebQuery API Key") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
                 OutlinedTextField(
                     value = draft.serverPassword,
                     onValueChange = { value -> onDraftChange { it.copy(serverPassword = value) } },
@@ -117,39 +92,26 @@ fun BookmarkEditorDialog(
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                        value = draft.virtualServerId.toString(),
-                        onValueChange = { value ->
-                            onDraftChange {
-                                it.copy(virtualServerId = value.toIntOrNull() ?: it.virtualServerId)
-                            }
-                        },
-                        label = { Text("虚拟服务器 ID") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = draft.defaultChannel,
-                        onValueChange = { value ->
-                            onDraftChange { it.copy(defaultChannel = value) }
-                        },
-                        label = { Text("默认频道") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
                 OutlinedTextField(
-                    value = draft.bridgeUrl,
-                    onValueChange = { value -> onDraftChange { it.copy(bridgeUrl = value.trim()) } },
-                    label = { Text("语音桥地址（WebRTC）") },
-                    placeholder = { Text("wss://bridge.example.com/ws") },
+                    value = draft.defaultChannel,
+                    onValueChange = { value -> onDraftChange { it.copy(defaultChannel = value) } },
+                    label = { Text("默认频道（可选）") },
+                    placeholder = { Text("Lobby/Room 1") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = draft.defaultChannelPassword,
+                    onValueChange = { value ->
+                        onDraftChange { it.copy(defaultChannelPassword = value) }
+                    },
+                    label = { Text("默认频道密码（可选）") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Text(
-                    text = "语音与屏幕共享需要配套的 WebRTC 桥接服务；留空则仅启用管控与聊天功能。",
+                    text = "使用与电脑端相同的原生协议直连，无需服务器额外配置。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

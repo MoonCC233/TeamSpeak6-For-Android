@@ -7,7 +7,7 @@ import com.mooncc.teamspeak6.data.local.ChatMessageDao
 import com.mooncc.teamspeak6.data.local.SettingsStore
 import com.mooncc.teamspeak6.data.local.TeamSpeakDatabase
 import com.mooncc.teamspeak6.data.repository.BookmarkRepositoryImpl
-import com.mooncc.teamspeak6.data.repository.TeamSpeakRepositoryImpl
+import com.mooncc.teamspeak6.data.repository.NativeTeamSpeakRepositoryImpl
 import com.mooncc.teamspeak6.domain.repository.BookmarkRepository
 import com.mooncc.teamspeak6.domain.repository.TeamSpeakRepository
 import com.mooncc.teamspeak6.voice.identity.IdentityStore
@@ -23,37 +23,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.Dispatchers
-import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
-    @Provides
-    @Singleton
-    fun provideJson(): Json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
-        explicitNulls = false
-    }
-
-    @Provides
-    @Singleton
-    @QueryHttpClient
-    fun provideQueryHttpClient(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
-        .addInterceptor(
-            HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            },
-        )
-        .build()
 
     @Provides
     @Singleton
@@ -106,5 +80,5 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindTeamSpeakRepository(impl: TeamSpeakRepositoryImpl): TeamSpeakRepository
+    abstract fun bindTeamSpeakRepository(impl: NativeTeamSpeakRepositoryImpl): TeamSpeakRepository
 }

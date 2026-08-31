@@ -2,12 +2,7 @@ package com.mooncc.teamspeak6.di
 
 import javax.inject.Qualifier
 
-/** OkHttp client tuned for the WebQuery interface. */
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class QueryHttpClient
-
-/** OkHttp client used for the WebRTC signaling socket. */
+/** OkHttp client used for the screen-share signaling socket. */
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class SignalingHttpClient

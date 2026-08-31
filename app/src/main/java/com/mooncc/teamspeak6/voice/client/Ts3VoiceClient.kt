@@ -30,6 +30,7 @@ import com.github.manevolent.ts3j.protocol.ProtocolRole
 import com.github.manevolent.ts3j.protocol.TS3DNS
 import com.github.manevolent.ts3j.protocol.client.ClientConnectionState
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
+import com.github.manevolent.ts3j.util.Ts3Crypt
 import com.mooncc.teamspeak6.voice.audio.VoiceCaptureEngine
 import com.mooncc.teamspeak6.voice.audio.VoicePlaybackEngine
 import com.mooncc.teamspeak6.voice.identity.IdentityManager
@@ -92,6 +93,7 @@ internal class Ts3VoiceClient(
         serverPassword: String,
         defaultChannel: String,
         defaultChannelPassword: String,
+        subscribeAll: Boolean = true,
         timeoutMs: Long = CONNECT_TIMEOUT_MS,
     ): Result<Unit> = connectMutex.withLock {
         if (socket != null) disconnectInternal()
@@ -124,7 +126,7 @@ internal class Ts3VoiceClient(
                 socket = client
                 try {
                     client.connect(resolve(host, port), serverPassword.ifBlank { null }, timeoutMs)
-                    client.subscribeAll()
+                    if (subscribeAll) client.subscribeAll()
                     Unit
                 } catch (t: Throwable) {
                     socket = null
@@ -228,6 +230,39 @@ internal class Ts3VoiceClient(
     suspend fun listServerGroups(): Result<List<Map<String, String>>> = command("servergrouplist")
 
     suspend fun listChannelGroups(): Result<List<Map<String, String>>> = command("channelgrouplist")
+
+    suspend fun listMyPermissions(): Result<List<Map<String, String>>> =
+        command("clientgetpermissions")
+
+    suspend fun sendChannelMessage(channelId: Int, text: String): Result<Unit> = execute(
+        "sendtextmessage",
+        mapOf(
+            "targetmode" to Ts3Event.TARGET_CHANNEL.toString(),
+            "target" to channelId.toString(),
+            "msg" to text,
+        ),
+    )
+
+    suspend fun sendPrivateMessage(clientId: Int, text: String): Result<Unit> = execute(
+        "sendtextmessage",
+        mapOf(
+            "targetmode" to Ts3Event.TARGET_CLIENT.toString(),
+            "target" to clientId.toString(),
+            "msg" to text,
+        ),
+    )
+
+    /**
+     * Server-wide chat needs the virtual server id, which ts3j keeps private —
+     * so this one has to go through its helper rather than [command].
+     */
+    suspend fun sendServerMessage(text: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val client = socket ?: return@withContext Result.failure(IOException("not connected"))
+        runCatching { client.sendServerMessage(text) }
+    }
+
+    /** Channel passwords travel hashed, never in the clear. */
+    fun hashPassword(password: String): String = Ts3Crypt.hashPassword(password)
 
     /** Ping to the server in milliseconds, or `0` while disconnected. */
     val pingMs: Long

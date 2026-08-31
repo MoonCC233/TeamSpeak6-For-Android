@@ -30,7 +30,6 @@ data class AppSettings(
     val notifyOnMessage: Boolean = true,
     val keepScreenOnWhileConnected: Boolean = true,
     val autoSubscribeChannels: Boolean = true,
-    val pollIntervalMs: Int = 2000,
     val screenShareBitrateKbps: Int = 2500,
     val screenShareFps: Int = 15,
 )
@@ -52,7 +51,6 @@ class SettingsStore(private val context: Context) {
             notifyOnMessage = prefs[KEY_NOTIFY_MESSAGE] ?: true,
             keepScreenOnWhileConnected = prefs[KEY_KEEP_SCREEN_ON] ?: true,
             autoSubscribeChannels = prefs[KEY_AUTO_SUBSCRIBE] ?: true,
-            pollIntervalMs = prefs[KEY_POLL_INTERVAL] ?: 2000,
             screenShareBitrateKbps = prefs[KEY_SHARE_BITRATE] ?: 2500,
             screenShareFps = prefs[KEY_SHARE_FPS] ?: 15,
         )
@@ -74,7 +72,6 @@ class SettingsStore(private val context: Context) {
                 notifyOnMessage = prefs[KEY_NOTIFY_MESSAGE] ?: true,
                 keepScreenOnWhileConnected = prefs[KEY_KEEP_SCREEN_ON] ?: true,
                 autoSubscribeChannels = prefs[KEY_AUTO_SUBSCRIBE] ?: true,
-                pollIntervalMs = prefs[KEY_POLL_INTERVAL] ?: 2000,
                 screenShareBitrateKbps = prefs[KEY_SHARE_BITRATE] ?: 2500,
                 screenShareFps = prefs[KEY_SHARE_FPS] ?: 15,
             )
@@ -92,7 +89,6 @@ class SettingsStore(private val context: Context) {
             prefs[KEY_NOTIFY_MESSAGE] = next.notifyOnMessage
             prefs[KEY_KEEP_SCREEN_ON] = next.keepScreenOnWhileConnected
             prefs[KEY_AUTO_SUBSCRIBE] = next.autoSubscribeChannels
-            prefs[KEY_POLL_INTERVAL] = next.pollIntervalMs
             prefs[KEY_SHARE_BITRATE] = next.screenShareBitrateKbps
             prefs[KEY_SHARE_FPS] = next.screenShareFps
         }
@@ -112,7 +108,6 @@ class SettingsStore(private val context: Context) {
         val KEY_NOTIFY_MESSAGE = booleanPreferencesKey("notify_message")
         val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val KEY_AUTO_SUBSCRIBE = booleanPreferencesKey("auto_subscribe")
-        val KEY_POLL_INTERVAL = intPreferencesKey("poll_interval_ms")
         val KEY_SHARE_BITRATE = intPreferencesKey("share_bitrate_kbps")
         val KEY_SHARE_FPS = intPreferencesKey("share_fps")
     }

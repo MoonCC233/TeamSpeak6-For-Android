@@ -202,20 +202,6 @@ fun SettingsScreen(
                         viewModel.update { it.copy(autoSubscribeChannels = value) }
                     },
                 )
-                OutlinedTextField(
-                    value = settings.pollIntervalMs.toString(),
-                    onValueChange = { value ->
-                        val parsed = value.filter(Char::isDigit).toIntOrNull()
-                        if (parsed != null) {
-                            viewModel.update { it.copy(pollIntervalMs = parsed) }
-                        }
-                    },
-                    label = { Text("状态刷新间隔（毫秒）") },
-                    supportingText = { Text("越小越实时，但更耗流量。范围 500–15000") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
     }
