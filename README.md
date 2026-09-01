@@ -68,18 +68,18 @@ npm start
 
 同时补了一份 PC 端参考伴生程序，位于 `pc-companion/`，它同时包含：
 
-- 一个桌面端 Electron 版界面，用于连接信令服务并显示远端屏幕
+- 一个基于浏览器的桌面端界面，用于连接信令服务、开始/停止屏幕共享，并渲染远端共享画面
 - 一个 CLI 版信令脚本，用于在无界面环境中验证同 room 的 `watch / offer / answer / candidate` 流程
 
 ```bash
 cd pc-companion
-npm install
-npm start              # Electron 桌面界面
+npm install   # 仅用于兼容 CLI 入口；浏览器界面不需要额外依赖
+npm start     # 启动本地静态 UI： http://127.0.0.1:4173
 npm run start:cli -- --room room-123 --uid pc-a --name DeskA --publish
-npm run start:cli -- --room room-123 --uid pc-b --name DeskB --watch p_xxx
+npm run start:cli -- --uid pc-b --name DeskB --watch p_xxx
 ```
 
-这份示例用于验证同一 MSS 协议的桌面端与 Android 端可以在相同 room 中交换 `watch` / `offer` / `answer` / `candidate` 信令。
+浏览器版会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。
 
 ## 技术栈
 
