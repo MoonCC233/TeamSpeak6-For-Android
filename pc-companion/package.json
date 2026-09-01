@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "start:cli": "node client.js",
+    "check:lan": "node lan-check.js",
     "test": "node smoke-test.js"
   },
   "dependencies": {

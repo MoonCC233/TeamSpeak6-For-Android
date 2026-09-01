@@ -100,6 +100,34 @@ npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流�
 - 发布端收到 `offer` 后发 `answer`
 - 双端继续交换 `candidate`，直到 `connected` 或 `ontrack` 触发
 
+#### 局域网真实设备联调命令
+
+在同一 Wi‑Fi / 局域网下，先在桌面端启动信令服务，然后用以下命令检查设备是否能在同房间互相看到：
+
+```bash
+cd signaling-server
+npm install
+npm start
+```
+
+另开一个终端：
+
+```bash
+cd pc-companion
+npm install
+node lan-check.js --server http://192.168.1.10:8765 --room room-123 --uid laptop-a --name LaptopA --publish
+node lan-check.js --server http://192.168.1.10:8765 --room room-123 --uid laptop-b --name LaptopB --watch p_xxx
+```
+
+在 Android 侧：
+
+- 打开同一 TeamSpeak 服务器 + 频道
+- 设置屏幕共享信令地址为 `http://192.168.1.10:8765`
+- 进入同一 `roomId`
+- 触发开始共享 / 观看
+
+如果两端都能看到 `welcome`、`share-started`、`watch-request`、`offer`、`answer`、`candidate`，则说明同局域网 P2P 互通链路已成立。
+
 同一 MSS 协议下，屏幕共享只要求双方都实现相同的 `watch / offer / answer / candidate` 交换，不依赖官方 TeamSpeak 桌面端的私有信令协议。
 
 ## 技术栈
