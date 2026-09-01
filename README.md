@@ -10,6 +10,7 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 - [x] 阶段 4：原生 TeamSpeak 协议语音（连接、频道、聊天、Opus 收发）
 - [x] 阶段 5：屏幕共享（自建协议、WebRTC 收发、MediaProjection 采集）
 - [x] 阶段 6：前台服务、通知、自动重连与打磨
+- [x] 阶段 7：最小 MSS 信令服务端（WebSocket room 管理、peer 路由、announce/watch/offer/answer/candidate 转发）
 
 ### 已实现界面
 
@@ -44,6 +45,26 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 - 视频优先 H.264 Constrained Baseline，VP8 回退；码率同时通过 `RtpSender.setParameters` 与 SDP `b=AS:` 控制。
 
 **互通限制**：TeamSpeak 6 的屏幕共享信令层没有任何公开文档（媒体层是 WebRTC，已由官方员工确认，但 SDP/ICE 如何经由 TeamSpeak 服务器交换未公开），因此**无法与官方客户端互看屏幕**。本项目的屏幕共享仅能与实现了 MSS 协议的客户端互通。语音不受此限制，与官方客户端完全互通。
+
+### 最小 MSS 信令服务端
+
+当前已补齐最小可运行的 WebSocket 信令服务端，位于 `signaling-server/`。它实现了：
+
+- room 管理：按 TeamSpeak 频道位置派生 `roomId`，同频道用户自动落在同一 room
+- peer 注册：客户端 `hello` 后返回 `welcome`，并返回该 room 的现有 peers / shares
+- share 状态广播：`announce` / `unannounce` 会广播 share-started / share-stopped
+- watch / offer / answer / candidate 转发：支持 P2P 基础信令交换
+- 连接生命周期：`peer-left` 与 `bye`/`error` 会在断开时清理状态
+
+启动方式：
+
+```bash
+cd signaling-server
+npm install
+npm start
+```
+
+默认监听 `ws://127.0.0.1:8765`。目前服务端优先落地 P2P 最小可用链路，SFU 中转仍为后续扩展点。
 
 ## 技术栈
 
