@@ -316,22 +316,32 @@ function handleMessage(ws, raw) {
   }
 }
 
-const wss = new WebSocketServer({ port: PORT });
+function createServer(port = PORT) {
+  const wss = new WebSocketServer({ port });
 
-wss.on('connection', (ws) => {
-  ws.on('message', (raw) => {
-    handleMessage(ws, raw.toString());
+  wss.on('connection', (ws) => {
+    ws.on('message', (raw) => {
+      handleMessage(ws, raw.toString());
+    });
+
+    ws.on('close', () => {
+      const peer = peersBySocket.get(ws);
+      if (peer) removePeer(peer);
+    });
+
+    ws.on('error', () => {
+      const peer = peersBySocket.get(ws);
+      if (peer) removePeer(peer);
+    });
   });
 
-  ws.on('close', () => {
-    const peer = peersBySocket.get(ws);
-    if (peer) removePeer(peer);
-  });
+  return wss;
+}
 
-  ws.on('error', () => {
-    const peer = peersBySocket.get(ws);
-    if (peer) removePeer(peer);
-  });
-});
-
-console.log(`MSS signaling server listening on ws://0.0.0.0:${PORT}`);
+if (require.main === module) {
+  const wss = createServer(PORT);
+  console.log(`MSS signaling server listening on ws://0.0.0.0:${PORT}`);
+  module.exports = { wss, createServer };
+} else {
+  module.exports = { createServer, roomFor, handleMessage, removePeer, peersBySocket, rooms };
+}

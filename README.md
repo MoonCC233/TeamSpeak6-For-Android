@@ -66,6 +66,17 @@ npm start
 
 默认监听 `ws://127.0.0.1:8765`。目前服务端优先落地 P2P 最小可用链路，SFU 中转仍为后续扩展点。
 
+同时补了一份 PC 端参考伴生程序，位于 `pc-companion/`，可模拟同 room 里发起共享 / 观看共享：
+
+```bash
+cd pc-companion
+npm install
+node client.js --room room-123 --uid pc-a --name DeskA --publish
+node client.js --room room-123 --uid pc-b --name DeskB --watch p_xxx
+```
+
+这份示例用于验证同一 MSS 协议的桌面端与 Android 端可以在相同 room 中交换 `watch` / `offer` / `answer` / `candidate` 信令。
+
 ## 技术栈
 
 - Kotlin 2.0，Jetpack Compose（Material 3）
