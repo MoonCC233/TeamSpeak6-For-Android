@@ -32,6 +32,7 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 | 连接、频道树、用户列表、权限、文字聊天 | TeamSpeak 原生协议（ts3j）+ 服务器推送通知 |
 | 语音收发 | 原生协议语音包 + Opus（Concentus）+ 抖动缓冲与混音 |
 | 屏幕共享 | 自建 MSS 协议（WebSocket 信令）+ WebRTC，支持 P2P 与服务器中转 |
+| 连接保活 | WebSocket `ping` / `pong` 心跳，防止长时间空闲后 NAT 或代理静默断开信令连接 |
 
 服务器状态由服务器主动推送，不做轮询。身份（identity）在首次启动时本地生成并持久化，与桌面客户端的身份机制一致。
 
@@ -54,6 +55,7 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 - peer 注册：客户端 `hello` 后返回 `welcome`，并返回该 room 的现有 peers / shares
 - share 状态广播：`announce` / `unannounce` 会广播 share-started / share-stopped
 - watch / offer / answer / candidate 转发：支持 P2P 基础信令交换
+- 心跳保活：每 25s 发送一次 `ping`，客户端通过 `pong` 回应，减少 NAT/代理导致的静默断线
 - 连接生命周期：`peer-left` 与 `bye`/`error` 会在断开时清理状态
 
 启动方式：

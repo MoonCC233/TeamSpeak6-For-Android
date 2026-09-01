@@ -194,8 +194,28 @@ test('announce/watch/offer flow routes correctly within a room', async () => {
   }
 });
 
-test('leave closes the peer and emits peer-left to remaining room members', async () => {
+test('ping/pong heartbeat keeps the signaling socket alive', async () => {
   const port = 9878;
+  const server = createServer(port);
+
+  try {
+    const peer = await joinRoom(port, 'room-keepalive', 'keepalive', 'KeepAlive');
+    assert.equal(peer.welcome.heartbeatMs > 0, true);
+
+    peer.ws.send(JSON.stringify({ type: 'ping', v: 1, nonce: 42 }));
+    const pong = await waitForMessage(peer.ws, (payload) => payload.type === 'pong' && payload.nonce === 42);
+    assert.equal(pong.type, 'pong');
+    assert.equal(pong.nonce, 42);
+
+    peer.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('leave closes the peer and emits peer-left to remaining room members', async () => {
+  const port = 9879;
   const server = createServer(port);
 
   try {

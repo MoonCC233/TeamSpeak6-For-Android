@@ -77,9 +77,20 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   const ws = new WebSocket(opts.server);
   let peerId = null;
+  let heartbeatTimer = null;
+
+  const startHeartbeat = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        send(ws, 'ping', { nonce: Date.now() });
+      }
+    }, 20_000);
+  };
 
   ws.on('open', () => {
     console.log(`Connected to ${opts.server}`);
+    startHeartbeat();
     send(ws, 'hello', {
       roomId: opts.roomId,
       clientUid: opts.clientUid,
@@ -95,6 +106,9 @@ function main() {
     switch (msg.type) {
       case 'welcome': {
         peerId = msg.peerId;
+        if (msg.heartbeatMs) {
+          console.log(`Server heartbeat interval: ${msg.heartbeatMs}ms`);
+        }
         if (opts.publish) {
           send(ws, 'announce', {
             mode: 'p2p',
@@ -107,6 +121,15 @@ function main() {
             send(ws, 'watch', { publisherId: opts.watch });
           }, 250);
         }
+        break;
+      }
+      case 'ping': {
+        console.log(`ping from server nonce=${msg.nonce || 0}`);
+        send(ws, 'pong', { nonce: Number(msg.nonce || 0) });
+        break;
+      }
+      case 'pong': {
+        console.log(`pong from server nonce=${msg.nonce || 0}`);
         break;
       }
       case 'watch-request': {

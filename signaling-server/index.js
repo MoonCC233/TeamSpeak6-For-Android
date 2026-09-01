@@ -2,6 +2,7 @@ const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT || 8765);
+const HEARTBEAT_MS = Number(process.env.MSS_HEARTBEAT_MS || 25_000);
 const rooms = new Map();
 const peersBySocket = new Map();
 
@@ -187,6 +188,7 @@ function handleMessage(ws, raw) {
         v: 1,
         peerId: assignedPeerId,
         roomId,
+        heartbeatMs: HEARTBEAT_MS,
         sfuAvailable: false,
         iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
         peers: peerList.filter((p) => p.peerId !== assignedPeerId),
@@ -371,6 +373,17 @@ function createServer(port = PORT) {
     });
   });
 
+  const heartbeat = setInterval(() => {
+    for (const room of rooms.values()) {
+      for (const peer of room.values()) {
+        if (isSocketActive(peer.socket)) {
+          send(peer.socket, { type: 'ping', v: 1, nonce: Date.now() });
+        }
+      }
+    }
+  }, HEARTBEAT_MS);
+
+  wss.on('close', () => clearInterval(heartbeat));
   return wss;
 }
 

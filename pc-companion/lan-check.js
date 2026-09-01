@@ -84,10 +84,21 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   const ws = new WebSocket(opts.server);
   let peerId = null;
+  let heartbeatTimer = null;
   printRoomSummary(opts);
+
+  const startHeartbeat = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        send(ws, 'ping', { nonce: Date.now() });
+      }
+    }, 20_000);
+  };
 
   ws.on('open', () => {
     console.log(`Connected to ${opts.server}`);
+    startHeartbeat();
     send(ws, 'hello', {
       roomId: opts.roomId,
       serverUid: opts.serverUid,
@@ -105,6 +116,9 @@ function main() {
     switch (msg.type) {
       case 'welcome': {
         peerId = msg.peerId;
+        if (msg.heartbeatMs) {
+          console.log(`Server heartbeat interval: ${msg.heartbeatMs}ms`);
+        }
         console.log(`Joined room ${msg.roomId} as ${peerId}`);
         console.log(`Peers in room: ${msg.peers.map((peer) => peer.peerId).join(', ') || 'none'}`);
         console.log(`Shares in room: ${msg.shares.map((share) => share.publisherId).join(', ') || 'none'}`);
@@ -123,6 +137,15 @@ function main() {
         if (opts.keepalive) {
           console.log('[lan-check] keepalive mode enabled; socket remains open for live traffic inspection');
         }
+        break;
+      }
+      case 'ping': {
+        console.log(`ping from server nonce=${msg.nonce || 0}`);
+        send(ws, 'pong', { nonce: Number(msg.nonce || 0) });
+        break;
+      }
+      case 'pong': {
+        console.log(`pong from server nonce=${msg.nonce || 0}`);
         break;
       }
       case 'share-started': {
