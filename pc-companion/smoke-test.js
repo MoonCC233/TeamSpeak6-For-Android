@@ -1,6 +1,22 @@
 const WebSocket = require('ws');
 const { createServer } = require('./server.js');
 
+function normalizeSignalUrl(raw) {
+  const candidate = String(raw || '').trim();
+  if (!candidate) return '';
+  if (candidate.startsWith('ws://') || candidate.startsWith('wss://')) return candidate;
+  if (candidate.startsWith('http://')) return `ws${candidate.slice(4)}`;
+  if (candidate.startsWith('https://')) return `wss${candidate.slice(5)}`;
+  return candidate;
+}
+
+if (normalizeSignalUrl('http://127.0.0.1:8765') !== 'ws://127.0.0.1:8765') {
+  throw new Error('HTTP signal URL normalization failed');
+}
+if (normalizeSignalUrl('https://signal.example.com') !== 'wss://signal.example.com') {
+  throw new Error('HTTPS signal URL normalization failed');
+}
+
 async function waitForMessage(ws, predicate, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {

@@ -12,9 +12,18 @@ function printUsage() {
     '  --help                   Show this help\n');
 }
 
+function normalizeSignalUrl(raw) {
+  const candidate = String(raw || '').trim();
+  if (!candidate) return '';
+  if (candidate.startsWith('ws://') || candidate.startsWith('wss://')) return candidate;
+  if (candidate.startsWith('http://')) return `ws${candidate.slice(4)}`;
+  if (candidate.startsWith('https://')) return `wss${candidate.slice(5)}`;
+  return candidate;
+}
+
 function parseArgs(argv) {
   const args = {
-    server: process.env.MSS_SIGNALING_URL || 'ws://127.0.0.1:8765',
+    server: normalizeSignalUrl(process.env.MSS_SIGNALING_URL || 'ws://127.0.0.1:8765'),
     roomId: 'demo-room',
     clientUid: 'pc-demo',
     nickname: 'DesktopCompanion',
@@ -29,7 +38,7 @@ function parseArgs(argv) {
       printUsage();
       process.exit(0);
     }
-    if (value === '--server') args.server = argv[++index];
+    if (value === '--server') args.server = normalizeSignalUrl(argv[++index]);
     else if (value === '--room') args.roomId = argv[++index];
     else if (value === '--uid') args.clientUid = argv[++index];
     else if (value === '--name') args.nickname = argv[++index];

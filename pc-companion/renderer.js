@@ -12,6 +12,15 @@ const connectionState = document.getElementById('connectionState');
 const remoteVideo = document.getElementById('remoteVideo');
 const emptyState = document.getElementById('emptyState');
 
+function normalizeSignalUrl(raw) {
+  const candidate = String(raw || '').trim();
+  if (!candidate) return '';
+  if (candidate.startsWith('ws://') || candidate.startsWith('wss://')) return candidate;
+  if (candidate.startsWith('http://')) return `ws${candidate.slice(4)}`;
+  if (candidate.startsWith('https://')) return `wss${candidate.slice(5)}`;
+  return candidate;
+}
+
 let socket = null;
 let peerId = null;
 let peerConnections = new Map();
@@ -204,7 +213,7 @@ function connect() {
     return;
   }
 
-  const url = serverInput.value.trim();
+  const url = normalizeSignalUrl(serverInput.value.trim());
   const roomId = roomInput.value.trim();
   const clientUid = uidInput.value.trim();
   const nickname = nameInput.value.trim();
