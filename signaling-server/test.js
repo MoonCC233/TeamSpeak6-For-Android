@@ -63,24 +63,45 @@ test('room ids are derived deterministically from server uid and channel id', ()
   assert.match(first, /^[0-9a-f]+$/);
 });
 
-test('hello returns welcome and notifies peers on join', async () => {
+test('hello accepts roomId or serverUid+channelId and derives the same room', async () => {
   const port = 9876;
   const server = createServer(port);
 
   try {
-    const alpha = await joinRoom(port, 'room-test', 'alpha', 'Alpha');
-    const beta = await joinRoom(port, 'room-test', 'beta', 'Beta');
+    const serverUid = 'server-uid';
+    const channelId = 42;
+    const expectedRoomId = deriveRoomId(serverUid, channelId);
 
-    assert.equal(alpha.welcome.type, 'welcome');
-    assert.equal(beta.welcome.type, 'welcome');
-    assert.equal(alpha.welcome.roomId, 'room-test');
-    assert.equal(beta.welcome.roomId, 'room-test');
+    const alpha = await connect(port);
+    alpha.send(JSON.stringify({
+      type: 'hello',
+      v: 1,
+      serverUid,
+      channelId,
+      clientUid: 'alpha',
+      tsClientId: 1,
+      nickname: 'Alpha',
+    }));
+    const alphaWelcome = await waitForMessage(alpha, (payload) => payload.type === 'welcome');
+    assert.equal(alphaWelcome.roomId, expectedRoomId);
 
-    const peerJoined = await waitForMessage(alpha.ws, (payload) => payload.type === 'peer-joined');
+    const beta = await connect(port);
+    beta.send(JSON.stringify({
+      type: 'hello',
+      v: 1,
+      roomId: expectedRoomId,
+      clientUid: 'beta',
+      tsClientId: 2,
+      nickname: 'Beta',
+    }));
+    const betaWelcome = await waitForMessage(beta, (payload) => payload.type === 'welcome');
+    assert.equal(betaWelcome.roomId, expectedRoomId);
+
+    const peerJoined = await waitForMessage(alpha, (payload) => payload.type === 'peer-joined');
     assert.equal(peerJoined.peer.nickname, 'Beta');
 
-    beta.ws.close();
-    alpha.ws.close();
+    beta.close();
+    alpha.close();
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {
     server.close();

@@ -10,6 +10,17 @@ function deriveRoomId(serverUid, channelId) {
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 32);
 }
 
+function resolveRoomId(message) {
+  const explicit = String(message.roomId || '').trim();
+  if (explicit) return explicit;
+  const serverUid = String(message.serverUid || '').trim();
+  const channelId = Number(message.channelId ?? 0);
+  if (!serverUid || !Number.isFinite(channelId) || channelId <= 0) {
+    return '';
+  }
+  return deriveRoomId(serverUid, channelId);
+}
+
 function roomFor(roomId) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Map());
@@ -148,9 +159,9 @@ function handleMessage(ws, raw) {
         return;
       }
 
-      const roomId = String(message.roomId || '');
+      const roomId = resolveRoomId(message);
       if (!roomId) {
-        send(ws, errorPayload('bad_request', 'roomId is required'));
+        send(ws, errorPayload('bad_request', 'roomId or serverUid+channelId is required'));
         ws.close();
         return;
       }

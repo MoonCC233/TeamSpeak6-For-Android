@@ -99,6 +99,7 @@ npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流�
 - 观看端收到 `watch-request` 后必须发出 `offer`
 - 发布端收到 `offer` 后发 `answer`
 - 双端继续交换 `candidate`，直到 `connected` 或 `ontrack` 触发
+- 也支持直接发送 `serverUid + channelId` 让服务端自动派生 `roomId`，用于与 Android 端完全一致的 TeamSpeak 频道归并
 
 #### 局域网真实设备联调命令
 
