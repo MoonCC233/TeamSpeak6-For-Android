@@ -67,6 +67,16 @@ class SignalingCodecTest {
     }
 
     @Test
+    fun `ping and pong round trip through the codec`() {
+        val ping = SignalingCodec.decode("""{"type":"ping","nonce":42}""") as ServerMessage.Ping
+        assertEquals(42L, ping.nonce)
+
+        val encoded = SignalingCodec.encode(ClientMessage.Pong(42))
+        assertTrue(encoded.contains("\"type\":\"pong\""))
+        assertTrue(encoded.contains("\"nonce\":42"))
+    }
+
+    @Test
     fun `unknown types decode to Unknown instead of throwing`() {
         val message = SignalingCodec.decode("""{"type":"future-thing","x":1}""")
 

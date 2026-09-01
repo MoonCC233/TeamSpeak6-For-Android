@@ -52,6 +52,7 @@ object SignalingCodec {
         "candidate",
         "bye",
         "error",
+        "ping",
         "pong",
     )
 }

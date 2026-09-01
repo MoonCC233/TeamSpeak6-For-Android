@@ -557,6 +557,10 @@ class ScreenShareManager @Inject constructor(
                 emitMessage("屏幕共享：$text")
             }
 
+            is ServerMessage.Ping -> {
+                signaling.send(ClientMessage.Pong(message.nonce))
+            }
+
             is ServerMessage.Pong, is ServerMessage.Unknown -> Unit
         }
     }

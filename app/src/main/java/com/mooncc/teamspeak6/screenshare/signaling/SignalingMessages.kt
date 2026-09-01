@@ -185,6 +185,13 @@ sealed interface ClientMessage {
         val nonce: Long,
         override val v: Int = SignalingProtocol.VERSION,
     ) : ClientMessage
+
+    @Serializable
+    @SerialName("pong")
+    data class Pong(
+        val nonce: Long,
+        override val v: Int = SignalingProtocol.VERSION,
+    ) : ClientMessage
 }
 
 /**
@@ -271,6 +278,10 @@ sealed interface ServerMessage {
         val message: String = "",
         val fatal: Boolean = false,
     ) : ServerMessage
+
+    @Serializable
+    @SerialName("ping")
+    data class Ping(val nonce: Long = 0) : ServerMessage
 
     @Serializable
     @SerialName("pong")

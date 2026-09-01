@@ -157,6 +157,10 @@ class SignalingClient(
                 Log.d(TAG, "ignoring unknown signaling type: ${message.type}")
                 return
             }
+            if (message is ServerMessage.Ping) {
+                send(ClientMessage.Pong(message.nonce))
+                return
+            }
             if (message is ServerMessage.Pong) return
             scope.launch { _messages.emit(message) }
             if (message is ServerMessage.Error && message.fatal) {
