@@ -1,7 +1,0 @@
--keep class org.webrtc.** { *; }
--keepclassmembers class kotlinx.serialization.json.** { *; }
--keepattributes *Annotation*, InnerClasses, Signature
--dontwarn okhttp3.internal.platform.**
--dontwarn org.conscrypt.**
--dontwarn org.bouncycastle.**
--dontwarn org.openjsse.**
