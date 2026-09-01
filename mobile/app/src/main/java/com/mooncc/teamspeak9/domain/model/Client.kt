@@ -38,6 +38,10 @@ data class Client(
     val isSharingScreen: Boolean = false,
     val isSharingVideo: Boolean = false,
     val isLocal: Boolean = false,
+    /** Muted only for us; the server and other clients are unaware. */
+    val localMuted: Boolean = false,
+    /** Playback gain applied to this client alone, 0..200. */
+    val volumePercent: Int = 100,
 ) {
     val isQuery: Boolean get() = type == ClientType.QUERY
 
@@ -49,6 +53,7 @@ data class Client(
 
     val statusIcon: ClientStatus
         get() = when {
+            localMuted -> ClientStatus.LOCALLY_MUTED
             isSpeakerMuted -> ClientStatus.SPEAKER_MUTED
             isMicMuted -> ClientStatus.MIC_MUTED
             isAway -> ClientStatus.AWAY
@@ -72,5 +77,6 @@ enum class ClientStatus {
     IDLE,
     MIC_MUTED,
     SPEAKER_MUTED,
+    LOCALLY_MUTED,
     AWAY,
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
@@ -21,12 +22,16 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,6 +84,7 @@ fun ClientActionsDialog(
     onOpenChat: () -> Unit,
     onPoke: () -> Unit,
     onInfo: () -> Unit,
+    onAudio: () -> Unit,
     onServerGroups: () -> Unit,
     onMove: () -> Unit,
     onKickChannel: () -> Unit,
@@ -93,6 +99,15 @@ fun ClientActionsDialog(
                 ActionItem("私聊", Icons.AutoMirrored.Filled.Chat, onOpenChat)
                 ActionItem("查看信息", Icons.Default.Info, onInfo)
                 if (!isLocal) {
+                    ActionItem(
+                        label = if (client.localMuted) "取消本地静音 / 音量" else "本地静音 / 音量",
+                        icon = if (client.localMuted) {
+                            Icons.Default.VolumeOff
+                        } else {
+                            Icons.Default.VolumeUp
+                        },
+                        onClick = onAudio,
+                    )
                     ActionItem("戳一下", Icons.Default.NotificationsActive, onPoke)
                     ActionItem("移动到频道", Icons.AutoMirrored.Filled.Login, onMove)
                     ActionItem("服务器组", Icons.Default.Groups, onServerGroups)
@@ -103,6 +118,97 @@ fun ClientActionsDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
+}
+
+/**
+ * Local mute and per-client volume. Both are client-side only, so the values
+ * come straight from the live client snapshot rather than local dialog state.
+ */
+@Composable
+fun ClientAudioDialog(
+    client: Client,
+    onDismiss: () -> Unit,
+    onMutedChange: (Boolean) -> Unit,
+    onVolumeChange: (Int) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${client.nickname} 的音频") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 46.dp)
+                        .clickable { onMutedChange(!client.localMuted) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Icon(
+                        imageVector = if (client.localMuted) {
+                            Icons.Default.VolumeOff
+                        } else {
+                            Icons.Default.VolumeUp
+                        },
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text("本地静音", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.weight(1f))
+                    Switch(checked = client.localMuted, onCheckedChange = onMutedChange)
+                }
+                Text(
+                    text = "音量 ${client.volumePercent}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Slider(
+                    value = client.volumePercent.toFloat(),
+                    onValueChange = { onVolumeChange(it.toInt()) },
+                    valueRange = 0f..200f,
+                    steps = 39,
+                    enabled = !client.localMuted,
+                )
+                Text(
+                    text = "仅影响本机播放，不会通知服务器或其他用户。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("完成") } },
+        dismissButton = {
+            TextButton(onClick = { onVolumeChange(100) }) { Text("重置音量") }
+        },
+    )
+}
+
+@Composable
+fun TalkRequestDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var message by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("申请发言权") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "在受限频道中，频道管理者会收到你的申请。",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    label = { Text("附加消息（可选）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(message) }) { Text("申请") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -320,6 +426,12 @@ fun ClientInfoDialog(client: Client, onDismiss: () -> Unit) {
                 InfoRow("优先发言", yesNo(client.isPrioritySpeaker))
                 InfoRow("录制中", yesNo(client.isRecording))
                 InfoRow("屏幕共享", yesNo(client.isSharingScreen))
+                InfoRow("申请发言", yesNo(client.isRequestingTalkPower))
+                if (client.isRequestingTalkPower && client.talkRequestMessage.isNotBlank()) {
+                    InfoRow("申请消息", client.talkRequestMessage)
+                }
+                InfoRow("本地静音", yesNo(client.localMuted))
+                InfoRow("本地音量", "${client.volumePercent}%")
                 if (client.description.isNotBlank()) {
                     InfoRow("描述", client.description)
                 }

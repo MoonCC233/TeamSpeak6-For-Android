@@ -49,6 +49,12 @@ sealed interface ServerDialog {
     data class ChannelPassword(val channel: Channel) : ServerDialog
     data class ClientActions(val client: Client) : ServerDialog
     data class ClientInfo(val client: Client) : ServerDialog
+
+    /**
+     * Local mute / volume for one client. Holds only the id so the dialog keeps
+     * rendering live values as the sliders move.
+     */
+    data class ClientAudio(val clientId: Int) : ServerDialog
     data class ChannelActions(val channel: Channel) : ServerDialog
     data class ChannelInfo(val channel: Channel) : ServerDialog
     data class CreateChannel(val parentId: Int) : ServerDialog
@@ -60,6 +66,9 @@ sealed interface ServerDialog {
     data class ServerGroups(val client: Client) : ServerDialog
     data object Nickname : ServerDialog
     data object AwayMessage : ServerDialog
+
+    /** Composes the message sent along with a talk-power request. */
+    data object TalkRequest : ServerDialog
 
     /** Pre-share options: mode, resolution, bitrate, privacy. */
     data object ScreenShareOptions : ServerDialog
@@ -464,6 +473,54 @@ class ServerViewModel @Inject constructor(
         viewModelScope.launch {
             repository.setChannelCommander(!repository.localMediaState.value.isChannelCommander)
                 .onFailure { statusMessage.value = it.message }
+        }
+    }
+
+    fun togglePrioritySpeaker() {
+        viewModelScope.launch {
+            repository.setPrioritySpeaker(!repository.localMediaState.value.isPrioritySpeaker)
+                .onFailure { statusMessage.value = it.message }
+        }
+    }
+
+    /** Opens the talk-request dialog, or withdraws an outstanding request. */
+    fun onTalkPowerButton() {
+        if (repository.localMediaState.value.isRequestingTalkPower) {
+            viewModelScope.launch {
+                repository.requestTalkPower(false)
+                    .onSuccess { statusMessage.value = "已取消发言申请" }
+                    .onFailure { statusMessage.value = it.message }
+            }
+        } else {
+            dialog.value = ServerDialog.TalkRequest
+        }
+    }
+
+    fun requestTalkPower(message: String) {
+        dismissDialog()
+        viewModelScope.launch {
+            repository.requestTalkPower(true, message)
+                .onSuccess { statusMessage.value = "已向频道管理者申请发言权" }
+                .onFailure { statusMessage.value = it.message }
+        }
+    }
+
+    fun showClientAudio(client: Client) {
+        dialog.value = ServerDialog.ClientAudio(client.id)
+    }
+
+    fun setClientLocalMuted(clientId: Int, muted: Boolean) {
+        viewModelScope.launch { repository.setClientLocalMuted(clientId, muted) }
+    }
+
+    fun setClientVolume(clientId: Int, percent: Int) {
+        viewModelScope.launch { repository.setClientVolume(clientId, percent) }
+    }
+
+    fun clearLocalClientOverrides() {
+        viewModelScope.launch {
+            repository.clearLocalClientOverrides()
+            statusMessage.value = "已清除所有本地静音与音量设置"
         }
     }
 

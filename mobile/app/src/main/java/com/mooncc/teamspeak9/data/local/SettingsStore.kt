@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -44,6 +45,11 @@ data class AppSettings(
     val screenShareAudioBitrateKbps: Int = 128,
     /** 0 means unlimited. */
     val screenShareViewerLimit: Int = 0,
+    /**
+     * Unique identifiers of clients muted locally. Numeric client ids change
+     * every session, so mutes are remembered by uid instead.
+     */
+    val locallyMutedClientUids: Set<String> = emptySet(),
 )
 
 class SettingsStore(private val context: Context) {
@@ -75,6 +81,7 @@ class SettingsStore(private val context: Context) {
             prefs[KEY_SHARE_AUDIO] = next.screenShareAudio
             prefs[KEY_SHARE_AUDIO_BITRATE] = next.screenShareAudioBitrateKbps
             prefs[KEY_SHARE_VIEWER_LIMIT] = next.screenShareViewerLimit
+            prefs[KEY_LOCAL_MUTED_UIDS] = next.locallyMutedClientUids
         }
     }
 
@@ -101,6 +108,7 @@ class SettingsStore(private val context: Context) {
         screenShareAudio = prefs[KEY_SHARE_AUDIO] ?: false,
         screenShareAudioBitrateKbps = prefs[KEY_SHARE_AUDIO_BITRATE] ?: 128,
         screenShareViewerLimit = prefs[KEY_SHARE_VIEWER_LIMIT] ?: 0,
+        locallyMutedClientUids = prefs[KEY_LOCAL_MUTED_UIDS] ?: emptySet(),
     )
 
     private companion object {
@@ -126,5 +134,6 @@ class SettingsStore(private val context: Context) {
         val KEY_SHARE_AUDIO = booleanPreferencesKey("share_audio")
         val KEY_SHARE_AUDIO_BITRATE = intPreferencesKey("share_audio_bitrate_kbps")
         val KEY_SHARE_VIEWER_LIMIT = intPreferencesKey("share_viewer_limit")
+        val KEY_LOCAL_MUTED_UIDS = stringSetPreferencesKey("local_muted_uids")
     }
 }

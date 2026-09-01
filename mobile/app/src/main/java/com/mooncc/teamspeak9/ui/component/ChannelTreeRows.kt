@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Headset
@@ -23,10 +24,12 @@ import androidx.compose.material.icons.filled.HeadsetOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -237,12 +240,28 @@ fun ClientRow(
                 tint = MaterialTheme.colorScheme.secondary,
             )
         }
+        if (client.isPrioritySpeaker) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = "优先发言者",
+                modifier = Modifier.size(13.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
+            )
+        }
         if (client.isSharingScreen) {
             Icon(
                 imageVector = Icons.Default.ScreenShare,
                 contentDescription = "正在共享屏幕",
                 modifier = Modifier.size(13.dp),
                 tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (client.isRequestingTalkPower) {
+            Icon(
+                imageVector = Icons.Default.PanTool,
+                contentDescription = "申请发言权",
+                modifier = Modifier.size(13.dp),
+                tint = MaterialTheme.colorScheme.tertiary,
             )
         }
         if (client.isAway && client.awayMessage.isNotBlank()) {
@@ -258,6 +277,7 @@ fun ClientRow(
 }
 
 private fun statusIcon(client: Client) = when {
+    client.localMuted -> Icons.Default.VolumeOff
     client.isSpeakerMuted -> Icons.Default.HeadsetOff
     client.isMicMuted -> Icons.Default.MicOff
     client.isTalking -> Icons.Default.Mic
@@ -267,7 +287,7 @@ private fun statusIcon(client: Client) = when {
 
 @Composable
 private fun statusTint(client: Client): Color = when {
-    client.isSpeakerMuted || client.isMicMuted -> TsMuted
+    client.localMuted || client.isSpeakerMuted || client.isMicMuted -> TsMuted
     client.isTalking -> TsTalking
     client.isAway -> TsAway
     else -> TsOnSurfaceVariant

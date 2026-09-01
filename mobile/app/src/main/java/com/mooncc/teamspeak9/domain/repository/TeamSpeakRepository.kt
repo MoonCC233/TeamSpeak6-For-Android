@@ -73,5 +73,21 @@ interface TeamSpeakRepository {
     suspend fun setPushToTalkActive(active: Boolean)
     suspend fun setAway(away: Boolean, message: String = "")
     suspend fun setChannelCommander(enabled: Boolean): Result<Unit>
+
+    /** Mutes [clientId] for us only; nothing is sent to the server. */
+    suspend fun setClientLocalMuted(clientId: Int, muted: Boolean)
+
+    /** Per-client playback gain in percent (0..200), local only. */
+    suspend fun setClientVolume(clientId: Int, percent: Int)
+
+    /** Clears every local mute and per-client volume override. */
+    suspend fun clearLocalClientOverrides()
+
+    /** Raises or withdraws a talk-power request on moderated channels. */
+    suspend fun requestTalkPower(requesting: Boolean, message: String = ""): Result<Unit>
+
+    /** Toggles our own priority-speaker flag (requires the matching permission). */
+    suspend fun setPrioritySpeaker(enabled: Boolean): Result<Unit>
+
     fun updateLocalMedia(transform: (LocalMediaState) -> LocalMediaState)
 }

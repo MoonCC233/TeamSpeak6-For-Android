@@ -82,6 +82,7 @@ fun ServerScreen(
     val state by viewModel.uiState.collectAsState()
     val serverGroups by viewModel.serverGroups.collectAsState()
     val channelTree by viewModel.channelTree.collectAsState()
+    val clients by viewModel.clients.collectAsState()
     val remoteTracks by viewModel.remoteScreenTracks.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -200,6 +201,13 @@ fun ServerScreen(
                             },
                         )
                         DropdownMenuItem(
+                            text = { Text("清除本地静音") },
+                            onClick = {
+                                menuExpanded = false
+                                viewModel.clearLocalClientOverrides()
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("服务器聊天") },
                             onClick = {
                                 menuExpanded = false
@@ -239,6 +247,8 @@ fun ServerScreen(
                     onPushToTalkPressed = viewModel::setPushToTalkActive,
                     onToggleScreenShare = viewModel::onToggleScreenShare,
                     onToggleChannelCommander = viewModel::toggleChannelCommander,
+                    onTogglePrioritySpeaker = viewModel::togglePrioritySpeaker,
+                    onTalkPower = viewModel::onTalkPowerButton,
                 )
                 NavigationBar(containerColor = TsChrome) {
                     NavigationBarItem(
@@ -312,6 +322,7 @@ fun ServerScreen(
         state = state,
         serverGroups = serverGroups,
         allChannels = channelTree,
+        clients = clients,
         viewModel = viewModel,
     )
 }

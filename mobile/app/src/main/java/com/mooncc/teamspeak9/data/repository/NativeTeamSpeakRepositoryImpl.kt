@@ -125,6 +125,16 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
     private var clientsById = linkedMapOf<Int, Client>()
     private var talkingClientIds = mutableSetOf<Int>()
 
+    /** Local-only per-client overrides; never sent to the server. */
+    private val localMutedIds = mutableSetOf<Int>()
+    private val clientVolumes = mutableMapOf<Int, Int>()
+
+    /**
+     * Local mutes are remembered by unique identifier, since the numeric client
+     * id is only stable for the duration of one session.
+     */
+    private var persistedMutedUids = emptySet<String>()
+
     init {
         playback.onTalkingChanged = { clientId, talking -> onTalkingChanged(clientId, talking) }
         capture.onTalkingChanged = { talking ->
@@ -154,6 +164,7 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
     private suspend fun establish(bookmark: Bookmark, resume: LocalMediaState?): Boolean {
         activeBookmark = bookmark
         val settings = runCatching { settingsStore.settings.first() }.getOrNull()
+        persistedMutedUids = settings?.locallyMutedClientUids ?: emptySet()
         val preserved = _localMediaState.value
         _localMediaState.value = LocalMediaState(
             pushToTalkEnabled = settings?.pushToTalkEnabled ?: false,
@@ -274,6 +285,8 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
             channelsById = linkedMapOf()
             clientsById = linkedMapOf()
             talkingClientIds = mutableSetOf()
+            localMutedIds.clear()
+            clientVolumes.clear()
         }
         _channelTree.value = emptyList()
         _clients.value = emptyList()
@@ -336,6 +349,9 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
                 .map { Ts3Mappers.toClient(it, localId) }
                 .associateByTo(linkedMapOf()) { it.id }
             talkingClientIds.retainAll(clientsById.keys)
+            localMutedIds.retainAll(clientsById.keys)
+            clientVolumes.keys.retainAll(clientsById.keys)
+            restoreLocalMutes()
         }
         publish()
 
@@ -371,9 +387,32 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
 
     /** Rebuilds the published tree and client list from the id maps. */
     private fun publish() {
-        val clientList = clientsById.values.map { it.copy(isTalking = it.id in talkingClientIds) }
+        val clientList = clientsById.values.map { client ->
+            client.copy(
+                isTalking = client.id in talkingClientIds,
+                localMuted = client.id in localMutedIds,
+                volumePercent = clientVolumes[client.id] ?: 100,
+            )
+        }
         _clients.value = clientList
         _channelTree.value = ChannelTreeBuilder.build(channelsById.values.toList(), clientList)
+    }
+
+    /**
+     * Re-applies mutes that were remembered by unique identifier once the client
+     * shows up again with a fresh numeric id.
+     */
+    private fun restoreLocalMutes() {
+        if (persistedMutedUids.isEmpty()) return
+        clientsById.values.forEach { client ->
+            if (client.uniqueIdentifier.isNotBlank() &&
+                client.uniqueIdentifier in persistedMutedUids &&
+                client.id !in localMutedIds
+            ) {
+                localMutedIds += client.id
+                playback.setClientMuted(client.id, true)
+            }
+        }
     }
 
     // ---------------------------------------------------------------- events
@@ -467,7 +506,10 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
             .toClient(event.properties, localId)
             .copy(id = event.clientId, channelId = event.channelId)
 
-        stateMutex.withLock { clientsById[event.clientId] = joined }
+        stateMutex.withLock {
+            clientsById[event.clientId] = joined
+            restoreLocalMutes()
+        }
         publish()
 
         if (!joined.isQuery && settingsStore.settings.first().notifyOnJoinLeave) {
@@ -484,6 +526,9 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
     private suspend fun onClientLeft(event: Ts3Event.ClientLeft) {
         val left = stateMutex.withLock {
             talkingClientIds.remove(event.clientId)
+            localMutedIds.remove(event.clientId)
+            clientVolumes.remove(event.clientId)
+            playback.removeStream(event.clientId)
             clientsById.remove(event.clientId)
         } ?: return
         publish()
@@ -964,6 +1009,60 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         return updateSelf("client_is_channel_commander" to enabled.flag())
     }
 
+    override suspend fun setClientLocalMuted(clientId: Int, muted: Boolean) {
+        stateMutex.withLock {
+            if (muted) localMutedIds += clientId else localMutedIds -= clientId
+            playback.setClientMuted(clientId, muted)
+            publish()
+        }
+        settingsStore.update { settings ->
+            val ids = settings.locallyMutedClientUids.toMutableSet()
+            val uid = clientsById[clientId]?.uniqueIdentifier
+            if (!uid.isNullOrBlank()) {
+                if (muted) ids += uid else ids -= uid
+            }
+            settings.copy(locallyMutedClientUids = ids)
+        }
+    }
+
+    override suspend fun setClientVolume(clientId: Int, percent: Int) {
+        val clamped = percent.coerceIn(MIN_CLIENT_VOLUME, MAX_CLIENT_VOLUME)
+        stateMutex.withLock {
+            if (clamped == 100) clientVolumes -= clientId else clientVolumes[clientId] = clamped
+            playback.setClientGain(clientId, clamped)
+            publish()
+        }
+    }
+
+    override suspend fun clearLocalClientOverrides() {
+        stateMutex.withLock {
+            localMutedIds.forEach { playback.setClientMuted(it, false) }
+            clientVolumes.keys.forEach { playback.setClientGain(it, 100) }
+            localMutedIds.clear()
+            clientVolumes.clear()
+            publish()
+        }
+        settingsStore.update { it.copy(locallyMutedClientUids = emptySet()) }
+    }
+
+    override suspend fun requestTalkPower(requesting: Boolean, message: String): Result<Unit> {
+        _localMediaState.update {
+            it.copy(
+                isRequestingTalkPower = requesting,
+                talkRequestMessage = if (requesting) message else "",
+            )
+        }
+        return updateSelf(
+            "client_talk_request" to requesting.flag(),
+            "client_talk_request_msg" to if (requesting) message else "",
+        )
+    }
+
+    override suspend fun setPrioritySpeaker(enabled: Boolean): Result<Unit> {
+        _localMediaState.update { it.copy(isPrioritySpeaker = enabled) }
+        return updateSelf("client_is_priority_speaker" to enabled.flag())
+    }
+
     override fun updateLocalMedia(transform: (LocalMediaState) -> LocalMediaState) {
         _localMediaState.update(transform)
         syncAudio()
@@ -1061,6 +1160,10 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         /** Encoder bitrate range mapped from the channel's codec quality. */
         const val MIN_VOICE_BITRATE = 16_000
         const val MAX_VOICE_BITRATE = 96_000
+
+        /** Bounds for the per-client local volume override. */
+        const val MIN_CLIENT_VOLUME = 0
+        const val MAX_CLIENT_VOLUME = 200
 
         /** `reasonid` values the server sends with leave / move notifications. */
         const val REASON_KICK_CHANNEL = 4

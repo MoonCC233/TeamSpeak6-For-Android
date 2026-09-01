@@ -3,6 +3,7 @@ package com.mooncc.teamspeak9.ui.screen.server
 import androidx.compose.runtime.Composable
 import com.mooncc.teamspeak9.domain.model.Channel
 import com.mooncc.teamspeak9.domain.model.ChatTarget
+import com.mooncc.teamspeak9.domain.model.Client
 import com.mooncc.teamspeak9.domain.model.ServerGroup
 
 /**
@@ -13,6 +14,7 @@ fun ServerDialogHost(
     state: ServerUiState,
     serverGroups: List<ServerGroup>,
     allChannels: List<Channel>,
+    clients: List<Client>,
     viewModel: ServerViewModel,
 ) {
     val dismiss = viewModel::dismissDialog
@@ -28,7 +30,7 @@ fun ServerDialogHost(
         )
 
         is ServerDialog.ClientActions -> ClientActionsDialog(
-            client = dialog.client,
+            client = clients.firstOrNull { it.id == dialog.client.id } ?: dialog.client,
             isLocal = dialog.client.id == state.connection.localClientId,
             onDismiss = dismiss,
             onOpenChat = {
@@ -41,12 +43,31 @@ fun ServerDialogHost(
             },
             onPoke = { viewModel.showPoke(dialog.client) },
             onInfo = { viewModel.showClientInfo(dialog.client) },
+            onAudio = { viewModel.showClientAudio(dialog.client) },
             onServerGroups = { viewModel.showServerGroups(dialog.client) },
             onMove = { viewModel.showMoveClient(dialog.client) },
             onKickChannel = { viewModel.showKick(dialog.client, fromServer = false) },
             onKickServer = { viewModel.showKick(dialog.client, fromServer = true) },
             onBan = { viewModel.showBan(dialog.client) },
         )
+
+        is ServerDialog.ClientAudio -> {
+            val client = clients.firstOrNull { it.id == dialog.clientId }
+            if (client == null) {
+                dismiss()
+            } else {
+                ClientAudioDialog(
+                    client = client,
+                    onDismiss = dismiss,
+                    onMutedChange = { muted ->
+                        viewModel.setClientLocalMuted(client.id, muted)
+                    },
+                    onVolumeChange = { percent ->
+                        viewModel.setClientVolume(client.id, percent)
+                    },
+                )
+            }
+        }
 
         is ServerDialog.ClientInfo -> ClientInfoDialog(
             client = dialog.client,
@@ -159,6 +180,11 @@ fun ServerDialogHost(
             initialMessage = state.media.awayMessage,
             onDismiss = dismiss,
             onConfirm = viewModel::setAway,
+        )
+
+        ServerDialog.TalkRequest -> TalkRequestDialog(
+            onDismiss = dismiss,
+            onConfirm = viewModel::requestTalkPower,
         )
 
         ServerDialog.ScreenShareOptions -> ScreenShareOptionsDialog(

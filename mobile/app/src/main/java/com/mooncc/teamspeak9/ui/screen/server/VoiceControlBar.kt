@@ -4,14 +4,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Headset
@@ -19,6 +22,7 @@ import androidx.compose.material.icons.filled.HeadsetOff
 import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.StopScreenShare
 import androidx.compose.material3.FilledIconButton
@@ -49,6 +53,8 @@ fun VoiceControlBar(
     onPushToTalkPressed: (Boolean) -> Unit,
     onToggleScreenShare: () -> Unit,
     onToggleChannelCommander: () -> Unit,
+    onTogglePrioritySpeaker: () -> Unit,
+    onTalkPower: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -78,9 +84,11 @@ fun VoiceControlBar(
             )
         }
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             ToggleButton(
                 icon = if (media.micMuted) Icons.Default.MicOff else Icons.Default.Mic,
@@ -117,6 +125,18 @@ fun VoiceControlBar(
                 label = "指挥",
                 active = media.isChannelCommander,
                 onClick = onToggleChannelCommander,
+            )
+            ToggleButton(
+                icon = Icons.Default.Bolt,
+                label = "优先发言",
+                active = media.isPrioritySpeaker,
+                onClick = onTogglePrioritySpeaker,
+            )
+            ToggleButton(
+                icon = Icons.Default.PanTool,
+                label = "申请发言",
+                active = media.isRequestingTalkPower,
+                onClick = onTalkPower,
             )
         }
 
