@@ -16,8 +16,10 @@ let socket = null;
 let peerId = null;
 let peerConnections = new Map();
 let currentPublisher = null;
+let selectedPublisherId = null;
 let localStream = null;
 let isConnected = false;
+let knownPublishers = new Map();
 const pendingAnswers = new Map();
 
 const log = (text) => {
@@ -144,29 +146,65 @@ async function watchPublisher(publisherId) {
   send('watch', { publisherId });
 }
 
-function renderPublishers(peers) {
+function setSelectedPublisher(peerId) {
+  selectedPublisherId = peerId || null;
+  currentPublisher = selectedPublisherId;
+  Array.from(publisherList.querySelectorAll('button')).forEach((button) => {
+    const isSelected = button.dataset.peerId === selectedPublisherId;
+    button.classList.toggle('is-selected', isSelected);
+    button.textContent = isSelected ? 'Watching' : 'Watch';
+  });
+}
+
+function syncPublisherList(peers = []) {
+  peers.forEach((peer) => {
+    if (!peer || !peer.peerId) return;
+    knownPublishers.set(peer.peerId, {
+      peerId: peer.peerId,
+      nickname: peer.nickname || peer.peerId,
+    });
+  });
+
+  const entries = [...knownPublishers.values()];
   publisherList.innerHTML = '';
-  if (!peers || peers.length === 0) {
+
+  if (!entries.length) {
     const item = document.createElement('li');
     item.textContent = 'No publishers';
     publisherList.appendChild(item);
+    if (!selectedPublisherId) {
+      currentPublisher = null;
+    }
     return;
   }
 
-  peers.forEach((peer) => {
+  entries.forEach((peer) => {
     const item = document.createElement('li');
     const label = document.createElement('span');
     label.textContent = peer.nickname || peer.peerId;
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.peerId = peer.peerId;
-    button.textContent = 'Watch';
     button.className = 'secondary';
-    button.onclick = () => watchPublisher(peer.peerId);
+    button.textContent = selectedPublisherId === peer.peerId ? 'Watching' : 'Watch';
+    button.classList.toggle('is-selected', selectedPublisherId === peer.peerId);
+    button.onclick = () => {
+      setSelectedPublisher(peer.peerId);
+      watchPublisher(peer.peerId);
+    };
+
     item.appendChild(label);
     item.appendChild(button);
     publisherList.appendChild(item);
   });
+
+  if (!selectedPublisherId) {
+    setSelectedPublisher(entries[0].peerId);
+  }
+}
+
+function renderPublishers(peers) {
+  syncPublisherList(peers || []);
 }
 
 function connect() {
@@ -202,30 +240,56 @@ function connect() {
     switch (msg.type) {
       case 'welcome': {
         peerId = msg.peerId;
-        renderPublishers(msg.peers || []);
-        if (msg.shares && msg.shares.length) {
-          renderPublishers(msg.shares.map((share) => ({ peerId: share.publisherId, nickname: share.nickname })));
-        }
+        knownPublishers.clear();
+        renderPublishers([
+          ...(msg.peers || []),
+          ...(msg.shares || []).map((share) => ({ peerId: share.publisherId, nickname: share.nickname })),
+        ]);
         updateConnectionLabel(`Connected (${msg.roomId})`);
         break;
       }
       case 'peer-joined': {
-        renderPublishers([...(Array.from(publisherList.children).length ? [] : [])]);
-        log(`Peer joined ${msg.peer.nickname}`);
+        if (msg.peer) {
+          syncPublisherList([...knownPublishers.values(), { peerId: msg.peer.peerId, nickname: msg.peer.nickname || msg.peer.peerId }]);
+        }
+        log(`Peer joined ${msg.peer?.nickname || msg.peer?.peerId || 'unknown'}`);
         break;
       }
       case 'peer-left': {
+        if (msg.peerId) {
+          knownPublishers.delete(msg.peerId);
+          if (selectedPublisherId === msg.peerId) {
+            setSelectedPublisher(null);
+            setRemoteVideo(null);
+          }
+        }
+        renderPublishers([...knownPublishers.values()]);
         log(`Peer left ${msg.peerId}`);
         break;
       }
       case 'share-started': {
         const share = msg.share;
-        log(`Share started by ${share.publisherId}`);
-        renderPublishers([{ peerId: share.publisherId, nickname: share.nickname }]);
+        if (share) {
+          knownPublishers.set(share.publisherId, { peerId: share.publisherId, nickname: share.nickname || share.publisherId });
+          if (!selectedPublisherId) {
+            setSelectedPublisher(share.publisherId);
+          }
+          renderPublishers([...knownPublishers.values()]);
+        }
+        log(`Share started by ${share?.publisherId || 'unknown'}`);
         break;
       }
       case 'share-stopped': {
-        log(`Share stopped by ${msg.publisherId}`);
+        const publisherId = msg.publisherId;
+        if (publisherId) {
+          knownPublishers.delete(publisherId);
+          if (selectedPublisherId === publisherId) {
+            setSelectedPublisher(null);
+            setRemoteVideo(null);
+          }
+          renderPublishers([...knownPublishers.values()]);
+        }
+        log(`Share stopped by ${publisherId || 'unknown'}`);
         break;
       }
       case 'watch-request': {
@@ -296,8 +360,11 @@ stopBtn.addEventListener('click', () => {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
   }
+  currentPublisher = null;
+  selectedPublisherId = null;
   send('unannounce');
   setRemoteVideo(null);
+  renderPublishers([...knownPublishers.values()]);
 });
 
 log('Ready');
