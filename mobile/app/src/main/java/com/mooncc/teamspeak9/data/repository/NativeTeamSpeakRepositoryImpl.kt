@@ -22,6 +22,7 @@ import com.mooncc.teamspeak9.domain.model.LocalMediaState
 import com.mooncc.teamspeak9.domain.model.Permission
 import com.mooncc.teamspeak9.domain.model.ServerEvent
 import com.mooncc.teamspeak9.domain.model.ServerGroup
+import com.mooncc.teamspeak9.domain.model.WhisperGroupTarget
 import com.mooncc.teamspeak9.domain.repository.BookmarkRepository
 import com.mooncc.teamspeak9.domain.repository.TeamSpeakRepository
 import com.mooncc.teamspeak9.voice.audio.VoiceCaptureEngine
@@ -154,6 +155,11 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         // An empty frame closes the burst and must go out even if whispering
         // was just switched off.
         if (!state.whisperActive && frame.isNotEmpty()) return
+        val group = state.whisperGroup
+        if (group != null) {
+            client.sendGroupWhisper(target = group, codecData = frame)
+            return
+        }
         client.sendWhisper(
             channelIds = state.whisperChannelIds.toIntArray(),
             clientIds = state.whisperClientIds.toIntArray(),
@@ -207,6 +213,8 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
                     // Channel ids are stable across sessions; client ids are
                     // per-connection handles and would target strangers.
                     whisperChannelIds = resume.whisperChannelIds,
+                    // Group and channel-group ids are server-side and stable too.
+                    whisperGroup = resume.whisperGroup,
                 )
             }
         }
@@ -1090,8 +1098,27 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
             it.copy(
                 whisperChannelIds = channels,
                 whisperClientIds = clients,
+                // A group target and an id list cannot share one packet.
+                whisperGroup = null,
                 whisperActive = it.whisperActive && (channels.isNotEmpty() || clients.isNotEmpty()),
             )
+        }
+        syncAudio()
+    }
+
+    override suspend fun setWhisperGroupTarget(target: WhisperGroupTarget?) {
+        if (target != null && !target.isValid) {
+            emit(ServerEvent.Error("请选择要耳语的组", now()))
+            return
+        }
+        _localMediaState.update { state ->
+            val next = state.copy(
+                whisperGroup = target,
+                // Switching to group addressing drops the explicit list.
+                whisperChannelIds = if (target == null) state.whisperChannelIds else emptyList(),
+                whisperClientIds = if (target == null) state.whisperClientIds else emptyList(),
+            )
+            next.copy(whisperActive = next.whisperActive && next.hasWhisperTargets)
         }
         syncAudio()
     }

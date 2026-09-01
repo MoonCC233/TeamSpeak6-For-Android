@@ -81,6 +81,7 @@ fun ServerScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val serverGroups by viewModel.serverGroups.collectAsState()
+    val channelGroups by viewModel.channelGroups.collectAsState()
     val channelTree by viewModel.channelTree.collectAsState()
     val clients by viewModel.clients.collectAsState()
     val remoteTracks by viewModel.remoteScreenTracks.collectAsState()
@@ -323,6 +324,7 @@ fun ServerScreen(
     ServerDialogHost(
         state = state,
         serverGroups = serverGroups,
+        channelGroups = channelGroups,
         allChannels = channelTree,
         clients = clients,
         viewModel = viewModel,

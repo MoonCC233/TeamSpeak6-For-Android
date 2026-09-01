@@ -48,9 +48,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.mooncc.teamspeak9.domain.model.Channel
+import com.mooncc.teamspeak9.domain.model.ChannelGroup
 import com.mooncc.teamspeak9.domain.model.Client
 import com.mooncc.teamspeak9.domain.model.GroupType
 import com.mooncc.teamspeak9.domain.model.ServerGroup
+import com.mooncc.teamspeak9.domain.model.WhisperGroupKind
+import com.mooncc.teamspeak9.domain.model.WhisperGroupScope
+import com.mooncc.teamspeak9.domain.model.WhisperGroupTarget
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -216,19 +220,48 @@ fun TalkRequestDialog(
 
 /**
  * Multi-select for whisper routing: channels and individual clients can be
- * combined, matching how the desktop client builds whisper lists.
+ * combined, matching how the desktop client builds whisper lists. A second tab
+ * covers group whispers, which address clients by group membership and channel
+ * scope instead — the protocol keeps the two modes in separate wire formats, so
+ * the dialog commits to exactly one of them.
  */
 @Composable
 fun WhisperTargetsDialog(
     channels: List<Channel>,
     clients: List<Client>,
+    serverGroups: List<ServerGroup>,
+    channelGroups: List<ChannelGroup>,
     selectedChannelIds: Set<Int>,
     selectedClientIds: Set<Int>,
+    selectedGroup: WhisperGroupTarget?,
     onDismiss: () -> Unit,
     onConfirm: (channelIds: List<Int>, clientIds: List<Int>) -> Unit,
+    onConfirmGroup: (WhisperGroupTarget?) -> Unit,
 ) {
     val pickedChannels = remember { mutableStateListOf<Int>().apply { addAll(selectedChannelIds) } }
     val pickedClients = remember { mutableStateListOf<Int>().apply { addAll(selectedClientIds) } }
+    var groupMode by remember { mutableStateOf(selectedGroup != null) }
+    var kind by remember {
+        mutableStateOf(selectedGroup?.kind ?: WhisperGroupKind.CHANNEL_COMMANDER)
+    }
+    var scope by remember {
+        mutableStateOf(selectedGroup?.scope ?: WhisperGroupScope.ALL_CHANNELS)
+    }
+    var groupId by remember { mutableStateOf(selectedGroup?.groupId ?: 0L) }
+
+    // Only regular groups can be whispered to; templates and the query group
+    // have no members that hold a voice connection.
+    val pickableGroups = remember(kind, serverGroups, channelGroups) {
+        when (kind) {
+            WhisperGroupKind.SERVER_GROUP -> serverGroups
+                .filter { it.type == GroupType.REGULAR }
+                .map { it.id.toLong() to it.name }
+            WhisperGroupKind.CHANNEL_GROUP -> channelGroups
+                .filter { it.type == GroupType.REGULAR }
+                .map { it.id.toLong() to it.name }
+            else -> emptyList()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -240,41 +273,110 @@ fun WhisperTargetsDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(
-                    text = "耳语只会发送给选中的频道与用户，不受当前频道限制。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (channels.isNotEmpty()) {
-                    SectionLabel("频道")
-                    channels.forEach { channel ->
-                        CheckRow(
-                            label = channel.displayName,
-                            checked = channel.id in pickedChannels,
-                            onCheckedChange = { checked ->
-                                if (checked) pickedChannels += channel.id else pickedChannels -= channel.id
-                            },
-                        )
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = !groupMode, onClick = { groupMode = false })
+                    Text("指定频道 / 用户", style = MaterialTheme.typography.bodyMedium)
                 }
-                if (clients.isNotEmpty()) {
-                    SectionLabel("用户")
-                    clients.forEach { client ->
-                        CheckRow(
-                            label = client.nickname,
-                            checked = client.id in pickedClients,
-                            onCheckedChange = { checked ->
-                                if (checked) pickedClients += client.id else pickedClients -= client.id
-                            },
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = groupMode, onClick = { groupMode = true })
+                    Text("按组耳语", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                if (groupMode) {
+                    Text(
+                        text = "服务端按组成员和频道范围解析目标，无需自己列出用户。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SectionLabel("对象")
+                    WHISPER_KINDS.forEach { (option, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = kind == option,
+                                onClick = {
+                                    kind = option
+                                    groupId = 0
+                                },
+                            )
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (kind.needsGroupId) {
+                        SectionLabel(if (kind == WhisperGroupKind.SERVER_GROUP) "服务器组" else "频道组")
+                        if (pickableGroups.isEmpty()) {
+                            Text(
+                                text = "没有可选的组",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        pickableGroups.forEach { (id, name) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = groupId == id, onClick = { groupId = id })
+                                Text(name, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                    SectionLabel("频道范围")
+                    WHISPER_SCOPES.forEach { (option, label) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = scope == option, onClick = { scope = option })
+                            Text(label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "耳语只会发送给选中的频道与用户，不受当前频道限制。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (channels.isNotEmpty()) {
+                        SectionLabel("频道")
+                        channels.forEach { channel ->
+                            CheckRow(
+                                label = channel.displayName,
+                                checked = channel.id in pickedChannels,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        pickedChannels += channel.id
+                                    } else {
+                                        pickedChannels -= channel.id
+                                    }
+                                },
+                            )
+                        }
+                    }
+                    if (clients.isNotEmpty()) {
+                        SectionLabel("用户")
+                        clients.forEach { client ->
+                            CheckRow(
+                                label = client.nickname,
+                                checked = client.id in pickedClients,
+                                onCheckedChange = { checked ->
+                                    if (checked) {
+                                        pickedClients += client.id
+                                    } else {
+                                        pickedClients -= client.id
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(pickedChannels.toList(), pickedClients.toList()) }) {
-                Text("保存")
-            }
+            val target = WhisperGroupTarget(kind = kind, scope = scope, groupId = groupId)
+            TextButton(
+                enabled = !groupMode || target.isValid,
+                onClick = {
+                    if (groupMode) {
+                        onConfirmGroup(target)
+                    } else {
+                        onConfirm(pickedChannels.toList(), pickedClients.toList())
+                    }
+                },
+            ) { Text("保存") }
         },
         dismissButton = {
             TextButton(
@@ -287,6 +389,23 @@ fun WhisperTargetsDialog(
         },
     )
 }
+
+private val WHISPER_KINDS = listOf(
+    WhisperGroupKind.CHANNEL_COMMANDER to "频道指挥",
+    WhisperGroupKind.ALL_CLIENTS to "所有用户",
+    WhisperGroupKind.SERVER_GROUP to "服务器组成员",
+    WhisperGroupKind.CHANNEL_GROUP to "频道组成员",
+)
+
+private val WHISPER_SCOPES = listOf(
+    WhisperGroupScope.ALL_CHANNELS to "全部频道",
+    WhisperGroupScope.CURRENT_CHANNEL to "当前频道",
+    WhisperGroupScope.PARENT_CHANNEL to "父频道",
+    WhisperGroupScope.ALL_PARENT_CHANNEL to "所有父频道",
+    WhisperGroupScope.CHANNEL_FAMILY to "频道族",
+    WhisperGroupScope.COMPLETE_CHANNEL_FAMILY to "完整频道族",
+    WhisperGroupScope.SUBCHANNELS to "子频道",
+)
 
 @Composable
 private fun SectionLabel(text: String) {

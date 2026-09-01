@@ -2,6 +2,7 @@ package com.mooncc.teamspeak9.ui.screen.server
 
 import androidx.compose.runtime.Composable
 import com.mooncc.teamspeak9.domain.model.Channel
+import com.mooncc.teamspeak9.domain.model.ChannelGroup
 import com.mooncc.teamspeak9.domain.model.ChatTarget
 import com.mooncc.teamspeak9.domain.model.Client
 import com.mooncc.teamspeak9.domain.model.ServerGroup
@@ -13,6 +14,7 @@ import com.mooncc.teamspeak9.domain.model.ServerGroup
 fun ServerDialogHost(
     state: ServerUiState,
     serverGroups: List<ServerGroup>,
+    channelGroups: List<ChannelGroup>,
     allChannels: List<Channel>,
     clients: List<Client>,
     viewModel: ServerViewModel,
@@ -190,10 +192,14 @@ fun ServerDialogHost(
         ServerDialog.WhisperTargets -> WhisperTargetsDialog(
             channels = flattenChannels(allChannels),
             clients = clients.filter { it.id != state.connection.localClientId },
+            serverGroups = serverGroups,
+            channelGroups = channelGroups,
             selectedChannelIds = state.media.whisperChannelIds.toSet(),
             selectedClientIds = state.media.whisperClientIds.toSet(),
+            selectedGroup = state.media.whisperGroup,
             onDismiss = dismiss,
             onConfirm = viewModel::applyWhisperTargets,
+            onConfirmGroup = viewModel::applyWhisperGroupTarget,
         )
 
         ServerDialog.ScreenShareOptions -> ScreenShareOptionsDialog(

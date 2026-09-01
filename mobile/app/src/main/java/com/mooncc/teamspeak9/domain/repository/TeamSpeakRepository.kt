@@ -12,6 +12,7 @@ import com.mooncc.teamspeak9.domain.model.LocalMediaState
 import com.mooncc.teamspeak9.domain.model.Permission
 import com.mooncc.teamspeak9.domain.model.ServerEvent
 import com.mooncc.teamspeak9.domain.model.ServerGroup
+import com.mooncc.teamspeak9.domain.model.WhisperGroupTarget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,8 +90,19 @@ interface TeamSpeakRepository {
     /** Toggles our own priority-speaker flag (requires the matching permission). */
     suspend fun setPrioritySpeaker(enabled: Boolean): Result<Unit>
 
-    /** Replaces the whisper target list (channels and/or clients). */
+    /**
+     * Replaces the whisper target list (channels and/or clients).
+     *
+     * Clears any group target: the two addressing modes cannot be combined in
+     * one whisper packet.
+     */
     suspend fun setWhisperTargets(channelIds: List<Int>, clientIds: List<Int>)
+
+    /**
+     * Replaces the whisper target with a group target, or clears it when
+     * [target] is null. Clears the explicit id lists for the same reason.
+     */
+    suspend fun setWhisperGroupTarget(target: WhisperGroupTarget?)
 
     /**
      * Starts or stops whispering. While active the microphone bypasses normal

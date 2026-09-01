@@ -43,6 +43,12 @@ data class LocalMediaState(
     val talkRequestMessage: String = "",
     val whisperChannelIds: List<Int> = emptyList(),
     val whisperClientIds: List<Int> = emptyList(),
+    /**
+     * Group whisper target, mutually exclusive with the explicit id lists: the
+     * two addressing modes use different wire formats and cannot be combined in
+     * one packet.
+     */
+    val whisperGroup: WhisperGroupTarget? = null,
     val whisperActive: Boolean = false,
     val isAway: Boolean = false,
     val awayMessage: String = "",
@@ -54,7 +60,9 @@ data class LocalMediaState(
 ) {
     /** Whether any whisper target is configured. */
     val hasWhisperTargets: Boolean
-        get() = whisperChannelIds.isNotEmpty() || whisperClientIds.isNotEmpty()
+        get() = whisperGroup != null ||
+            whisperChannelIds.isNotEmpty() ||
+            whisperClientIds.isNotEmpty()
 
     /** Whether the microphone should currently transmit. */
     val shouldTransmit: Boolean

@@ -33,6 +33,7 @@ import com.github.manevolent.ts3j.protocol.client.ClientConnectionState
 import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
 import com.github.manevolent.ts3j.util.Ts3Crypt
+import com.mooncc.teamspeak9.domain.model.WhisperGroupTarget
 import com.mooncc.teamspeak9.voice.audio.VoiceCaptureEngine
 import com.mooncc.teamspeak9.voice.audio.VoicePlaybackEngine
 import com.mooncc.teamspeak9.voice.identity.IdentityManager
@@ -184,18 +185,42 @@ internal class Ts3VoiceClient(
         clientIds: IntArray,
         codecData: ByteArray,
     ): Boolean {
+        if (channelIds.isEmpty() && clientIds.isEmpty()) return false
+        return sendWhisperBody(
+            MultiWhisperTarget(channelIds = channelIds, clientIds = clientIds),
+            codecData,
+        )
+    }
+
+    /**
+     * Sends one encoded frame as a group whisper.
+     *
+     * The server resolves group membership and channel scope, so this addresses
+     * peers the client may not even have in its own list. The two addressing
+     * modes are mutually exclusive on the wire, hence the separate entry point.
+     */
+    fun sendGroupWhisper(
+        target: WhisperGroupTarget,
+        codecData: ByteArray,
+    ): Boolean {
+        if (!target.isValid) return false
+        return sendWhisperBody(GroupWhisperTargetBody(target), codecData)
+    }
+
+    private fun sendWhisperBody(
+        target: PacketBody1VoiceWhisper.WhisperTarget,
+        codecData: ByteArray,
+    ): Boolean {
         val client = socket ?: return false
         if (!client.isConnected) return false
-        if (channelIds.isEmpty() && clientIds.isEmpty()) return false
 
         return runCatching {
             val body = PacketBody1VoiceWhisper(ProtocolRole.CLIENT)
             body.codecType = CodecType.OPUS_VOICE
             body.codecData = codecData
-            body.target = MultiWhisperTarget(
-                channelIds = channelIds,
-                clientIds = clientIds,
-            )
+            // The target type also selects the header's NEW_PROTOCOL flag, which
+            // is what tells the server how to parse the body.
+            body.target = target
             // packetId and the encryption generation are assigned by the socket.
             client.writePacket(body)
         }.onFailure { Log.w(TAG, "whisper send failed", it) }.isSuccess

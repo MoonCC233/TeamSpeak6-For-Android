@@ -17,6 +17,9 @@ import com.mooncc.teamspeak9.domain.model.ScreenSharePrivacy
 import com.mooncc.teamspeak9.domain.model.ScreenShareResolution
 import com.mooncc.teamspeak9.domain.model.ScreenShareState
 import com.mooncc.teamspeak9.domain.model.ServerEvent
+import com.mooncc.teamspeak9.domain.model.WhisperGroupKind
+import com.mooncc.teamspeak9.domain.model.WhisperGroupScope
+import com.mooncc.teamspeak9.domain.model.WhisperGroupTarget
 import com.mooncc.teamspeak9.domain.repository.BookmarkRepository
 import com.mooncc.teamspeak9.domain.repository.TeamSpeakRepository
 import com.mooncc.teamspeak9.data.local.AppSettings
@@ -542,6 +545,19 @@ class ServerViewModel @Inject constructor(
         }
     }
 
+    /** Group whisper: the server resolves membership, so no ids are listed. */
+    fun applyWhisperGroupTarget(target: WhisperGroupTarget?) {
+        dismissDialog()
+        viewModelScope.launch {
+            repository.setWhisperGroupTarget(target)
+            statusMessage.value = if (target == null) {
+                "已清空耳语目标"
+            } else {
+                "耳语目标：${target.describe()}"
+            }
+        }
+    }
+
     /** Held down by the whisper button: transmits to the whisper targets only. */
     fun setWhisperActive(active: Boolean) {
         viewModelScope.launch {
@@ -642,3 +658,23 @@ private fun AppSettings.withShareConfig(config: ScreenShareConfig) = copy(
     screenShareAudioBitrateKbps = config.audioBitrateKbps,
     screenShareViewerLimit = config.viewerLimit,
 )
+
+/** Short label for the status line after picking a group whisper target. */
+private fun WhisperGroupTarget.describe(): String {
+    val who = when (kind) {
+        WhisperGroupKind.SERVER_GROUP -> "服务器组"
+        WhisperGroupKind.CHANNEL_GROUP -> "频道组"
+        WhisperGroupKind.CHANNEL_COMMANDER -> "频道指挥"
+        WhisperGroupKind.ALL_CLIENTS -> "所有用户"
+    }
+    val where = when (scope) {
+        WhisperGroupScope.ALL_CHANNELS -> "全部频道"
+        WhisperGroupScope.CURRENT_CHANNEL -> "当前频道"
+        WhisperGroupScope.PARENT_CHANNEL -> "父频道"
+        WhisperGroupScope.ALL_PARENT_CHANNEL -> "所有父频道"
+        WhisperGroupScope.CHANNEL_FAMILY -> "频道族"
+        WhisperGroupScope.COMPLETE_CHANNEL_FAMILY -> "完整频道族"
+        WhisperGroupScope.SUBCHANNELS -> "子频道"
+    }
+    return "$who · $where"
+}
