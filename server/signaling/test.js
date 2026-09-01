@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { spawn } = require('node:child_process');
+const path = require('node:path');
 const WebSocket = require('ws');
 const { createServer, deriveRoomId } = require('./index.js');
 
@@ -27,11 +29,49 @@ function waitForMessage(ws, predicate, timeoutMs = 4000) {
   });
 }
 
-function connect(port) {
+function connect(port, query = '') {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+    const ws = new WebSocket(`ws://127.0.0.1:${port}${query}`);
     ws.on('open', () => resolve(ws));
     ws.on('error', reject);
+  });
+}
+
+/** Waits for a spawned server to accept connections. */
+async function waitForPort(port, attempts = 40) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const probe = await connect(port);
+      probe.close();
+      return;
+    } catch (error) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  throw new Error(`server on port ${port} never came up`);
+}
+
+/** Resolves when nothing matching [predicate] arrives within [timeoutMs]. */
+function assertNoMessage(ws, timeoutMs, predicate) {
+  return new Promise((resolve, reject) => {
+    const onMessage = (raw) => {
+      try {
+        const payload = JSON.parse(String(raw));
+        if (!predicate(payload)) return;
+        clearTimeout(timer);
+        ws.removeListener('message', onMessage);
+        reject(new Error(`unexpectedly received ${payload.type}`));
+      } catch (error) {
+        // malformed frames are not what this assertion is about
+      }
+    };
+
+    const timer = setTimeout(() => {
+      ws.removeListener('message', onMessage);
+      resolve();
+    }, timeoutMs);
+
+    ws.on('message', onMessage);
   });
 }
 
@@ -227,10 +267,218 @@ test('leave closes the peer and emits peer-left to remaining room members', asyn
     const peerLeft = await waitForMessage(beta.ws, (payload) => payload.type === 'peer-left' && payload.peerId === alpha.welcome.peerId);
     assert.equal(peerLeft.peerId, alpha.welcome.peerId);
 
+    // A replayed `welcome` would make beta reset its share list and forget the
+    // streams it is already watching.
+    await assertNoMessage(beta.ws, 300, (payload) => payload.type === 'welcome');
+
     alpha.ws.close();
     beta.ws.close();
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {
     server.close();
+  }
+});
+
+test('re-announcing replaces the advertised share parameters', async () => {
+  const port = 9880;
+  const server = createServer(port);
+
+  try {
+    const publisher = await joinRoom(port, 'room-reannounce', 'pub', 'Publisher');
+    const viewer = await joinRoom(port, 'room-reannounce', 'view', 'Viewer');
+
+    publisher.ws.send(JSON.stringify({
+      type: 'announce',
+      v: 1,
+      mode: 'p2p',
+      hasAudio: true,
+      video: { width: 1920, height: 1080, fps: 30, bitrateKbps: 4000 },
+    }));
+    await waitForMessage(viewer.ws, (payload) => payload.type === 'share-started');
+
+    publisher.ws.send(JSON.stringify({
+      type: 'announce',
+      v: 1,
+      mode: 'p2p',
+      hasAudio: false,
+      video: { width: 1280, height: 720, fps: 24, bitrateKbps: 1500 },
+    }));
+
+    const updated = await waitForMessage(
+      viewer.ws,
+      (payload) => payload.type === 'share-started' && payload.share.video.height === 720,
+    );
+    assert.equal(updated.share.hasAudio, false);
+    assert.equal(updated.share.video.bitrateKbps, 1500);
+
+    // A late joiner must see the same parameters rather than the first announce.
+    const latecomer = await joinRoom(port, 'room-reannounce', 'late', 'Latecomer');
+    assert.equal(latecomer.welcome.shares.length, 1);
+    assert.equal(latecomer.welcome.shares[0].video.height, 720);
+    assert.equal(latecomer.welcome.shares[0].hasAudio, false);
+
+    latecomer.ws.close();
+    viewer.ws.close();
+    publisher.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('viewer limit is enforced by the server, not just the publisher', async () => {
+  const port = 9881;
+  const server = createServer(port);
+
+  try {
+    const publisher = await joinRoom(port, 'room-limit', 'pub', 'Publisher');
+    const first = await joinRoom(port, 'room-limit', 'v1', 'Viewer1');
+    const second = await joinRoom(port, 'room-limit', 'v2', 'Viewer2');
+
+    publisher.ws.send(JSON.stringify({
+      type: 'announce',
+      v: 1,
+      mode: 'p2p',
+      hasAudio: false,
+      video: { width: 1280, height: 720, fps: 30, bitrateKbps: 2000 },
+      viewerLimit: 1,
+    }));
+    await waitForMessage(first.ws, (payload) => payload.type === 'share-started');
+
+    first.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: publisher.welcome.peerId }));
+    await waitForMessage(publisher.ws, (payload) => payload.type === 'watch-request');
+
+    second.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: publisher.welcome.peerId }));
+    const rejected = await waitForMessage(second.ws, (payload) => payload.type === 'error');
+    assert.equal(rejected.code, 'viewer_limit');
+    assert.equal(rejected.fatal, false);
+
+    // Freeing the slot must let the second viewer in.
+    first.ws.send(JSON.stringify({ type: 'unwatch', v: 1, publisherId: publisher.welcome.peerId }));
+    await waitForMessage(publisher.ws, (payload) => payload.type === 'bye');
+
+    second.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: publisher.welcome.peerId }));
+    const admitted = await waitForMessage(publisher.ws, (payload) => payload.type === 'watch-request');
+    assert.equal(admitted.from, second.welcome.peerId);
+
+    second.ws.close();
+    first.ws.close();
+    publisher.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('an allow list keeps other clients from reaching the publisher', async () => {
+  const port = 9882;
+  const server = createServer(port);
+
+  try {
+    const publisher = await joinRoom(port, 'room-allow', 'pub', 'Publisher');
+    const invited = await joinRoom(port, 'room-allow', 'invited-uid', 'Invited');
+    const stranger = await joinRoom(port, 'room-allow', 'stranger-uid', 'Stranger');
+
+    publisher.ws.send(JSON.stringify({
+      type: 'announce',
+      v: 1,
+      mode: 'p2p',
+      privacy: 'contacts',
+      hasAudio: false,
+      video: { width: 1280, height: 720, fps: 30, bitrateKbps: 2000 },
+      allowedUids: ['invited-uid'],
+    }));
+    await waitForMessage(invited.ws, (payload) => payload.type === 'share-started');
+
+    stranger.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: publisher.welcome.peerId }));
+    const rejected = await waitForMessage(stranger.ws, (payload) => payload.type === 'error');
+    assert.equal(rejected.code, 'not_allowed');
+
+    invited.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: publisher.welcome.peerId }));
+    const request = await waitForMessage(publisher.ws, (payload) => payload.type === 'watch-request');
+    assert.equal(request.clientUid, 'invited-uid');
+
+    stranger.ws.close();
+    invited.ws.close();
+    publisher.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('watching a peer that is not sharing is rejected', async () => {
+  const port = 9883;
+  const server = createServer(port);
+
+  try {
+    const idle = await joinRoom(port, 'room-idle', 'idle', 'Idle');
+    const viewer = await joinRoom(port, 'room-idle', 'view', 'Viewer');
+
+    viewer.ws.send(JSON.stringify({ type: 'watch', v: 1, publisherId: idle.welcome.peerId }));
+    const rejected = await waitForMessage(viewer.ws, (payload) => payload.type === 'error');
+    assert.equal(rejected.code, 'not_sharing');
+
+    viewer.ws.close();
+    idle.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('MSS_AUTH_TOKEN gates hello, via header-free query string or payload', async () => {
+  const port = 9884;
+  const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
+    env: { ...process.env, PORT: String(port), MSS_AUTH_TOKEN: 'secret-token' },
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+
+  try {
+    await waitForPort(port);
+
+    const wrong = await connect(port);
+    wrong.send(JSON.stringify({
+      type: 'hello',
+      v: 1,
+      roomId: 'room-auth',
+      clientUid: 'a',
+      tsClientId: 1,
+      nickname: 'A',
+      token: 'nope',
+    }));
+    const denied = await waitForMessage(wrong, (payload) => payload.type === 'error');
+    assert.equal(denied.code, 'unauthorized');
+    assert.equal(denied.fatal, true);
+    wrong.close();
+
+    const inPayload = await connect(port);
+    inPayload.send(JSON.stringify({
+      type: 'hello',
+      v: 1,
+      roomId: 'room-auth',
+      clientUid: 'b',
+      tsClientId: 2,
+      nickname: 'B',
+      token: 'secret-token',
+    }));
+    const welcome = await waitForMessage(inPayload, (payload) => payload.type === 'welcome');
+    assert.equal(welcome.roomId, 'room-auth');
+    inPayload.close();
+
+    const inQuery = await connect(port, '?token=secret-token');
+    inQuery.send(JSON.stringify({
+      type: 'hello',
+      v: 1,
+      roomId: 'room-auth',
+      clientUid: 'c',
+      tsClientId: 3,
+      nickname: 'C',
+    }));
+    const queryWelcome = await waitForMessage(inQuery, (payload) => payload.type === 'welcome');
+    assert.equal(queryWelcome.roomId, 'room-auth');
+    inQuery.close();
+  } finally {
+    child.kill();
   }
 });

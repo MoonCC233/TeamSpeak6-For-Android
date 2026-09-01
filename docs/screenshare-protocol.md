@@ -66,11 +66,19 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
   "clientUid": "yPHNqxr...",
   "tsClientId": 42,
   "nickname": "MoonCC233",
+  "token": "shared-secret",
   "capabilities": { "canPublish": true, "canSubscribe": true, "codecs": ["H264", "VP8"] }
 }
 ```
 
 必须是连接后的第一条消息。服务端回 `welcome`。
+
+`token` 仅在服务端配置了 `MSS_AUTH_TOKEN` 时必填，也可以改为放在连接 URL 的查询串里
+（`ws://host:8765/?token=shared-secret`），两者等价，`token` 字段优先。校验失败返回
+`unauthorized` 且 `fatal` 为 `true`。服务端未配置令牌时两者都被忽略。
+
+一个 socket 只能 `hello` 一次；重复发送返回 `bad_request` 并断开。断线重连必须建新连接，
+并且会拿到一个新的 `peerId`（见 §2）。
 
 ### `announce` — 开始共享
 
@@ -95,6 +103,14 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
 
 服务端向房间内其他人广播 `share-started`。
 
+重复 `announce` 是合法的：整条共享描述被新值替换，房间内其他人收到一条新的
+`share-started`，之后加入的人在 `welcome.shares` 里看到的也是新值。切换清晰度或
+开关共享音频时用它，不需要先 `unannounce`。
+
+`viewerLimit` 与 `allowedUids` 由服务端强制执行（见 `watch`），不依赖客户端自律。
+`privacy: private` 的最终裁决权仍在发起者手上——服务端照常转发 `watch-request`，
+由发起者选择回 `offer` 还是 `bye`。
+
 ### `unannounce` — 停止共享
 
 ```json
@@ -111,6 +127,18 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
 
 - `p2p` 模式：服务端把 `watch-request` 转发给发起者，由发起者决定是否 `offer`
 - `sfu` 模式：服务端直接回一个 `offer`
+
+服务端在转发前会先校验，任一条不满足则回 `error` 且不通知发起者：
+
+| 条件 | 失败时的 `code` |
+| --- | --- |
+| `publisherId` 在同一房间内存在 | `no_such_peer` |
+| 该 peer 正在共享 | `not_sharing` |
+| 未超过 `viewerLimit` | `viewer_limit` |
+| `allowedUids` 为空或包含请求方的 `clientUid` | `not_allowed` |
+
+通过校验后请求方即占用一个观众名额，直到它 `unwatch`、发起者 `unannounce`、
+任一方 `bye`，或它离开房间/被心跳驱逐。已在观看的人重复 `watch` 不会重复占名额。
 
 ### `unwatch` — 停止观看
 
@@ -165,6 +193,10 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
 
 客户端每 20 秒发一次。服务端回 `pong` 并带回同一个 `nonce`。
 
+服务端同样会主动发 `ping`（间隔见 `welcome.heartbeatMs`，默认 25 秒）。**任何**消息都算活跃，
+所以专门回 `pong` 不是必需的，但连续两个心跳周期内一条消息都没发过的连接会被断开，
+其占用的观众名额随之释放。挂起到后台的手机端应保证仍能按周期发 `ping`。
+
 ## 5. 服务端 → 客户端
 
 ### `welcome`
@@ -175,6 +207,7 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
   "v": 1,
   "peerId": "p_9a3f",
   "roomId": "3f2a...",
+  "heartbeatMs": 25000,
   "sfuAvailable": true,
   "iceServers": [
     { "urls": ["stun:stun.example.com:3478"] },
@@ -187,6 +220,10 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
 ```
 
 `sfuAvailable` 为 `false` 时客户端不应使用 `sfu` 模式，应回退到 `p2p` 并提示用户。
+
+`welcome` **只在 `hello` 之后发送一次**，是一份全量快照。服务端不会重放它——房间成员变化
+全部走增量的 `peer-joined` / `peer-left` / `share-started` / `share-stopped`。客户端因此可以
+放心地在收到 `welcome` 时重置本地房间状态。
 
 ### `peer-joined` / `peer-left`
 
@@ -240,11 +277,13 @@ roomId = sha256("<serverUid>|<channelId>")  取前 32 个 hex 字符
 | code | 含义 |
 | --- | --- |
 | `bad_version` | `v` 不受支持（fatal） |
-| `bad_request` | 消息格式非法 |
+| `bad_request` | 消息格式非法，或在同一 socket 上重复 `hello` |
+| `unauthorized` | 服务端配置了 `MSS_AUTH_TOKEN` 但令牌缺失或不匹配（fatal） |
 | `not_in_room` | 未 `hello` 就发了其他消息（fatal） |
 | `no_such_peer` | `to` / `publisherId` 不存在 |
+| `not_sharing` | `watch` 的目标当前没有在共享 |
 | `viewer_limit` | 超过 `viewerLimit` |
-| `not_allowed` | `privacy` 拒绝 |
+| `not_allowed` | `privacy` 拒绝，即请求方的 `clientUid` 不在 `allowedUids` 内 |
 | `sfu_unavailable` | 请求了 `sfu` 但服务端不支持 |
 | `already_publishing` | 该 peer 已在共享 |
 
@@ -302,8 +341,14 @@ S ↔ V   candidate …
 | Android 观看 | 已实现 |
 | Android 发起（`MediaProjection`） | 已实现 |
 | Android 服务器中转模式 | 客户端已实现，等待服务端 |
-| 信令服务 | 待实现（参考实现见下） |
-| SFU 中转 | 待实现 |
-| Windows 伴生程序 | 待实现 |
+| 信令服务 | 已实现，见 [`server/signaling`](../server/signaling) |
+| SFU 中转 | 待实现（`welcome.sfuAvailable` 恒为 `false`） |
+| 桌面伴生程序 | 已实现，见 [`desktop/companion`](../desktop/companion) |
 
-信令服务的最小实现只需要：维护 `roomId → peers` 映射、按 `to` 转发、广播 `share-started` / `share-stopped` / `peer-joined` / `peer-left`。不涉及媒体，任何语言都能在几百行内写完。`sfu` 模式额外需要一个 WebRTC 服务端实现（如 mediasoup、Pion、LiveKit）。
+信令服务只有 [`server/signaling/index.js`](../server/signaling/index.js) 一份实现。桌面伴生程序
+通过 `attachSignaling()` 复用它，把 UI 静态文件和信令挂在同一个端口上，这样局域网联调只需要
+一个进程。**不要为某一端另写一份协议实现**——历史上两份实现漂移过，正是之前互通失败的原因。
+
+自己实现服务端的话，最小集是：维护 `roomId → peers` 映射、按 `to` 转发、广播
+`share-started` / `share-stopped` / `peer-joined` / `peer-left`。不涉及媒体，任何语言都能在几百行内写完。
+`sfu` 模式额外需要一个 WebRTC 服务端实现（如 mediasoup、Pion、LiveKit）。

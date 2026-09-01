@@ -48,6 +48,28 @@ http://192.168.1.10:8765
 
 Android 端和桌面端都要使用同一个信令服务地址。
 
+可选环境变量（完整列表见 [../server/README.md](../server/README.md)）：
+
+```bash
+# 换端口
+PORT=9000 npm start
+
+# 开启房间准入令牌：客户端必须提供同样的值，否则被拒绝并断开
+MSS_AUTH_TOKEN=my-shared-secret npm start
+
+# 跨网络（非同一局域网）互通时下发 STUN/TURN
+MSS_ICE_SERVERS=stun:stun.l.google.com:19302,turn:turn.example.com:3478 npm start
+```
+
+同一局域网内不配置 `MSS_ICE_SERVERS` 也能连通；跨运营商/跨 NAT 则至少需要一台 TURN。
+
+跑一遍协议自测：
+
+```bash
+cd server/signaling
+npm test
+```
+
 ## 4. 启动桌面端伴生程序
 
 ```bash
@@ -55,6 +77,10 @@ cd desktop/companion
 npm install
 npm start
 ```
+
+桌面端**不需要**单独启动信令服务：它复用 `server/signaling` 的同一份实现，把 UI 和信令
+挂在同一个端口（默认 4173）上。也就是说局域网联调只跑这一个进程就够了，把手机的信令地址
+填成 `http://<电脑IP>:4173` 即可。只有当你想让信令独立部署时，才需要按上一节单独启动 8765。
 
 启动后，浏览器页面会提供：
 
@@ -101,12 +127,15 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 1. 打开 TeamSpeak 服务器并进入目标频道
 2. 打开屏幕共享相关页面
 3. 填写信令地址，例如：
-   - `http://192.168.1.10:8765`
+   - `http://192.168.1.10:4173`（桌面伴生程序自带信令，推荐）
+   - `http://192.168.1.10:8765`（独立部署的信令服务）
    - 或 `ws://127.0.0.1:8765`（仅本机调试）
 4. Android 会根据当前 TeamSpeak 的 `serverUid + channelId` 自动计算同一 roomId
 5. 选择“开始共享”或“观看共享”
 
 如果两端都在同一 room 中，信令层会自动发现共享发布者和观众请求。
+
+服务端若配置了 `MSS_AUTH_TOKEN`，把令牌拼在地址后面即可：`http://192.168.1.10:4173/?token=my-shared-secret`。
 
 ## 7. 屏幕共享的完整流程
 
@@ -161,6 +190,23 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 - 观看端是否发出 `watch`
 - `offer` / `answer` 是否成功交换
 - ICE candidate 是否完成
+
+如果 `watch` 之后立刻收到错误提示，那是服务端主动拒绝了，按 `code` 对照：
+
+| 提示中的 code | 原因 | 处理 |
+| --- | --- | --- |
+| `not_sharing` | 对方已经停止共享 | 等对方重新开始共享 |
+| `viewer_limit` | 共享者设置了观众上限且已满 | 等有人退出，或让共享者调大上限 |
+| `not_allowed` | 共享者把可见范围设成了「仅联系人」，你的 `clientUid` 不在名单里 | 让共享者把你加进允许列表，或改成公开 |
+| `unauthorized` | 服务端配了 `MSS_AUTH_TOKEN`，客户端没提供或提供错了 | 核对令牌 |
+
+`private`（逐个批准）模式下不会报错，而是等共享端弹窗确认，被拒绝时表现为收到 `bye`。
+
+### Q: 挂后台一会儿就掉线？
+
+服务端每 25 秒发一次心跳，连续两个周期收不到客户端任何消息就会断开连接并释放其观众名额。
+被系统冻结的手机端会命中这个规则。回到前台后重连即可（会拿到一个新的 `peerId`，属正常行为）。
+心跳间隔可用 `MSS_HEARTBEAT_MS` 调整。
 
 ### Q: 端口或地址无法访问？
 

@@ -1,11 +1,21 @@
+'use strict';
+
 const { WebSocketServer } = require('ws');
 const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT || 8765);
 const HEARTBEAT_MS = Number(process.env.MSS_HEARTBEAT_MS || 25_000);
+const AUTH_TOKEN = String(process.env.MSS_AUTH_TOKEN || '');
+const PROTOCOL_VERSION = 1;
+
 const rooms = new Map();
 const peersBySocket = new Map();
 
+/**
+ * Room ids are derived rather than assigned so a phone and a desktop that know
+ * the same TeamSpeak location join the same room without a lookup service. All
+ * three clients must derive it identically.
+ */
 function deriveRoomId(serverUid, channelId) {
   const input = `${serverUid || ''}|${channelId ?? 0}`;
   return crypto.createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 32);
@@ -29,6 +39,13 @@ function roomFor(roomId) {
   return rooms.get(roomId);
 }
 
+/** Looks a peer up without creating an empty room as a side effect. */
+function peerInRoom(roomId, peerId) {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  return room.get(String(peerId || '')) || null;
+}
+
 function makePeerId() {
   return `p_${crypto.randomBytes(6).toString('hex')}`;
 }
@@ -43,11 +60,42 @@ function isSocketActive(ws) {
 }
 
 function errorPayload(code, message, fatal = false) {
-  return { type: 'error', v: 1, code, message, fatal };
+  return { type: 'error', v: PROTOCOL_VERSION, code, message, fatal };
+}
+
+/**
+ * Compares the token in constant time: a plain `!==` leaks the expected value
+ * one byte at a time to a caller who can measure the response.
+ */
+function tokenMatches(candidate) {
+  if (!AUTH_TOKEN) return true;
+  const expected = Buffer.from(AUTH_TOKEN, 'utf8');
+  const actual = Buffer.from(String(candidate || ''), 'utf8');
+  if (actual.length !== expected.length) return false;
+  return crypto.timingSafeEqual(expected, actual);
+}
+
+/** Reads `?token=` so a client can authenticate without a protocol change. */
+function tokenFromRequest(request) {
+  const raw = request && request.url ? request.url : '';
+  const query = raw.indexOf('?');
+  if (query < 0) return '';
+  return new URLSearchParams(raw.slice(query + 1)).get('token') || '';
+}
+
+function iceServerConfig() {
+  const raw = String(process.env.MSS_ICE_SERVERS || '').trim();
+  if (!raw) return [{ urls: ['stun:stun.l.google.com:19302'] }];
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((urls) => ({ urls: [urls] }));
 }
 
 function notifyRoom(roomId, payload, exceptPeerId = null) {
-  const room = roomFor(roomId);
+  const room = rooms.get(roomId);
+  if (!room) return;
   for (const peer of room.values()) {
     if (!peer || peer.peerId === exceptPeerId) continue;
     send(peer.socket, payload);
@@ -75,10 +123,28 @@ function summarizeShare(peer) {
   };
 }
 
+function collectShares(room) {
+  const shares = [];
+  for (const peer of room.values()) {
+    const share = summarizeShare(peer);
+    if (share) shares.push(share);
+  }
+  return shares;
+}
+
 function logRoute(peer, type, details = '') {
   const peerLabel = peer ? `${peer.peerId}@${peer.roomId}` : 'unknown';
   const suffix = details ? ` ${details}` : '';
   console.log(`[mss] ${peerLabel} ${type}${suffix}`);
+}
+
+/** Drops [viewerId] from every publisher in the room that was serving it. */
+function forgetViewer(roomId, viewerId) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  for (const peer of room.values()) {
+    peer.viewers.delete(viewerId);
+  }
 }
 
 function removePeer(peer) {
@@ -87,37 +153,56 @@ function removePeer(peer) {
   if (!room) return;
 
   if (peer.share) {
-    notifyRoom(peer.roomId, { type: 'share-stopped', v: 1, publisherId: peer.peerId }, peer.peerId);
+    notifyRoom(peer.roomId, {
+      type: 'share-stopped',
+      v: PROTOCOL_VERSION,
+      publisherId: peer.peerId,
+    }, peer.peerId);
   }
 
   room.delete(peer.peerId);
   peersBySocket.delete(peer.socket);
+  forgetViewer(peer.roomId, peer.peerId);
 
   if (room.size === 0) {
     rooms.delete(peer.roomId);
-  } else {
-    const peers = Array.from(room.values()).map(summarizePeer);
-    for (const other of room.values()) {
-      send(other.socket, {
-        type: 'peer-left',
-        v: 1,
-        peerId: peer.peerId,
-      });
-    }
-    // announce a new peer list to the remaining members for a future reconnect/resync
-    for (const other of room.values()) {
-      send(other.socket, {
-        type: 'welcome',
-        v: 1,
-        peerId: other.peerId,
-        roomId: peer.roomId,
-        sfuAvailable: false,
-        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
-        peers,
-        shares: Array.from(room.values()).filter((entry) => entry.share).map((entry) => summarizeShare(entry)).filter(Boolean),
-      });
-    }
+    return;
   }
+
+  // `peer-left` alone: replaying `welcome` would make the remaining clients
+  // reset their share list and forget which streams they are already watching.
+  notifyRoom(peer.roomId, {
+    type: 'peer-left',
+    v: PROTOCOL_VERSION,
+    peerId: peer.peerId,
+  });
+}
+
+/**
+ * Decides whether [viewer] may watch [publisher].
+ *
+ * The publisher still has the final say for a `private` share — it is prompted
+ * and answers with an offer or a `bye` — but the viewer limit and the allow list
+ * are enforced here so a client cannot talk its way past them.
+ */
+function watchRejection(publisher, viewer) {
+  const share = publisher.share;
+  if (!share) {
+    return errorPayload('not_sharing', `Peer ${publisher.peerId} is not sharing`);
+  }
+
+  const limit = Number(share.viewerLimit || 0);
+  const alreadyAdmitted = publisher.viewers.has(viewer.peerId);
+  if (limit > 0 && !alreadyAdmitted && publisher.viewers.size >= limit) {
+    return errorPayload('viewer_limit', `Publisher ${publisher.peerId} reached its viewer limit`);
+  }
+
+  const allowed = share.allowedUids || [];
+  if (allowed.length > 0 && !allowed.includes(viewer.clientUid)) {
+    return errorPayload('not_allowed', 'The publisher did not share this screen with you');
+  }
+
+  return null;
 }
 
 function handleMessage(ws, raw) {
@@ -136,7 +221,7 @@ function handleMessage(ws, raw) {
     return;
   }
 
-  if (typeof message.v !== 'number' || message.v !== 1) {
+  if (typeof message.v !== 'number' || message.v !== PROTOCOL_VERSION) {
     send(ws, errorPayload('bad_version', 'Unsupported protocol version', true));
     ws.close();
     return;
@@ -150,12 +235,20 @@ function handleMessage(ws, raw) {
     return;
   }
 
+  if (peer) peer.lastSeen = Date.now();
+
   logRoute(peer, message.type, `room=${peer ? peer.roomId : message.roomId || '(none)'}`);
 
   switch (message.type) {
     case 'hello': {
       if (peer) {
         send(ws, errorPayload('bad_request', 'Socket already belongs to a room'));
+        ws.close();
+        return;
+      }
+
+      if (!tokenMatches(message.token || ws.mssQueryToken)) {
+        send(ws, errorPayload('unauthorized', 'Invalid or missing signaling token', true));
         ws.close();
         return;
       }
@@ -177,48 +270,50 @@ function handleMessage(ws, raw) {
         tsClientId: Number(message.tsClientId || 0),
         nickname: String(message.nickname || 'Guest'),
         share: null,
+        viewers: new Set(),
+        lastSeen: Date.now(),
       };
       room.set(assignedPeerId, entry);
       peersBySocket.set(ws, entry);
 
-      const peerList = Array.from(room.values()).map(summarizePeer);
-      const shareList = Array.from(room.values()).filter((p) => p.share).map((p) => summarizeShare(p)).filter(Boolean);
       send(ws, {
         type: 'welcome',
-        v: 1,
+        v: PROTOCOL_VERSION,
         peerId: assignedPeerId,
         roomId,
         heartbeatMs: HEARTBEAT_MS,
         sfuAvailable: false,
-        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
-        peers: peerList.filter((p) => p.peerId !== assignedPeerId),
-        shares: shareList,
+        iceServers: iceServerConfig(),
+        peers: Array.from(room.values())
+          .filter((other) => other.peerId !== assignedPeerId)
+          .map(summarizePeer),
+        shares: collectShares(room),
       });
 
-      for (const other of room.values()) {
-        if (other.peerId === assignedPeerId) continue;
-        send(other.socket, {
-          type: 'peer-joined',
-          v: 1,
-          peer: summarizePeer(entry),
-        });
-      }
+      notifyRoom(roomId, {
+        type: 'peer-joined',
+        v: PROTOCOL_VERSION,
+        peer: summarizePeer(entry),
+      }, assignedPeerId);
       break;
     }
 
     case 'announce': {
-      if (!peer.share || peer.share.mode !== message.mode || peer.share.video !== message.video) {
-        peer.share = {
-          mode: String(message.mode || 'p2p'),
-          hasAudio: !!message.hasAudio,
-          video: message.video || null,
-          audio: message.audio || null,
-        };
-      }
-      logRoute(peer, 'announce', `mode=${peer.share.mode} hasAudio=${!!peer.share.hasAudio}`);
+      peer.share = {
+        mode: String(message.mode || 'p2p'),
+        privacy: String(message.privacy || 'public'),
+        hasAudio: !!message.hasAudio,
+        video: message.video || null,
+        audio: message.audio || null,
+        allowedUids: Array.isArray(message.allowedUids)
+          ? message.allowedUids.map((uid) => String(uid))
+          : [],
+        viewerLimit: Number(message.viewerLimit || 0),
+      };
+      logRoute(peer, 'announce', `mode=${peer.share.mode} hasAudio=${!!peer.share.hasAudio} limit=${peer.share.viewerLimit}`);
       notifyRoom(peer.roomId, {
         type: 'share-started',
-        v: 1,
+        v: PROTOCOL_VERSION,
         share: summarizeShare(peer),
       }, peer.peerId);
       break;
@@ -228,24 +323,34 @@ function handleMessage(ws, raw) {
       if (peer.share) {
         notifyRoom(peer.roomId, {
           type: 'share-stopped',
-          v: 1,
+          v: PROTOCOL_VERSION,
           publisherId: peer.peerId,
         }, peer.peerId);
       }
       peer.share = null;
+      peer.viewers.clear();
       break;
     }
 
     case 'watch': {
-      const publisher = roomFor(peer.roomId).get(message.publisherId);
+      const publisher = peerInRoom(peer.roomId, message.publisherId);
       if (!publisher) {
         send(ws, errorPayload('no_such_peer', `Publisher ${message.publisherId} not found`));
         return;
       }
-      logRoute(peer, 'watch', `publisher=${message.publisherId}`);
+
+      const rejection = watchRejection(publisher, peer);
+      if (rejection) {
+        logRoute(peer, 'watch-rejected', `publisher=${publisher.peerId} code=${rejection.code}`);
+        send(ws, rejection);
+        return;
+      }
+
+      publisher.viewers.add(peer.peerId);
+      logRoute(peer, 'watch', `publisher=${publisher.peerId} viewers=${publisher.viewers.size}`);
       send(publisher.socket, {
         type: 'watch-request',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         nickname: peer.nickname,
         clientUid: peer.clientUid,
@@ -254,11 +359,12 @@ function handleMessage(ws, raw) {
     }
 
     case 'unwatch': {
-      const publisher = roomFor(peer.roomId).get(message.publisherId);
+      const publisher = peerInRoom(peer.roomId, message.publisherId);
       if (!publisher) return;
+      publisher.viewers.delete(peer.peerId);
       send(publisher.socket, {
         type: 'bye',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         reason: 'viewer stopped',
       });
@@ -270,7 +376,7 @@ function handleMessage(ws, raw) {
         send(ws, errorPayload('sfu_unavailable', 'SFU mode is not enabled on this signaling server', false));
         return;
       }
-      const target = roomFor(peer.roomId).get(message.to);
+      const target = peerInRoom(peer.roomId, message.to);
       if (!target) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
@@ -278,7 +384,7 @@ function handleMessage(ws, raw) {
       logRoute(peer, 'offer', `to=${message.to} bytes=${String(message.sdp || '').length}`);
       send(target.socket, {
         type: 'offer',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         sdp: message.sdp,
         streamId: message.streamId || 'screen',
@@ -287,7 +393,7 @@ function handleMessage(ws, raw) {
     }
 
     case 'answer': {
-      const target = roomFor(peer.roomId).get(message.to);
+      const target = peerInRoom(peer.roomId, message.to);
       if (!target) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
@@ -295,7 +401,7 @@ function handleMessage(ws, raw) {
       logRoute(peer, 'answer', `to=${message.to} bytes=${String(message.sdp || '').length}`);
       send(target.socket, {
         type: 'answer',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         sdp: message.sdp,
       });
@@ -303,7 +409,7 @@ function handleMessage(ws, raw) {
     }
 
     case 'candidate': {
-      const target = roomFor(peer.roomId).get(message.to);
+      const target = peerInRoom(peer.roomId, message.to);
       if (!target) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
@@ -311,7 +417,7 @@ function handleMessage(ws, raw) {
       logRoute(peer, 'candidate', `to=${message.to} mid=${String(message.sdpMid || '')}`);
       send(target.socket, {
         type: 'candidate',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         candidate: String(message.candidate ?? ''),
         sdpMid: String(message.sdpMid || ''),
@@ -321,11 +427,13 @@ function handleMessage(ws, raw) {
     }
 
     case 'bye': {
-      const target = roomFor(peer.roomId).get(message.to);
+      const target = peerInRoom(peer.roomId, message.to);
       if (!target) return;
+      peer.viewers.delete(target.peerId);
+      target.viewers.delete(peer.peerId);
       send(target.socket, {
         type: 'bye',
-        v: 1,
+        v: PROTOCOL_VERSION,
         from: peer.peerId,
         reason: message.reason || '',
       });
@@ -334,14 +442,14 @@ function handleMessage(ws, raw) {
 
     case 'leave': {
       removePeer(peer);
-      if (ws && ws.readyState === ws.OPEN) {
+      if (isSocketActive(ws)) {
         ws.close();
       }
       break;
     }
 
     case 'ping': {
-      send(ws, { type: 'pong', v: 1, nonce: Number(message.nonce || 0) });
+      send(ws, { type: 'pong', v: PROTOCOL_VERSION, nonce: Number(message.nonce || 0) });
       break;
     }
 
@@ -354,10 +462,43 @@ function handleMessage(ws, raw) {
   }
 }
 
-function createServer(port = PORT) {
-  const wss = new WebSocketServer({ port });
+/**
+ * Sends a heartbeat and evicts peers that missed two rounds, so a socket that
+ * dies without a close frame (mobile suspend, NAT timeout) stops appearing in
+ * the room and stops holding a viewer slot.
+ */
+function sweep() {
+  const staleBefore = Date.now() - HEARTBEAT_MS * 2;
+  for (const room of Array.from(rooms.values())) {
+    for (const peer of Array.from(room.values())) {
+      if (!isSocketActive(peer.socket)) {
+        removePeer(peer);
+        continue;
+      }
+      if (peer.lastSeen < staleBefore) {
+        logRoute(peer, 'evict', 'heartbeat timeout');
+        removePeer(peer);
+        closeQuietly(peer.socket);
+        continue;
+      }
+      send(peer.socket, { type: 'ping', v: PROTOCOL_VERSION, nonce: Date.now() });
+    }
+  }
+}
 
-  wss.on('connection', (ws) => {
+function closeQuietly(ws) {
+  try {
+    ws.close();
+  } catch (error) {
+    // already gone, which is the outcome we wanted
+  }
+}
+
+/** Attaches the signaling protocol to an existing `ws` server. */
+function attachSignaling(wss) {
+  wss.on('connection', (ws, request) => {
+    ws.mssQueryToken = tokenFromRequest(request);
+
     ws.on('message', (raw) => {
       handleMessage(ws, raw.toString());
     });
@@ -373,24 +514,38 @@ function createServer(port = PORT) {
     });
   });
 
-  const heartbeat = setInterval(() => {
-    for (const room of rooms.values()) {
-      for (const peer of room.values()) {
-        if (isSocketActive(peer.socket)) {
-          send(peer.socket, { type: 'ping', v: 1, nonce: Date.now() });
-        }
-      }
-    }
-  }, HEARTBEAT_MS);
-
+  const heartbeat = setInterval(sweep, HEARTBEAT_MS);
+  // The heartbeat must never be the reason the process stays alive: when the
+  // signaling server is attached to an HTTP server, closing that server does not
+  // emit `close` here, so a ref'd timer would hang the host process forever.
+  heartbeat.unref();
   wss.on('close', () => clearInterval(heartbeat));
   return wss;
 }
 
-if (require.main === module) {
-  const wss = createServer(PORT);
-  console.log(`MSS signaling server listening on ws://0.0.0.0:${PORT}`);
-  module.exports = { wss, createServer, deriveRoomId };
-} else {
-  module.exports = { createServer, deriveRoomId, roomFor, handleMessage, removePeer, peersBySocket, rooms };
+function createServer(port = PORT) {
+  return attachSignaling(new WebSocketServer({ port }));
 }
+
+if (require.main === module) {
+  createServer(PORT);
+  console.log(`MSS signaling server listening on ws://0.0.0.0:${PORT}`);
+  if (!AUTH_TOKEN) {
+    console.warn('[mss] MSS_AUTH_TOKEN is unset: anyone who can reach this port can join any room.');
+  }
+}
+
+module.exports = {
+  attachSignaling,
+  createServer,
+  deriveRoomId,
+  handleMessage,
+  peersBySocket,
+  removePeer,
+  roomFor,
+  rooms,
+  summarizePeer,
+  summarizeShare,
+  HEARTBEAT_MS,
+  PROTOCOL_VERSION,
+};
