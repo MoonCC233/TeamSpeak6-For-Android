@@ -141,6 +141,7 @@ class ScreenShareManager @Inject constructor(
 
         _state.value = _state.value.copy(
             signalingUrl = normalizedUrl,
+            roomId = roomId,
             signaling = ScreenShareSignalingState.CONNECTING,
             remoteShares = emptyList(),
             errorMessage = null,
@@ -165,6 +166,7 @@ class ScreenShareManager @Inject constructor(
         signaling.disconnect()
         _state.value = _state.value.copy(
             signaling = ScreenShareSignalingState.OFFLINE,
+            roomId = "",
             remoteShares = emptyList(),
             viewerCount = 0,
             pendingViewerRequests = emptyList(),

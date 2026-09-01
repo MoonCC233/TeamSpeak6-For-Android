@@ -156,7 +156,8 @@ private fun SignalingBanner(state: ScreenShareState, onOpenOptions: () -> Unit) 
 
 private fun signalingDetail(state: ScreenShareState): String {
     val relay = if (state.serverModeAvailable) "支持服务器中转" else "仅支持 P2P"
-    return "${state.signalingUrl} · $relay"
+    val roomLabel = if (state.roomId.isNotBlank()) " · room=${state.roomId}" else ""
+    return "${state.signalingUrl} · $relay$roomLabel"
 }
 
 @Composable

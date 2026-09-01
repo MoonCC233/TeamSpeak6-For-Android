@@ -78,6 +78,7 @@ data class ViewerRequest(
 data class ScreenShareState(
     val signaling: ScreenShareSignalingState = ScreenShareSignalingState.OFFLINE,
     val signalingUrl: String = "",
+    val roomId: String = "",
     val serverModeAvailable: Boolean = false,
     val isSharing: Boolean = false,
     val isStarting: Boolean = false,
