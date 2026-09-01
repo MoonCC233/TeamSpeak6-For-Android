@@ -91,6 +91,15 @@ npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流�
 5. 另一端使用“观看”按钮或 `watch` 请求对方的 `publisherId`
 6. 观察 `offer / answer / candidate` 交换，并确认远端视频流出现
 
+#### 实时调试检查清单
+
+- 房间派生必须一致：`RoomId.forChannel(serverUid, channelId)` 与 `deriveRoomId(serverUid, channelId)` 必须相同
+- 信令地址可接受 `ws://` / `wss://`，也可接受 `http://` / `https://` 自动转换
+- 发布端必须先 `announce`，观看端再 `watch`
+- 观看端收到 `watch-request` 后必须发出 `offer`
+- 发布端收到 `offer` 后发 `answer`
+- 双端继续交换 `candidate`，直到 `connected` 或 `ontrack` 触发
+
 同一 MSS 协议下，屏幕共享只要求双方都实现相同的 `watch / offer / answer / candidate` 交换，不依赖官方 TeamSpeak 桌面端的私有信令协议。
 
 ## 技术栈
