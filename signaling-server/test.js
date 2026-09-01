@@ -128,6 +128,18 @@ test('announce/watch/offer flow routes correctly within a room', async () => {
     const offerReceived = await waitForMessage(viewer.ws, (payload) => payload.type === 'offer');
     assert.equal(offerReceived.from, publisher.welcome.peerId);
 
+    viewer.ws.send(JSON.stringify({
+      type: 'candidate',
+      v: 1,
+      to: publisher.welcome.peerId,
+      candidate: 'candidate:1 1 UDP 2130706431 192.168.1.10 52000 typ host',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    }));
+
+    const candidateReceived = await waitForMessage(publisher.ws, (payload) => payload.type === 'candidate');
+    assert.equal(candidateReceived.from, viewer.welcome.peerId);
+
     viewer.ws.close();
     publisher.ws.close();
     await new Promise((resolve) => setTimeout(resolve, 100));

@@ -1,5 +1,17 @@
 const WebSocket = require('ws');
 
+function printUsage() {
+  console.log('Usage: node client.js [options]\n\n' +
+    '  --server ws://host:port   Signal server URL (default: ws://127.0.0.1:8765)\n' +
+    '  --room roomId            TeamSpeak room ID / MSS room to join\n' +
+    '  --uid clientUid          Client UID for display\n' +
+    '  --name nickname          Display name\n' +
+    '  --publish                Announce screen share in this room\n' +
+    '  --watch publisherId      Request to watch a specific publisher\n' +
+    '  --wait                   Print share notices while waiting\n' +
+    '  --help                   Show this help\n');
+}
+
 function parseArgs(argv) {
   const args = {
     server: process.env.MSS_SIGNALING_URL || 'ws://127.0.0.1:8765',
@@ -13,6 +25,10 @@ function parseArgs(argv) {
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
+    if (value === '--help') {
+      printUsage();
+      process.exit(0);
+    }
     if (value === '--server') args.server = argv[++index];
     else if (value === '--room') args.roomId = argv[++index];
     else if (value === '--uid') args.clientUid = argv[++index];
