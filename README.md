@@ -1,6 +1,19 @@
-# TeamSpeak6-For-Android
+# TeamSpeak9
 
-TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose 构建，目标是在移动端提供接近桌面端的体验：频道树、文字聊天、原生协议语音通话，以及屏幕共享的观看与发起。
+TeamSpeak9 是一个完全独立实现的 TeamSpeak 风格客户端方案，不依赖 TeamSpeak 官方桌面端或官方 Android 客户端。项目基于 Kotlin + Jetpack Compose，目标是在移动端和桌面端实现接近官方 UI 的体验：频道树、文字聊天、原生协议语音，以及屏幕共享的观看与发起。
+
+## 目标
+
+- 手机端、桌面端、服务端三端都完全独立实现
+- 语音走自研/兼容协议栈，服务端按官方 TeamSpeak 服务端做适配扩展
+- 屏幕共享继续使用当前已完成的 MSS / WebRTC 协议
+- UI 可仿照官方 TeamSpeak 风格，但不依赖官方应用或官方私有协议
+
+## 使用文档
+
+- [docs/USAGE.md](docs/USAGE.md)：快速上手、运行方式、局域网联调和常见问题
+- [docs/screenshare-protocol.md](docs/screenshare-protocol.md)：屏幕共享协议说明
+- [docs/TEAMSPEAK9-ROADMAP.md](docs/TEAMSPEAK9-ROADMAP.md)：TeamSpeak9 重构路线图和三端适配计划
 
 ## 项目状态
 
@@ -47,9 +60,38 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 
 **互通限制**：TeamSpeak 6 的屏幕共享信令层没有任何公开文档（媒体层是 WebRTC，已由官方员工确认，但 SDP/ICE 如何经由 TeamSpeak 服务器交换未公开），因此**无法与官方客户端互看屏幕**。本项目的屏幕共享仅能与实现了 MSS 协议的客户端互通。语音不受此限制，与官方客户端完全互通。
 
+### 项目目录结构
+
+现在项目已按平台拆分为三大部分，并且按 TeamSpeak9 的产品方向来组织：
+
+```text
+TeamSpeak9/
+├─ mobile/
+│  ├─ README.md
+│  └─ app/                 # Android 客户端：Compose UI + TeamSpeak 原生协议 + 屏幕共享
+├─ desktop/
+│  ├─ README.md
+│  └─ companion/           # PC 端伴生程序：WebRTC + browser UI + CLI 验证工具
+├─ server/
+│  ├─ README.md
+│  └─ signaling/           # MSS 信令服务：房间、announce/watch、offer/answer/candidate
+├─ docs/
+├─ gradle/
+├─ build.gradle.kts
+├─ settings.gradle.kts
+├─ README.md
+└─ ...
+```
+
+其中：
+
+- `mobile/app`：Android 端实现；语音走 TeamSpeak 原生协议，屏幕共享走 MSS/WebRTC
+- `desktop/companion`：桌面端参考实现，可作为同协议观众/共享端参与互通
+- `server/signaling`：后端信令服务，负责 room、peer、share/watch、offer/answer/candidate 转发
+
 ### 最小 MSS 信令服务端
 
-当前已补齐最小可运行的 WebSocket 信令服务端，位于 `signaling-server/`。它实现了：
+当前已补齐最小可运行的 WebSocket 信令服务端，位于 `server/signaling/`。它实现了：
 
 - room 管理：按 TeamSpeak 频道位置派生 `roomId`，同频道用户自动落在同一 room
 - peer 注册：客户端 `hello` 后返回 `welcome`，并返回该 room 的现有 peers / shares
@@ -61,20 +103,20 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 启动方式：
 
 ```bash
-cd signaling-server
+cd server/signaling
 npm install
 npm start
 ```
 
 默认监听 `ws://127.0.0.1:8765`。目前服务端优先落地 P2P 最小可用链路，SFU 中转仍为后续扩展点。
 
-同时补了一份 PC 端参考伴生程序，位于 `pc-companion/`，它同时包含：
+同时补了一份 PC 端参考伴生程序，位于 `desktop/companion/`，它同时包含：
 
 - 一个基于浏览器的桌面端界面，用于连接信令服务、开始/停止屏幕共享，并渲染远端共享画面
 - 一个 CLI 版信令脚本，用于在无界面环境中验证同 room 的 `watch / offer / answer / candidate` 流程
 
 ```bash
-cd pc-companion
+cd desktop/companion
 npm install
 npm start     # 启动本地 UI + WebSocket 信令服务： http://127.0.0.1:4173
 npm run start:cli -- --room room-123 --uid pc-a --name DeskA --publish
@@ -86,8 +128,8 @@ npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流�
 
 ### 真实互通验证步骤
 
-1. 启动信令服务：`cd signaling-server && npm install && npm start`
-2. 启动 PC 伴生端：`cd pc-companion && npm start`
+1. 启动信令服务：`cd server/signaling && npm install && npm start`
+2. 启动 PC 伴生端：`cd desktop/companion && npm start`
 3. 在 Android 中打开同一 TeamSpeak 服务器与频道，填写同样的信令服务地址，并确保两端都进入相同 `roomId`
 4. 让 Android 或 PC 任一端点击“开始共享”并 `announce`
 5. 另一端使用“观看”按钮或 `watch` 请求对方的 `publisherId`
@@ -108,7 +150,7 @@ npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流�
 在同一 Wi‑Fi / 局域网下，先在桌面端启动信令服务，然后用以下命令检查设备是否能在同房间互相看到：
 
 ```bash
-cd signaling-server
+cd server/signaling
 npm install
 npm start
 ```
@@ -116,7 +158,7 @@ npm start
 另开一个终端：
 
 ```bash
-cd pc-companion
+cd desktop/companion
 npm install
 node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --channel-id <channelId> --uid laptop-a --name LaptopA --publish
 node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --channel-id <channelId> --uid laptop-b --name LaptopB --watch p_xxx

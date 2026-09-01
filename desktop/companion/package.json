@@ -1,0 +1,17 @@
+{
+  "name": "teamspeak9-pc-companion",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Desktop companion for the TeamSpeak9 MSS signaling protocol.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "start:cli": "node client.js",
+    "check:lan": "node lan-check.js",
+    "test": "node smoke-test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

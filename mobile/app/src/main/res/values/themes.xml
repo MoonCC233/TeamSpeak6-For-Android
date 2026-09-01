@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TeamSpeak9" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0F1620</item>
+        <item name="android:statusBarColor">#FF0F1620</item>
+        <item name="android:navigationBarColor">#FF0F1620</item>
+    </style>
+
+    <style name="Theme.TeamSpeak6" parent="Theme.TeamSpeak9" />
+</resources>

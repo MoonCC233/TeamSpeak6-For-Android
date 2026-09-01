@@ -21,5 +21,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TeamSpeak6-For-Android"
-include(":app")
+rootProject.name = "TeamSpeak9"
+include(":mobile:app")

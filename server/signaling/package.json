@@ -1,0 +1,13 @@
+{
+  "name": "teamspeak9-screen-share-signaling",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal WebSocket signaling server for the TeamSpeak9 MSS screen-share protocol.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
