@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TeamSpeak6 Companion</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <h1>TS6 Companion</h1>
+
+        <label>
+          Signal server
+          <input id="serverInput" value="ws://127.0.0.1:8765" />
+        </label>
+
+        <label>
+          Room ID
+          <input id="roomInput" value="demo-room" />
+        </label>
+
+        <label>
+          Client UID
+          <input id="uidInput" value="pc-demo" />
+        </label>
+
+        <label>
+          Nickname
+          <input id="nameInput" value="PC Companion" />
+        </label>
+
+        <div class="stack">
+          <button id="connectBtn">Connect</button>
+          <button id="publishBtn">Start sharing</button>
+          <button id="watchBtn">Watch selected publisher</button>
+          <button id="stopBtn" class="secondary">Stop</button>
+        </div>
+
+        <div class="panel">
+          <h2>Publishers</h2>
+          <ul id="publisherList"></ul>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <div class="statusbar">
+          <span id="connectionState">Disconnected</span>
+        </div>
+
+        <div class="video-panel">
+          <video id="remoteVideo" autoplay playsinline muted></video>
+          <div class="muted-note" id="emptyState">No stream yet</div>
+        </div>
+
+        <div class="log-panel">
+          <h2>Signal log</h2>
+          <pre id="logOutput"></pre>
+        </div>
+      </main>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

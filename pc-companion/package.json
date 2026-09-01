@@ -2,12 +2,14 @@
   "name": "teamspeak6-pc-companion",
   "private": true,
   "version": "1.0.0",
-  "description": "Reference desktop companion for the MSS signaling protocol used by TeamSpeak6-For-Android.",
-  "main": "client.js",
+  "description": "Desktop companion for the MSS signaling protocol used by TeamSpeak6-For-Android.",
+  "main": "main.js",
   "scripts": {
-    "start": "node client.js"
+    "start": "electron .",
+    "start:cli": "node client.js"
   },
   "dependencies": {
+    "electron": "^31.7.1",
     "ws": "^8.18.0"
   }
 }
