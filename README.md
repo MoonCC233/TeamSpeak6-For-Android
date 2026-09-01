@@ -73,13 +73,25 @@ npm start
 
 ```bash
 cd pc-companion
-npm install   # 仅用于兼容 CLI 入口；浏览器界面不需要额外依赖
-npm start     # 启动本地静态 UI： http://127.0.0.1:4173
+npm install
+npm start     # 启动本地 UI + WebSocket 信令服务： http://127.0.0.1:4173
 npm run start:cli -- --room room-123 --uid pc-a --name DeskA --publish
 npm run start:cli -- --uid pc-b --name DeskB --watch p_xxx
+npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流程
 ```
 
-浏览器版会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。
+浏览器版会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。为了跨设备互通，Android 端和 PC 伴生端都需要连接到同一个信令服务并使用同一个 `roomId`（同一个 TeamSpeak 服务器 UID + 频道 ID 派生出的 room id）。
+
+### 真实互通验证步骤
+
+1. 启动信令服务：`cd signaling-server && npm install && npm start`
+2. 启动 PC 伴生端：`cd pc-companion && npm start`
+3. 在 Android 中打开同一 TeamSpeak 服务器与频道，填写同样的信令服务地址，并确保两端都进入相同 `roomId`
+4. 让 Android 或 PC 任一端点击“开始共享”并 `announce`
+5. 另一端使用“观看”按钮或 `watch` 请求对方的 `publisherId`
+6. 观察 `offer / answer / candidate` 交换，并确认远端视频流出现
+
+同一 MSS 协议下，屏幕共享只要求双方都实现相同的 `watch / offer / answer / candidate` 交换，不依赖官方 TeamSpeak 桌面端的私有信令协议。
 
 ## 技术栈
 
