@@ -5,6 +5,11 @@ const PORT = Number(process.env.PORT || 8765);
 const rooms = new Map();
 const peersBySocket = new Map();
 
+function deriveRoomId(serverUid, channelId) {
+  const input = `${serverUid || ''}|${channelId ?? 0}`;
+  return crypto.createHash('sha256').update(input, 'utf8').digest('hex').slice(0, 32);
+}
+
 function roomFor(roomId) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, new Map());
@@ -348,7 +353,7 @@ function createServer(port = PORT) {
 if (require.main === module) {
   const wss = createServer(PORT);
   console.log(`MSS signaling server listening on ws://0.0.0.0:${PORT}`);
-  module.exports = { wss, createServer };
+  module.exports = { wss, createServer, deriveRoomId };
 } else {
-  module.exports = { createServer, roomFor, handleMessage, removePeer, peersBySocket, rooms };
+  module.exports = { createServer, deriveRoomId, roomFor, handleMessage, removePeer, peersBySocket, rooms };
 }

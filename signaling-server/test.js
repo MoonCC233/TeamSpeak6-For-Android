@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const WebSocket = require('ws');
-const { createServer } = require('./index.js');
+const { createServer, deriveRoomId } = require('./index.js');
 
 function waitForMessage(ws, predicate, timeoutMs = 4000) {
   return new Promise((resolve, reject) => {
@@ -49,6 +49,19 @@ async function joinRoom(port, roomId, clientUid, nickname) {
   const welcome = await waitForMessage(ws, (payload) => payload.type === 'welcome');
   return { ws, welcome };
 }
+
+test('room ids are derived deterministically from server uid and channel id', () => {
+  const first = deriveRoomId('server-uid', 42);
+  const second = deriveRoomId('server-uid', 42);
+  const differentChannel = deriveRoomId('server-uid', 43);
+  const differentServer = deriveRoomId('server-uid-2', 42);
+
+  assert.equal(first, second);
+  assert.notEqual(first, differentChannel);
+  assert.notEqual(first, differentServer);
+  assert.equal(first.length, 32);
+  assert.match(first, /^[0-9a-f]+$/);
+});
 
 test('hello returns welcome and notifies peers on join', async () => {
   const port = 9876;
