@@ -22,6 +22,14 @@ let isConnected = false;
 let knownPublishers = new Map();
 const pendingAnswers = new Map();
 
+function getPeerConnectionFor(targetPeerId) {
+  if (!targetPeerId) return null;
+  if (!peerConnections.has(targetPeerId)) {
+    peerConnections.set(targetPeerId, createPeerConnection(targetPeerId));
+  }
+  return peerConnections.get(targetPeerId);
+}
+
 const log = (text) => {
   const stamp = new Date().toLocaleTimeString();
   logOutput.textContent = `[${stamp}] ${text}\n` + logOutput.textContent;
@@ -68,6 +76,9 @@ function createPeerConnection(targetPeerId) {
       stream.addTrack(event.track);
     }
     setRemoteVideo(stream);
+    if (targetPeerId) {
+      setSelectedPublisher(targetPeerId);
+    }
   };
 
   pc.onconnectionstatechange = () => {
@@ -102,35 +113,13 @@ async function acquireDisplayStream() {
 async function publishShare() {
   try {
     const stream = await acquireDisplayStream();
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
-    });
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && currentPublisher) {
-        send('candidate', {
-          to: currentPublisher,
-          candidate: event.candidate.candidate,
-          sdpMid: event.candidate.sdpMid || '',
-          sdpMLineIndex: event.candidate.sdpMLineIndex || 0,
-        });
-      }
-    };
-
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    pendingAnswers.set('publisher-local', pc);
+    localStream = stream;
     send('announce', {
       mode: 'p2p',
       hasAudio: true,
       video: { width: 1920, height: 1080, fps: 30, bitrateKbps: 6000 },
     });
-    send('offer', {
-      to: currentPublisher,
-      sdp: offer.sdp,
-      streamId: 'screen',
-    });
+    log('Local screen share announced to the room. Waiting for watcher requests.');
   } catch (error) {
     log(`Publish failed: ${error.message}`);
   }
@@ -143,6 +132,8 @@ async function watchPublisher(publisherId) {
   }
 
   currentPublisher = publisherId;
+  selectedPublisherId = publisherId;
+  setSelectedPublisher(publisherId);
   send('watch', { publisherId });
 }
 
@@ -293,33 +284,68 @@ function connect() {
         break;
       }
       case 'watch-request': {
-        log(`Watch request from ${msg.from}`);
+        if (!localStream) {
+          log(`Ignored watch request from ${msg.from}: no local screen stream is active.`);
+          break;
+        }
+
+        const target = msg.from;
+        const pc = getPeerConnectionFor(target);
+        if (!pc) {
+          log(`Creating publisher-side peer for ${target}`);
+        }
+        localStream.getTracks().forEach((track) => {
+          if (!pc.getSenders().some((sender) => sender.track === track)) {
+            pc.addTrack(track, localStream);
+          }
+        });
+
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          send('offer', { to: target, sdp: pc.localDescription.sdp, streamId: 'screen' });
+          log(`Sent offer to watch requester ${target}`);
+        } catch (error) {
+          log(`Failed to send offer to ${target}: ${error.message}`);
+        }
         break;
       }
       case 'offer': {
         const target = msg.from;
-        const pc = createPeerConnection(target);
-        pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
-        pc.createAnswer().then((answer) => pc.setLocalDescription(answer)).then(() => {
+        const pc = getPeerConnectionFor(target);
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
           send('answer', { to: target, sdp: pc.localDescription.sdp });
-        });
+        } catch (error) {
+          log(`Failed to answer offer from ${target}: ${error.message}`);
+        }
         break;
       }
       case 'answer': {
         const pc = peerConnections.get(msg.from);
         if (pc) {
-          pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+          } catch (error) {
+            log(`Failed to apply answer from ${msg.from}: ${error.message}`);
+          }
         }
         break;
       }
       case 'candidate': {
         const pc = peerConnections.get(msg.from);
         if (pc && msg.candidate) {
-          pc.addIceCandidate(new RTCIceCandidate({
-            candidate: msg.candidate,
-            sdpMid: msg.sdpMid || '',
-            sdpMLineIndex: msg.sdpMLineIndex || 0,
-          }));
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate({
+              candidate: msg.candidate,
+              sdpMid: msg.sdpMid || '',
+              sdpMLineIndex: msg.sdpMLineIndex || 0,
+            }));
+          } catch (error) {
+            log(`ICE candidate rejected for ${msg.from}: ${error.message}`);
+          }
         }
         break;
       }
@@ -334,6 +360,8 @@ function connect() {
 
   socket.addEventListener('close', () => {
     isConnected = false;
+    peerConnections.forEach((pc) => pc.close());
+    peerConnections.clear();
     updateConnectionLabel('Disconnected');
     log('Disconnected from signaling server');
   });
@@ -360,6 +388,8 @@ stopBtn.addEventListener('click', () => {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
   }
+  peerConnections.forEach((pc) => pc.close());
+  peerConnections.clear();
   currentPublisher = null;
   selectedPublisherId = null;
   send('unannounce');
