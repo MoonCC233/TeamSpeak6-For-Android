@@ -28,6 +28,7 @@ TeamSpeak9 是一个完全独立实现的 TeamSpeak 风格客户端方案，不�
 - [x] 阶段 9：官方风格 UI 重构（手机端 + 桌面端同源配色）
 - [x] 阶段 10：补齐官方语音功能（本地静音/音量、发言申请、优先发言、耳语）
 - [x] 阶段 11：信令实现三端归一，服务端强制隐私与观众上限
+- [x] 阶段 12：指挥组耳语与 Electron 桌面外壳
 
 ### 语音功能对照
 
@@ -145,22 +146,27 @@ SFU 中转仍为后续扩展点（`welcome.sfuAvailable` 恒为 `false`）。
 
 桌面伴生程序位于 `desktop/companion/`，把 UI 与信令挂在同一端口，包含：
 
-- 一个基于浏览器的桌面端界面，用于连接信令服务、开始/停止屏幕共享，并渲染远端共享画面
+- 一个 Electron 桌面外壳（`npm start`），自带屏幕捕获选择器，Windows 上还会抓系统声音
+- 同一份界面也可用浏览器打开（`npm run serve`），无需安装 Electron
 - 一个 CLI 版信令脚本，用于在无界面环境中验证同 room 的 `watch / offer / answer / candidate` 流程
 
 ```bash
 cd desktop/companion
 npm install
-npm start     # UI + 信令同端口： http://127.0.0.1:4173
+npm start          # Electron 桌面外壳
+npm run serve      # 仅浏览器模式：UI + 信令同端口 http://127.0.0.1:4173
 npm run start:cli -- --room room-123 --uid pc-a --name DeskA --publish
 npm run start:cli -- --uid pc-b --name DeskB --watch p_xxx
-npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流程
+npm test           # 端到端验证同 room 的 announce/watch/offer/candidate 流程
 ```
+
+外壳与浏览器模式共用同一个 origin 和同一份信令实现（外壳内部就是起 `server.js` 再
+`loadURL`），所以两种模式的行为不会漂移。若 4173 被占用，外壳会退到随机端口并自动填入 UI。
 
 局域网联调只需要跑桌面端这一个进程，手机端信令地址填 `http://<电脑IP>:4173` 即可；
 只有需要独立部署信令时才单独启动 8765。
 
-浏览器版会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。为了跨设备互通，Android 端和 PC 伴生端都需要连接到同一个信令服务并使用同一个 `roomId`（同一个 TeamSpeak 服务器 UID + 频道 ID 派生出的 room id）。
+界面会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。为了跨设备互通，Android 端和 PC 伴生端都需要连接到同一个信令服务并使用同一个 `roomId`（同一个 TeamSpeak 服务器 UID + 频道 ID 派生出的 room id）。
 
 ### 真实互通验证步骤
 

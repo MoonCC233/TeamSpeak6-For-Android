@@ -60,9 +60,11 @@ jobs:
         working-directory: server/signaling
         run: npm install --no-audit --no-fund
 
+      # --omit=dev skips electron: the shell binary is ~100MB and the smoke test
+      # exercises `shell.js` directly rather than launching a window.
       - name: Install companion deps
         working-directory: desktop/companion
-        run: npm install --no-audit --no-fund
+        run: npm install --no-audit --no-fund --omit=dev
 
       - name: Signaling tests
         working-directory: server/signaling

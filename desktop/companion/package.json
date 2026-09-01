@@ -3,9 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "description": "Desktop companion for the TeamSpeak9 MSS signaling protocol.",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "electron .",
+    "serve": "node server.js",
     "dev": "node server.js",
     "start:cli": "node client.js",
     "check:lan": "node lan-check.js",
@@ -13,5 +14,8 @@
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "44.1.0"
   }
 }

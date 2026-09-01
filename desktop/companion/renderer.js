@@ -467,6 +467,25 @@ stopBtn.addEventListener('click', () => {
   input.addEventListener('input', updateTreeLabels);
 });
 
+/**
+ * In the Electron shell the UI is served from the same process that hosts the
+ * signaling server, and that port may have moved if 4173 was taken. Adopt the
+ * real port so the default in the form is never wrong. The page still runs
+ * unchanged in a plain browser, where `ts9Shell` is absent.
+ */
+async function adoptShellDefaults() {
+  if (!window.ts9Shell?.isShell) return;
+  try {
+    const info = await window.ts9Shell.info();
+    if (info?.signalUrl) serverInput.value = info.signalUrl;
+    log(`Running in the desktop shell (v${info?.version || '?'}, ${info?.platform || '?'})`);
+    updateTreeLabels();
+  } catch (error) {
+    log(`Could not read shell info: ${error.message}`);
+  }
+}
+
 updateTreeLabels();
 renderPublishers([]);
+adoptShellDefaults();
 log('Ready');

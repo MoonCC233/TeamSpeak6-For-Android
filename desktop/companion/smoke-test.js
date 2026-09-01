@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const { createServer } = require('./server.js');
+const { pickDisplaySource, shellAudioConstraint, startShellServer } = require('./shell.js');
 
 function normalizeSignalUrl(raw) {
   const candidate = String(raw || '').trim();
@@ -15,6 +16,27 @@ if (normalizeSignalUrl('http://127.0.0.1:8765') !== 'ws://127.0.0.1:8765') {
 }
 if (normalizeSignalUrl('https://signal.example.com') !== 'wss://signal.example.com') {
   throw new Error('HTTPS signal URL normalization failed');
+}
+
+// The shell prefers a whole screen because one always exists, whereas the window
+// list depends on what the user happens to have open.
+if (pickDisplaySource([{ id: 'window:1' }, { id: 'screen:0' }]).id !== 'screen:0') {
+  throw new Error('display source picker should prefer a screen');
+}
+if (pickDisplaySource([{ id: 'window:1' }]).id !== 'window:1') {
+  throw new Error('display source picker should fall back to a window');
+}
+if (pickDisplaySource([]) !== null) {
+  throw new Error('display source picker should report no source');
+}
+
+// Loopback audio is Windows-only in Electron; requesting it elsewhere fails the
+// whole capture request rather than just dropping the audio track.
+if (shellAudioConstraint('win32') !== 'loopback') {
+  throw new Error('windows should capture loopback audio');
+}
+if (shellAudioConstraint('linux') !== false) {
+  throw new Error('non-windows platforms must not request loopback audio');
 }
 
 async function waitForMessage(ws, predicate, timeoutMs = 5000) {
@@ -183,6 +205,28 @@ async function main() {
     const outsiderLeak = await assertNoMessage(outsider, 500, 'cross-room share leakage');
     if (outsiderLeak) {
       throw new Error('outsider should not receive room-local share notifications');
+    }
+
+    // The shell must survive a busy port instead of hanging on a promise that
+    // never settles, so verify the fallback against the port we already hold.
+    const fallback = await startShellServer(4174);
+    try {
+      if (!fallback.usedFallbackPort) {
+        throw new Error('shell should have reported a fallback port');
+      }
+      if (fallback.port === 4174 || !Number.isInteger(fallback.port) || fallback.port <= 0) {
+        throw new Error(`shell fallback picked an unusable port: ${fallback.port}`);
+      }
+
+      const shellClient = await connect(`ws://127.0.0.1:${fallback.port}`);
+      try {
+        const welcome = await joinRoom(shellClient, 'shell-room', 'shell-a', 'ShellA');
+        if (!welcome.peerId) throw new Error('shell fallback server did not sign the peer in');
+      } finally {
+        shellClient.close();
+      }
+    } finally {
+      fallback.server.close();
     }
 
     console.log('companion smoke test passed');

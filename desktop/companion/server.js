@@ -61,9 +61,31 @@ function createServer(targetPort = port) {
   // websocket server's lifetime to it or the process never exits.
   server.on('close', () => wss.close());
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    // A bound port is a startup failure the caller has to see (the Electron
+    // shell retries on an ephemeral port), so surface it instead of hanging on
+    // a promise that never settles.
+    //
+    // `ws` re-emits the HTTP server's errors on itself, and an unhandled one
+    // there crashes the process before this rejection can be observed, so both
+    // emitters need a listener.
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      wss.close();
+      server.close();
+      reject(error);
+    };
+
+    server.once('error', fail);
+    wss.once('error', fail);
+
     server.listen(targetPort, () => {
-      resolve({ server, wss });
+      settled = true;
+      server.removeListener('error', fail);
+      wss.removeListener('error', fail);
+      resolve({ server, wss, port: server.address().port });
     });
   });
 }
