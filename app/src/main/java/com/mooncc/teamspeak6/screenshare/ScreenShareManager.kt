@@ -273,6 +273,7 @@ class ScreenShareManager @Inject constructor(
         } else {
             config.mode
         }
+        logSignal("startSharing", "mode=$mode privacy=${config.privacy} captureAudio=${config.captureAudio}")
         // Device audio capture is not wired up yet, so never announce audio we
         // cannot actually send.
         val captureAudio = false
@@ -305,6 +306,7 @@ class ScreenShareManager @Inject constructor(
         _localTrack.value = track
         _state.value = _state.value.copy(isSharing = true, isStarting = false, viewerCount = 0)
 
+        logSignal("announce", "publisher=${localPeerId.ifBlank { "pending" }} mode=${effective.mode} bitrate=${effective.videoBitrateKbps}kbps")
         signaling.send(
             ClientMessage.Announce(
                 mode = effective.mode.toWire(),
@@ -396,6 +398,7 @@ class ScreenShareManager @Inject constructor(
         runCatching {
             val sdp = peer.createOffer(config.videoBitrateKbps, PREFERRED_CODEC)
             peer.applySenderBitrate(config.videoBitrateKbps)
+            logSignal("offerToViewer", "viewerId=$viewerId bitrate=${config.videoBitrateKbps}kbps")
             signaling.send(ClientMessage.Offer(to = viewerId, sdp = sdp))
         }.onFailure {
             Log.w(TAG, "offer to viewer failed", it)
@@ -411,6 +414,7 @@ class ScreenShareManager @Inject constructor(
             emitMessage("信令服务未连接")
             return
         }
+        logSignal("watch", "publisherId=$publisherId")
         updateRemoteShare(publisherId) { it.copy(isConnecting = true) }
         signaling.send(ClientMessage.Watch(publisherId))
     }
@@ -445,6 +449,7 @@ class ScreenShareManager @Inject constructor(
     // --------------------------------------------------------------- messages
 
     private suspend fun handle(message: ServerMessage) {
+        logSignal("incoming", message::class.simpleName ?: "message")
         when (message) {
             is ServerMessage.Welcome -> {
                 localPeerId = message.peerId
@@ -563,6 +568,7 @@ class ScreenShareManager @Inject constructor(
      */
     private suspend fun acceptIncomingOffer(message: ServerMessage.Offer) {
         val publisherId = message.from
+        logSignal("acceptIncomingOffer", "publisherId=$publisherId")
         val peer = createPeer(publisherId) ?: return
         peer.addReceiveOnlyVideo()
         val expectsAudio = _state.value.remoteShares
@@ -676,6 +682,11 @@ class ScreenShareManager @Inject constructor(
     }
 
     private fun normalizeSignalUrl(raw: String): String = normalizeSignalUrlStatic(raw)
+
+    private fun logSignal(event: String, detail: String = "") {
+        val message = if (detail.isBlank()) event else "$event $detail"
+        Log.d(TAG, message)
+    }
 
     private fun emitMessage(text: String) {
         scope.launch { _messages.emit(text) }

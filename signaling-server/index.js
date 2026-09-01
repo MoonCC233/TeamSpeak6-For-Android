@@ -63,6 +63,12 @@ function summarizeShare(peer) {
   };
 }
 
+function logRoute(peer, type, details = '') {
+  const peerLabel = peer ? `${peer.peerId}@${peer.roomId}` : 'unknown';
+  const suffix = details ? ` ${details}` : '';
+  console.log(`[mss] ${peerLabel} ${type}${suffix}`);
+}
+
 function removePeer(peer) {
   if (!peer || !peer.roomId) return;
   const room = rooms.get(peer.roomId);
@@ -132,6 +138,8 @@ function handleMessage(ws, raw) {
     return;
   }
 
+  logRoute(peer, message.type, `room=${peer ? peer.roomId : message.roomId || '(none)'}`);
+
   switch (message.type) {
     case 'hello': {
       if (peer) {
@@ -194,6 +202,7 @@ function handleMessage(ws, raw) {
           audio: message.audio || null,
         };
       }
+      logRoute(peer, 'announce', `mode=${peer.share.mode} hasAudio=${!!peer.share.hasAudio}`);
       notifyRoom(peer.roomId, {
         type: 'share-started',
         v: 1,
@@ -220,6 +229,7 @@ function handleMessage(ws, raw) {
         send(ws, errorPayload('no_such_peer', `Publisher ${message.publisherId} not found`));
         return;
       }
+      logRoute(peer, 'watch', `publisher=${message.publisherId}`);
       send(publisher.socket, {
         type: 'watch-request',
         v: 1,
@@ -252,6 +262,7 @@ function handleMessage(ws, raw) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
       }
+      logRoute(peer, 'offer', `to=${message.to} bytes=${String(message.sdp || '').length}`);
       send(target.socket, {
         type: 'offer',
         v: 1,
@@ -268,6 +279,7 @@ function handleMessage(ws, raw) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
       }
+      logRoute(peer, 'answer', `to=${message.to} bytes=${String(message.sdp || '').length}`);
       send(target.socket, {
         type: 'answer',
         v: 1,
@@ -283,6 +295,7 @@ function handleMessage(ws, raw) {
         send(ws, errorPayload('no_such_peer', `Target ${message.to} not found`));
         return;
       }
+      logRoute(peer, 'candidate', `to=${message.to} mid=${String(message.sdpMid || '')}`);
       send(target.socket, {
         type: 'candidate',
         v: 1,
