@@ -49,8 +49,29 @@ async function joinRoom(ws, roomId, clientUid, nickname) {
   return waitForMessage(ws, (payload) => payload.type === 'welcome');
 }
 
+async function assertNoMessage(ws, timeoutMs, description) {
+  return new Promise((resolve, reject) => {
+    const onMessage = (raw) => {
+      try {
+        const payload = JSON.parse(String(raw));
+        reject(new Error(`${description} unexpectedly received ${payload.type}`));
+      } catch {
+        reject(new Error(`${description} received malformed data`));
+      }
+    };
+
+    const timer = setTimeout(() => {
+      ws.removeListener('message', onMessage);
+      resolve();
+    }, timeoutMs);
+
+    ws.on('message', onMessage);
+  });
+}
+
 let publisher;
 let viewer;
+let outsider;
 
 async function main() {
   const { server } = await createServer(4174);
@@ -128,8 +149,29 @@ async function main() {
       throw new Error('candidate came from the wrong publisher');
     }
 
+    outsider = await connect('ws://127.0.0.1:4174');
+    await joinRoom(outsider, 'isolated-room', 'pc-c', 'PCOutsider');
+
+    publisher.send(JSON.stringify({
+      type: 'unannounce',
+      v: 1,
+    }));
+    publisher.send(JSON.stringify({
+      type: 'announce',
+      v: 1,
+      mode: 'p2p',
+      hasAudio: false,
+      video: { width: 1280, height: 720, fps: 24, bitrateKbps: 2000 },
+    }));
+
+    const outsiderLeak = await assertNoMessage(outsider, 500, 'cross-room share leakage');
+    if (outsiderLeak) {
+      throw new Error('outsider should not receive room-local share notifications');
+    }
+
     console.log('companion smoke test passed');
   } finally {
+    outsider?.close();
     publisher?.close();
     viewer?.close();
     server.close();
