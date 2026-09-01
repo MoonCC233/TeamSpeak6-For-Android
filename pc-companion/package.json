@@ -8,5 +8,8 @@
     "start": "node server.js",
     "dev": "node server.js",
     "start:cli": "node client.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }
