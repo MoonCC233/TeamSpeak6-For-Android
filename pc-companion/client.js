@@ -1,9 +1,12 @@
 const WebSocket = require('ws');
+const { deriveRoomId } = require('./room-id.js');
 
 function printUsage() {
   console.log('Usage: node client.js [options]\n\n' +
     '  --server ws://host:port   Signal server URL (default: ws://127.0.0.1:8765)\n' +
     '  --room roomId            TeamSpeak room ID / MSS room to join\n' +
+    '  --server-uid uid         TeamSpeak server UID used to derive roomId\n' +
+    '  --channel-id id          TeamSpeak channel ID used to derive roomId\n' +
     '  --uid clientUid          Client UID for display\n' +
     '  --name nickname          Display name\n' +
     '  --publish                Announce screen share in this room\n' +
@@ -24,7 +27,9 @@ function normalizeSignalUrl(raw) {
 function parseArgs(argv) {
   const args = {
     server: normalizeSignalUrl(process.env.MSS_SIGNALING_URL || 'ws://127.0.0.1:8765'),
-    roomId: 'demo-room',
+    roomId: process.env.MSS_ROOM_ID || 'demo-room',
+    serverUid: process.env.MSS_SERVER_UID || '',
+    channelId: process.env.MSS_CHANNEL_ID || '',
     clientUid: 'pc-demo',
     nickname: 'DesktopCompanion',
     publish: false,
@@ -40,11 +45,21 @@ function parseArgs(argv) {
     }
     if (value === '--server') args.server = normalizeSignalUrl(argv[++index]);
     else if (value === '--room') args.roomId = argv[++index];
+    else if (value === '--server-uid') args.serverUid = argv[++index];
+    else if (value === '--channel-id') args.channelId = argv[++index];
     else if (value === '--uid') args.clientUid = argv[++index];
     else if (value === '--name') args.nickname = argv[++index];
     else if (value === '--publish') args.publish = true;
     else if (value === '--watch') args.watch = argv[++index];
     else if (value === '--wait') args.waitForSignals = true;
+  }
+
+  if (!args.roomId || args.roomId === 'demo-room') {
+    const serverUid = String(args.serverUid || '').trim();
+    const channelId = Number(args.channelId || 0);
+    if (serverUid && channelId) {
+      args.roomId = deriveRoomId(serverUid, channelId);
+    }
   }
 
   return args;

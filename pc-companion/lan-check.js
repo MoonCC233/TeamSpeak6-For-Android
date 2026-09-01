@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const { deriveRoomId } = require('./room-id.js');
 
 function normalizeSignalUrl(raw) {
   const candidate = String(raw || '').trim();
@@ -13,6 +14,8 @@ function parseArgs(argv) {
   const args = {
     server: normalizeSignalUrl(process.env.MSS_SIGNALING_URL || 'ws://127.0.0.1:8765'),
     roomId: process.env.MSS_ROOM_ID || 'demo-room',
+    serverUid: process.env.MSS_SERVER_UID || '',
+    channelId: process.env.MSS_CHANNEL_ID || '',
     clientUid: process.env.MSS_CLIENT_UID || `lan-${Date.now()}`,
     nickname: process.env.MSS_NICKNAME || 'LanCheck',
     publish: false,
@@ -27,10 +30,20 @@ function parseArgs(argv) {
     }
     if (value === '--server') args.server = normalizeSignalUrl(argv[++i]);
     else if (value === '--room') args.roomId = argv[++i];
+    else if (value === '--server-uid') args.serverUid = argv[++i];
+    else if (value === '--channel-id') args.channelId = argv[++i];
     else if (value === '--uid') args.clientUid = argv[++i];
     else if (value === '--name') args.nickname = argv[++i];
     else if (value === '--publish') args.publish = true;
     else if (value === '--watch') args.watch = argv[++i];
+  }
+
+  if (!args.roomId || args.roomId === 'demo-room') {
+    const serverUid = String(args.serverUid || '').trim();
+    const channelId = Number(args.channelId || 0);
+    if (serverUid && channelId) {
+      args.roomId = deriveRoomId(serverUid, channelId);
+    }
   }
 
   return args;
@@ -40,6 +53,8 @@ function printUsage() {
   console.log('Usage: node lan-check.js [options]\n\n' +
     '  --server http://host:port   Signal server URL; http/https auto-normalized\n' +
     '  --room roomId              TeamSpeak/MSS room to join\n' +
+    '  --server-uid uid           TeamSpeak server UID used to derive roomId\n' +
+    '  --channel-id id            TeamSpeak channel ID used to derive roomId\n' +
     '  --uid clientUid            Client ID for this check\n' +
     '  --name nickname            Display name\n' +
     '  --publish                  Send announce immediately\n' +

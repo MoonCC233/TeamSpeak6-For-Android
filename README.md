@@ -115,9 +115,11 @@ npm start
 ```bash
 cd pc-companion
 npm install
-node lan-check.js --server http://192.168.1.10:8765 --room room-123 --uid laptop-a --name LaptopA --publish
-node lan-check.js --server http://192.168.1.10:8765 --room room-123 --uid laptop-b --name LaptopB --watch p_xxx
+node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --channel-id <channelId> --uid laptop-a --name LaptopA --publish
+node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --channel-id <channelId> --uid laptop-b --name LaptopB --watch p_xxx
 ```
+
+也可以手动传 `--room`，但同一 TeamSpeak 服务器 + 频道下更推荐直接使用 `--server-uid` + `--channel-id` 来自动计算 `roomId`，这样和 Android 侧 `RoomId.forChannel(serverUid, channelId)` 完全一致。
 
 在 Android 侧：
 
