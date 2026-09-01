@@ -23,7 +23,31 @@ TeamSpeak9 是一个完全独立实现的 TeamSpeak 风格客户端方案，不�
 - [x] 阶段 4：原生 TeamSpeak 协议语音（连接、频道、聊天、Opus 收发）
 - [x] 阶段 5：屏幕共享（自建协议、WebRTC 收发、MediaProjection 采集）
 - [x] 阶段 6：前台服务、通知、自动重连与打磨
-- [x] 阶段 7：最小 MSS 信令服务端（WebSocket room 管理、peer 路由、announce/watch/offer/answer/candidate 转发）
+- [x] 阶段 7：MSS 信令服务端（房间管理、peer 路由、信令转发）
+- [x] 阶段 8：三端目录拆分与 TeamSpeak9 品牌统一
+- [x] 阶段 9：官方风格 UI 重构（手机端 + 桌面端同源配色）
+- [x] 阶段 10：补齐官方语音功能（本地静音/音量、发言申请、优先发言、耳语）
+- [x] 阶段 11：信令实现三端归一，服务端强制隐私与观众上限
+
+### 语音功能对照
+
+TeamSpeak 官方客户端的语音能力已全部落地，没有裁剪：
+
+| 功能 | 状态 | 说明 |
+| --- | --- | --- |
+| 加入语音、频道切换 | 已实现 | 原生 UDP 协议，只填地址即可 |
+| Opus 收发、抖动缓冲、多路混音 | 已实现 | 码率跟随频道 `codecQuality` |
+| 按键说话 / 声音激活 | 已实现 | 阈值可调 |
+| 麦克风静音 / 扬声器静音 | 已实现 | 同步 `client_input_muted` / `client_output_muted` |
+| 回声消除、噪声抑制、自动增益 | 已实现 | 走 Android `AudioEffect` |
+| 离开状态与自定义留言 | 已实现 | |
+| 频道指挥（Channel Commander） | 已实现 | |
+| 优先发言（Priority Speaker） | 已实现 | |
+| 发言申请（Talk Power Request） | 已实现 | 附带申请留言 |
+| 单独静音某人 / 单独调节某人音量 | 已实现 | 本地生效，按 `clientUid` 持久化 |
+| 耳语（Whisper） | 已实现 | 可同时对多个频道 + 多个用户，最多 255 个目标 |
+| 接收他人耳语 | 已实现 | 单独注册 whisper handler |
+| 指挥组耳语（Group Whisper） | 未实现 | 需要 `WhisperTargetGroup`，见「已知限制」 |
 
 ### 已实现界面
 
@@ -32,7 +56,7 @@ TeamSpeak9 是一个完全独立实现的 TeamSpeak 风格客户端方案，不�
 - 用户行：说话 / 静音 / 离开 / 指挥 / 屏幕共享状态图标
 - 长按上下文菜单：加入频道、移动用户、踢出、封禁、poke、服务器组、频道增删改
 - 聊天：服务器 / 频道 / 私聊多会话标签、未读角标、发送状态
-- 底部语音控制条：麦克风、扬声器、按键说话、屏幕共享、频道指挥
+- 底部语音控制条：麦克风、扬声器、按键说话、屏幕共享、频道指挥、优先发言、申请发言、耳语
 - 屏幕标签页：信令连接状态、频道内共享列表、远端画面渲染、观众请求审批、共享选项（连接模式 / 分辨率 / 帧率 / 码率 / 隐私 / 音频 / 观众上限）
 - 设置：昵称、语音处理、信令服务地址、屏幕共享码率帧率、通知
 
@@ -89,16 +113,22 @@ TeamSpeak9/
 - `desktop/companion`：桌面端参考实现，可作为同协议观众/共享端参与互通
 - `server/signaling`：后端信令服务，负责 room、peer、share/watch、offer/answer/candidate 转发
 
-### 最小 MSS 信令服务端
+### MSS 信令服务端
 
-当前已补齐最小可运行的 WebSocket 信令服务端，位于 `server/signaling/`。它实现了：
+信令服务位于 `server/signaling/`，是**全项目唯一一份协议实现**。桌面端通过
+`require('../../server/signaling')` 复用它，不存在第二份拷贝——历史上两份实现漂移过，正是
+之前手机与桌面互通失败的原因。
+
+它实现了：
 
 - room 管理：按 TeamSpeak 频道位置派生 `roomId`，同频道用户自动落在同一 room
-- peer 注册：客户端 `hello` 后返回 `welcome`，并返回该 room 的现有 peers / shares
-- share 状态广播：`announce` / `unannounce` 会广播 share-started / share-stopped
-- watch / offer / answer / candidate 转发：支持 P2P 基础信令交换
-- 心跳保活：每 25s 发送一次 `ping`，客户端通过 `pong` 回应，减少 NAT/代理导致的静默断线
-- 连接生命周期：`peer-left` 与 `bye`/`error` 会在断开时清理状态
+- peer 注册：客户端 `hello` 后返回 `welcome`，附带该 room 的现有 peers / shares
+- share 状态广播：`announce` / `unannounce` 广播 share-started / share-stopped；重复 `announce` 会整体替换共享描述
+- watch / offer / answer / candidate 转发：P2P 信令交换
+- 隐私与配额强制：`viewerLimit`、`allowedUids` 在服务端校验，越权请求收到 `viewer_limit` / `not_allowed`，不会打扰共享者
+- 房间准入：设置 `MSS_AUTH_TOKEN` 后必须提供匹配令牌（timing-safe 比较），否则 `unauthorized` 并断开
+- 心跳保活与驱逐：每 25s 发 `ping`，连续两个周期无任何消息的 peer 被断开并释放其观众名额
+- 连接生命周期：断开时广播 `peer-left` 并清理其占用的观众名额；`welcome` 只在入房时发一次，绝不重放
 
 启动方式：
 
@@ -106,11 +136,14 @@ TeamSpeak9/
 cd server/signaling
 npm install
 npm start
+npm test      # 10 个用例覆盖房间派生、路由、配额、白名单、令牌与心跳语义
 ```
 
-默认监听 `ws://127.0.0.1:8765`。目前服务端优先落地 P2P 最小可用链路，SFU 中转仍为后续扩展点。
+默认监听 `ws://127.0.0.1:8765`。环境变量 `PORT` / `MSS_AUTH_TOKEN` / `MSS_ICE_SERVERS` /
+`MSS_HEARTBEAT_MS` 的说明见 [server/README.md](server/README.md)。目前 P2P 链路已可用，
+SFU 中转仍为后续扩展点（`welcome.sfuAvailable` 恒为 `false`）。
 
-同时补了一份 PC 端参考伴生程序，位于 `desktop/companion/`，它同时包含：
+桌面伴生程序位于 `desktop/companion/`，把 UI 与信令挂在同一端口，包含：
 
 - 一个基于浏览器的桌面端界面，用于连接信令服务、开始/停止屏幕共享，并渲染远端共享画面
 - 一个 CLI 版信令脚本，用于在无界面环境中验证同 room 的 `watch / offer / answer / candidate` 流程
@@ -118,11 +151,14 @@ npm start
 ```bash
 cd desktop/companion
 npm install
-npm start     # 启动本地 UI + WebSocket 信令服务： http://127.0.0.1:4173
+npm start     # UI + 信令同端口： http://127.0.0.1:4173
 npm run start:cli -- --room room-123 --uid pc-a --name DeskA --publish
 npm run start:cli -- --uid pc-b --name DeskB --watch p_xxx
 npm test      # 端到端验证同 room 的 announce/watch/offer/candidate 流程
 ```
+
+局域网联调只需要跑桌面端这一个进程，手机端信令地址填 `http://<电脑IP>:4173` 即可；
+只有需要独立部署信令时才单独启动 8765。
 
 浏览器版会调用 `getDisplayMedia()` 与 `RTCPeerConnection` 实现真实的屏幕采集和远端渲染；CLI 模式则保留用于无界面验证和自动化测试。为了跨设备互通，Android 端和 PC 伴生端都需要连接到同一个信令服务并使用同一个 `roomId`（同一个 TeamSpeak 服务器 UID + 频道 ID 派生出的 room id）。
 
@@ -169,7 +205,7 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 在 Android 侧：
 
 - 打开同一 TeamSpeak 服务器 + 频道
-- 设置屏幕共享信令地址为 `http://192.168.1.10:8765`
+- 设置屏幕共享信令地址为 `http://192.168.1.10:8765`（若直接用桌面端自带信令则填 `:4173`）
 - 进入同一 `roomId`
 - 触发开始共享 / 观看
 
@@ -187,17 +223,36 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 
 ## 构建
 
-要求 JDK 17+ 与 Android SDK（compileSdk 35）。
+要求 JDK 17+ 与 Android SDK（compileSdk 35）。Gradle 模块路径是 `:mobile:app`：
 
 ```bash
-./gradlew :app:assembleDebug
+./gradlew :mobile:app:assembleDebug
+./gradlew :mobile:app:testDebugUnitTest
 ```
 
-在 `local.properties` 中指定 SDK 路径：
+产物在 `mobile/app/build/outputs/apk/debug/`。在 `local.properties` 中指定 SDK 路径：
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
 ```
+
+服务端与桌面端不参与 Gradle 构建，用 npm 单独跑：
+
+```bash
+cd server/signaling && npm install && npm test
+cd desktop/companion && npm install && npm test
+```
+
+CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）分两个 job：Android 端做
+assemble + 单测并上传 APK，Node 端跑信令协议测试与桌面 smoke test。
+
+## 已知限制
+
+- **屏幕共享无法与官方 TeamSpeak 客户端互通**：官方信令层未公开文档，只能与实现了 MSS 协议的端互看（语音不受影响）。
+- **SFU 中转未实现**：客户端已支持，但服务端 `welcome.sfuAvailable` 恒为 `false`，会自动回退 P2P。跨 NAT 场景请配置 `MSS_ICE_SERVERS` 提供 TURN。
+- **指挥组耳语（Group Whisper）未实现**：面向频道/用户的耳语已完整可用，但「向所有频道指挥耳语」这类按组寻址的变体还缺 `WhisperTargetGroup` 支持。
+- **耳语目标数量受包长限制**：耳语语音包不可分片，上限 500 字节；目标列表极长（约 60 个频道以上）时可能撞上限，目前未做防护。
+- **耳语尚未与真实 TeamSpeak 服务端联调**：线格式已由单元测试钉住（含绕过 ts3j `WhisperTargetMultiple` 的 `getSize()` 缺陷），但未做端到端验证。
 
 ## 风险说明
 

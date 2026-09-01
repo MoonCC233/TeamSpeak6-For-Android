@@ -171,6 +171,25 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 
 如果后续需要更稳的跨网络连接，可以再扩展为 SFU / 中继模式，而不是仅保留 P2P。
 
+## 8.5 语音功能一览
+
+语音与屏幕共享是两条独立链路：**语音不需要信令服务**，填完服务器地址就能加入。官方客户端的
+语音能力全部已实现，操作入口如下：
+
+| 功能 | 入口 |
+| --- | --- |
+| 麦克风静音 / 扬声器静音 | 底部控制条 |
+| 按键说话 / 声音激活（含阈值） | 底部控制条切换，阈值在设置里 |
+| 回声消除、噪声抑制、自动增益 | 设置 → 语音处理 |
+| 输出音量、麦克风增益 | 设置 |
+| 离开状态与留言 | 顶部菜单 |
+| 频道指挥、优先发言、申请发言 | 底部控制条 |
+| 单独静音某人 / 调节某人音量 | 长按用户 → 音频 |
+| 耳语（多频道 + 多用户） | 底部控制条「耳语」按钮：先选目标，再按住说话 |
+
+耳语在按住期间会绕过按键说话设置，只发给选定目标；松开自动收尾。目标里的频道 id 会在断线
+重连后恢复，用户 id 不会——用户 id 是每次连接才分配的临时句柄，恢复它会指向错误的人。
+
 ## 9. 常见问题
 
 ### Q: 手机和电脑不在同一房间怎么办？
@@ -217,20 +236,33 @@ node lan-check.js --server http://192.168.1.10:8765 --server-uid <serverUid> --c
 - 电脑防火墙是否放行
 - 手机和电脑是否在同一局域网
 
+### Q: 能和官方 TeamSpeak 客户端互看屏幕吗？
+
+不能。语音走的是 TeamSpeak 原生协议，和官方客户端完全互通；屏幕共享走的是本项目自建的
+MSS 协议，只能和同样实现了 MSS 的端互通（本项目的手机端与桌面端）。官方的屏幕共享信令层
+没有公开文档，无法对接。
+
+### Q: 跨网络（不同城市/不同运营商）能用吗？
+
+语音可以，屏幕共享需要额外配置。P2P 在双方都处于对称 NAT 后面时会打洞失败，此时必须给
+信令服务配置 TURN：`MSS_ICE_SERVERS=turn:your-turn:3478`。服务端会把它随 `welcome` 下发给
+两端。SFU 中转模式客户端已支持，但服务端尚未实现，会自动回退到 P2P。
+
 ## 10. 相关文档
 
 - [docs/screenshare-protocol.md](./screenshare-protocol.md)：屏幕共享协议定义
-- [README.md](../README.md)：总览与项目结构说明
-- [mobile/README.md](../mobile/README.md)：Android 端说明
+- [docs/TEAMSPEAK9-ROADMAP.md](./TEAMSPEAK9-ROADMAP.md)：三端重构路线图
+- [README.md](../README.md)：总览、语音功能对照表与已知限制
+- [mobile/README.md](../mobile/README.md)：Android 端说明与构建命令
 - [desktop/README.md](../desktop/README.md)：桌面端说明
-- [server/README.md](../server/README.md)：信令服务说明
+- [server/README.md](../server/README.md)：信令服务说明与环境变量
 
 ## 11. 结论
 
 当前项目可分成三部分：
 
-- 语音：官方 TeamSpeak 原生协议
+- 语音：TeamSpeak 原生协议，官方语音功能已全部实现（含耳语、优先发言、发言申请、单人静音/音量）
 - 屏幕共享：自建 MSS/WebRTC 同协议链路
-- 后端：WebSocket 房间信令服务器
+- 后端：WebSocket 房间信令服务器，三端共用同一份实现
 
 只要 Android、桌面端和信令服务都使用同一套房间规则和同一套协议，就能在同一 TeamSpeak 频道下完成屏幕共享的公会式互通。
