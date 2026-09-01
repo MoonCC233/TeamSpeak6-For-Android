@@ -13,6 +13,9 @@ const logOutput = document.getElementById('logOutput');
 const connectionState = document.getElementById('connectionState');
 const remoteVideo = document.getElementById('remoteVideo');
 const emptyState = document.getElementById('emptyState');
+const statusDot = document.getElementById('statusDot');
+const treeServerLabel = document.getElementById('treeServerLabel');
+const treeChannelLabel = document.getElementById('treeChannelLabel');
 
 function normalizeSignalUrl(raw) {
   const candidate = String(raw || '').trim();
@@ -59,8 +62,26 @@ const log = (text) => {
   logOutput.textContent = `[${stamp}] ${text}\n` + logOutput.textContent;
 };
 
-function updateConnectionLabel(label) {
+function updateConnectionLabel(label, state = 'idle') {
   connectionState.textContent = label;
+  if (statusDot) {
+    statusDot.classList.remove('is-connected', 'is-pending', 'is-error');
+    if (state === 'connected') statusDot.classList.add('is-connected');
+    else if (state === 'pending') statusDot.classList.add('is-pending');
+    else if (state === 'error') statusDot.classList.add('is-error');
+  }
+}
+
+function updateTreeLabels() {
+  if (treeServerLabel) {
+    treeServerLabel.textContent = serverUidInput.value.trim() || serverInput.value.trim() || 'TeamSpeak9 Room';
+  }
+  if (treeChannelLabel) {
+    const channel = channelIdInput.value.trim();
+    treeChannelLabel.textContent = channel
+      ? `Channel ${channel}`
+      : roomInput.value.trim() || 'Screen share channel';
+  }
 }
 
 function setRemoteVideo(stream) {
@@ -196,7 +217,7 @@ function syncPublisherList(peers = []) {
   entries.forEach((peer) => {
     const item = document.createElement('li');
     const label = document.createElement('span');
-    label.textContent = peer.nickname || peer.peerId;
+    label.textContent = `🎧 ${peer.nickname || peer.peerId}`;
     const button = document.createElement('button');
     button.type = 'button';
     button.dataset.peerId = peer.peerId;
@@ -251,11 +272,12 @@ async function connect() {
   const { roomId, serverUid, channelId } = await resolveRoomForHello();
 
   socket = new WebSocket(url);
-  updateConnectionLabel('Connecting…');
+  updateConnectionLabel('Connecting…', 'pending');
+  updateTreeLabels();
 
   socket.addEventListener('open', () => {
     isConnected = true;
-    updateConnectionLabel('Connected');
+    updateConnectionLabel('Connected', 'connected');
     send('hello', {
       roomId,
       serverUid,
@@ -279,7 +301,7 @@ async function connect() {
           ...(msg.peers || []),
           ...(msg.shares || []).map((share) => ({ peerId: share.publisherId, nickname: share.nickname })),
         ]);
-        updateConnectionLabel(`Connected (${msg.roomId})`);
+        updateConnectionLabel(`Connected (${msg.roomId})`, 'connected');
         break;
       }
       case 'peer-joined': {
@@ -405,11 +427,12 @@ async function connect() {
     isConnected = false;
     peerConnections.forEach((pc) => pc.close());
     peerConnections.clear();
-    updateConnectionLabel('Disconnected');
+    updateConnectionLabel('Disconnected', 'idle');
     log('Disconnected from signaling server');
   });
 
   socket.addEventListener('error', () => {
+    updateConnectionLabel('Connection error', 'error');
     log('Signal socket error');
   });
 }
@@ -440,4 +463,10 @@ stopBtn.addEventListener('click', () => {
   renderPublishers([...knownPublishers.values()]);
 });
 
+[serverInput, roomInput, serverUidInput, channelIdInput].forEach((input) => {
+  input.addEventListener('input', updateTreeLabels);
+});
+
+updateTreeLabels();
+renderPublishers([]);
 log('Ready');
