@@ -1,9 +1,11 @@
 package com.mooncc.teamspeak6.data.repository
 
+import android.content.Context
 import com.mooncc.teamspeak6.data.local.ChatMessageDao
 import com.mooncc.teamspeak6.data.local.SettingsStore
 import com.mooncc.teamspeak6.data.local.toDomain
 import com.mooncc.teamspeak6.data.local.toEntity
+import com.mooncc.teamspeak6.data.network.NetworkMonitor
 import com.mooncc.teamspeak6.di.ApplicationScope
 import com.mooncc.teamspeak6.domain.model.Bookmark
 import com.mooncc.teamspeak6.domain.model.Channel
@@ -28,6 +30,9 @@ import com.mooncc.teamspeak6.voice.client.Ts3Event
 import com.mooncc.teamspeak6.voice.client.Ts3Mappers
 import com.mooncc.teamspeak6.voice.client.Ts3VoiceClient
 import com.mooncc.teamspeak6.voice.identity.IdentityManager
+import com.mooncc.teamspeak6.voice.service.VoiceService
+import com.mooncc.teamspeak6.voice.session.ReconnectPolicy
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -59,9 +64,11 @@ import kotlinx.coroutines.sync.withLock
  */
 @Singleton
 class NativeTeamSpeakRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val chatMessageDao: ChatMessageDao,
     private val bookmarkRepository: BookmarkRepository,
     private val settingsStore: SettingsStore,
+    private val networkMonitor: NetworkMonitor,
     identityManager: IdentityManager,
     @ApplicationScope private val scope: CoroutineScope,
 ) : TeamSpeakRepository {
@@ -103,6 +110,15 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
     private var activeBookmark: Bookmark? = null
     private var eventJob: Job? = null
     private var statsJob: Job? = null
+    private var reconnectJob: Job? = null
+    private var reconnectAttempts = 0
+
+    /**
+     * Distinguishes a user tapping "disconnect" from the link dropping. Both end up
+     * in [onDisconnected], and without this flag every deliberate disconnect would
+     * be immediately undone by the reconnect loop.
+     */
+    private var userInitiatedDisconnect = false
 
     /** Channels and clients by id; the published tree is derived from these. */
     private var channelsById = linkedMapOf<Int, Channel>()
@@ -121,9 +137,24 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
     // ------------------------------------------------------------ connection
 
     override suspend fun connect(bookmark: Bookmark) {
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempts = 0
         disconnect()
+        userInitiatedDisconnect = false
+        establish(bookmark, resume = null)
+    }
+
+    /**
+     * Opens a session and populates every state flow.
+     *
+     * [resume] carries the media toggles from a session that just dropped so a
+     * reconnect does not silently unmute a user who muted themselves.
+     */
+    private suspend fun establish(bookmark: Bookmark, resume: LocalMediaState?): Boolean {
         activeBookmark = bookmark
         val settings = runCatching { settingsStore.settings.first() }.getOrNull()
+        val preserved = _localMediaState.value
         _localMediaState.value = LocalMediaState(
             pushToTalkEnabled = settings?.pushToTalkEnabled ?: false,
             voiceActivationThresholdDb = settings?.voiceActivationThresholdDb ?: -40,
@@ -132,9 +163,28 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
             echoCancellation = settings?.echoCancellation ?: true,
             noiseSuppression = settings?.noiseSuppression ?: true,
             autoGainControl = settings?.autoGainControl ?: true,
-        )
+        ).let { fresh ->
+            if (resume == null) {
+                fresh
+            } else {
+                fresh.copy(
+                    micMuted = resume.micMuted,
+                    speakerMuted = resume.speakerMuted,
+                    isAway = resume.isAway,
+                    awayMessage = resume.awayMessage,
+                    outputVolumePercent = resume.outputVolumePercent,
+                    inputGainPercent = resume.inputGainPercent,
+                    pushToTalkEnabled = resume.pushToTalkEnabled,
+                    voiceActivationThresholdDb = resume.voiceActivationThresholdDb,
+                )
+            }
+        }
         _connectionState.value = ConnectionState(
-            status = ConnectionStatus.CONNECTING,
+            status = if (resume == null) {
+                ConnectionStatus.CONNECTING
+            } else {
+                ConnectionStatus.RECONNECTING
+            },
             bookmark = bookmark,
         )
 
@@ -149,14 +199,18 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         )
 
         connected.onFailure { failure ->
-            activeBookmark = null
+            if (resume == null) activeBookmark = null
             _connectionState.value = ConnectionState(
-                status = ConnectionStatus.ERROR,
+                status = if (resume == null) {
+                    ConnectionStatus.ERROR
+                } else {
+                    ConnectionStatus.RECONNECTING
+                },
                 bookmark = bookmark,
                 errorMessage = describe(failure),
             )
-            emit(ServerEvent.Error(describe(failure), now()))
-            return
+            if (resume == null) emit(ServerEvent.Error(describe(failure), now()))
+            return false
         }
 
         observeEvents()
@@ -183,9 +237,32 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         refreshNow()
         startAudio()
         observeStatistics()
+        VoiceService.start(context)
+        if (resume != null) {
+            if (resume.isAway) updateSelf(
+                "client_away" to true.flag(),
+                "client_away_message" to resume.awayMessage,
+            )
+            emit(ServerEvent.Error("已重新连接到服务器", now()))
+        }
+        reconnectAttempts = 0
+        return true
     }
 
     override suspend fun disconnect() {
+        userInitiatedDisconnect = true
+        reconnectJob?.cancel()
+        reconnectJob = null
+        reconnectAttempts = 0
+        teardownSession()
+        activeBookmark = null
+        _localMediaState.value = LocalMediaState()
+        _connectionState.value = ConnectionState(status = ConnectionStatus.DISCONNECTED)
+        VoiceService.stop(context)
+    }
+
+    /** Drops everything tied to the live socket without touching the published status. */
+    private suspend fun teardownSession() {
         eventJob?.cancel()
         eventJob = null
         statsJob?.cancel()
@@ -193,7 +270,6 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         stopAudio()
         client.disconnect()
 
-        activeBookmark = null
         stateMutex.withLock {
             channelsById = linkedMapOf()
             clientsById = linkedMapOf()
@@ -205,8 +281,45 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         _channelGroups.value = emptyList()
         _myPermissions.value = emptyList()
         _conversations.value = emptyList()
-        _localMediaState.value = LocalMediaState()
-        _connectionState.value = ConnectionState(status = ConnectionStatus.DISCONNECTED)
+    }
+
+    private fun scheduleReconnect(bookmark: Bookmark) {
+        if (userInitiatedDisconnect || activeBookmark == null) return
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            while (isActive && !userInitiatedDisconnect && activeBookmark != null) {
+                reconnectAttempts += 1
+                val shouldRetry = ReconnectPolicy.shouldRetry(
+                    attempt = reconnectAttempts,
+                    reasonId = 0,
+                    userInitiated = userInitiatedDisconnect,
+                )
+                if (!shouldRetry) {
+                    _connectionState.value = ConnectionState(
+                        status = ConnectionStatus.ERROR,
+                        bookmark = bookmark,
+                        errorMessage = "连接已断开，重连已达上限",
+                    )
+                    emit(ServerEvent.Error("连接已断开，重连已达上限", now()))
+                    return@launch
+                }
+
+                val delayMs = ReconnectPolicy.delayMsFor(reconnectAttempts)
+                _connectionState.value = ConnectionState(
+                    status = ConnectionStatus.RECONNECTING,
+                    bookmark = bookmark,
+                    errorMessage = "连接中断，正在重连($reconnectAttempts/${ReconnectPolicy.MAX_ATTEMPTS})",
+                )
+                delay(delayMs)
+                networkMonitor.awaitOnline()
+                val resume = _localMediaState.value
+                if (establish(bookmark, resume)) {
+                    reconnectAttempts = 0
+                    reconnectJob = null
+                    return@launch
+                }
+            }
+        }
     }
 
     override suspend fun refreshNow() {
@@ -322,14 +435,29 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         if (kicked) {
             emit(ServerEvent.Kicked(event.reasonMessage, fromServer = true, timestampMs = now()))
         }
+
+        if (userInitiatedDisconnect || kicked || bookmark == null) {
+            _connectionState.value = ConnectionState(
+                status = if (event.reasonMessage.isBlank() && !kicked) {
+                    ConnectionStatus.DISCONNECTED
+                } else {
+                    ConnectionStatus.ERROR
+                },
+                bookmark = bookmark,
+                errorMessage = event.reasonMessage.takeIf { it.isNotBlank() },
+            )
+            return
+        }
+
+        if (ReconnectPolicy.shouldRetry(reconnectAttempts + 1, event.reasonId, userInitiatedDisconnect)) {
+            scheduleReconnect(bookmark)
+            return
+        }
+
         _connectionState.value = ConnectionState(
-            status = if (event.reasonMessage.isBlank() && !kicked) {
-                ConnectionStatus.DISCONNECTED
-            } else {
-                ConnectionStatus.ERROR
-            },
+            status = ConnectionStatus.ERROR,
             bookmark = bookmark,
-            errorMessage = event.reasonMessage.takeIf { it.isNotBlank() },
+            errorMessage = event.reasonMessage.takeIf { it.isNotBlank() } ?: "连接已断开",
         )
     }
 

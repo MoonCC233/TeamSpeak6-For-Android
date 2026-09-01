@@ -1,8 +1,6 @@
 package com.mooncc.teamspeak6.screenshare.service
 
 import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
@@ -12,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.mooncc.teamspeak6.R
+import com.mooncc.teamspeak6.notification.NotificationChannels
 import com.mooncc.teamspeak6.ui.MainActivity
 
 /**
@@ -38,7 +37,7 @@ class ScreenShareService : Service() {
     }
 
     private fun startForegroundInternal() {
-        createChannel()
+        NotificationChannels.ensureCreated(this)
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -65,7 +64,7 @@ class ScreenShareService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, NotificationChannels.SCREEN_SHARE)
             .setSmallIcon(R.drawable.ic_notification_screen_share)
             .setContentTitle("正在共享屏幕")
             .setContentText("点击返回 TeamSpeak")
@@ -78,24 +77,7 @@ class ScreenShareService : Service() {
             .build()
     }
 
-    private fun createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_ID,
-                "屏幕共享",
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = "屏幕共享进行中的常驻通知"
-                setShowBadge(false)
-            },
-        )
-    }
-
     companion object {
-        private const val CHANNEL_ID = "screen_share"
         private const val NOTIFICATION_ID = 4201
         const val ACTION_STOP = "com.mooncc.teamspeak6.action.STOP_SCREEN_SHARE"
 

@@ -9,7 +9,7 @@ TeamSpeak 6 风格的 Android 语音协作客户端。Kotlin + Jetpack Compose �
 - [x] 阶段 3：完整 Compose UI（频道树、聊天、用户信息、设置）
 - [x] 阶段 4：原生 TeamSpeak 协议语音（连接、频道、聊天、Opus 收发）
 - [x] 阶段 5：屏幕共享（自建协议、WebRTC 收发、MediaProjection 采集）
-- [ ] 阶段 6：前台服务、通知、自动重连与打磨
+- [x] 阶段 6：前台服务、通知、自动重连与打磨
 
 ### 已实现界面
 

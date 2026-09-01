@@ -51,6 +51,11 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
+        <service
+            android:name=".voice.service.VoiceService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
     </application>
 
 </manifest>
