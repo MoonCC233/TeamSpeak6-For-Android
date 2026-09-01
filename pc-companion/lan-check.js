@@ -20,6 +20,7 @@ function parseArgs(argv) {
     nickname: process.env.MSS_NICKNAME || 'LanCheck',
     publish: false,
     watch: null,
+    keepalive: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -36,6 +37,7 @@ function parseArgs(argv) {
     else if (value === '--name') args.nickname = argv[++i];
     else if (value === '--publish') args.publish = true;
     else if (value === '--watch') args.watch = argv[++i];
+    else if (value === '--keepalive') args.keepalive = true;
   }
 
   if (!args.roomId || args.roomId === 'demo-room') {
@@ -59,7 +61,19 @@ function printUsage() {
     '  --name nickname            Display name\n' +
     '  --publish                  Send announce immediately\n' +
     '  --watch publisherId        Request to watch a known publisher\n' +
+    '  --keepalive                Keep the socket open to watch ongoing traffic\n' +
     '  --help                     Show help\n');
+}
+
+function printRoomSummary(opts) {
+  const serverUid = String(opts.serverUid || '').trim();
+  const channelId = Number(opts.channelId || 0);
+  if (serverUid && channelId) {
+    const derived = deriveRoomId(serverUid, channelId);
+    console.log(`[room] configured serverUid=${serverUid} channelId=${channelId} derivedRoomId=${derived}`);
+  } else {
+    console.log(`[room] explicit roomId=${opts.roomId || '(none)'}`);
+  }
 }
 
 function send(ws, type, payload = {}) {
@@ -70,11 +84,14 @@ function main() {
   const opts = parseArgs(process.argv.slice(2));
   const ws = new WebSocket(opts.server);
   let peerId = null;
+  printRoomSummary(opts);
 
   ws.on('open', () => {
     console.log(`Connected to ${opts.server}`);
     send(ws, 'hello', {
       roomId: opts.roomId,
+      serverUid: opts.serverUid,
+      channelId: Number(opts.channelId || 0),
       clientUid: opts.clientUid,
       tsClientId: 9000,
       nickname: opts.nickname,
@@ -92,6 +109,7 @@ function main() {
         console.log(`Peers in room: ${msg.peers.map((peer) => peer.peerId).join(', ') || 'none'}`);
         console.log(`Shares in room: ${msg.shares.map((share) => share.publisherId).join(', ') || 'none'}`);
         if (opts.publish) {
+          console.log('[lan-check] announce screen share to room');
           send(ws, 'announce', {
             mode: 'p2p',
             hasAudio: true,
@@ -99,7 +117,11 @@ function main() {
           });
         }
         if (opts.watch) {
+          console.log(`[lan-check] request watch for publisher=${opts.watch}`);
           setTimeout(() => send(ws, 'watch', { publisherId: opts.watch }), 250);
+        }
+        if (opts.keepalive) {
+          console.log('[lan-check] keepalive mode enabled; socket remains open for live traffic inspection');
         }
         break;
       }
