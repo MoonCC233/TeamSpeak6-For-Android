@@ -336,33 +336,57 @@ function createSignalServer(httpServer) {
   return wss;
 }
 
-const server = http.createServer((req, res) => {
-  const urlPath = req.url === '/' ? '/index.html' : req.url.split('?')[0];
-  const safePath = path.normalize(urlPath).replace(/^\.+[\\/]+/, '');
-  const filePath = path.join(root, safePath);
+function createServer(targetPort = port) {
+  const server = http.createServer((req, res) => {
+    const urlPath = req.url === '/' ? '/index.html' : req.url.split('?')[0];
+    const safePath = path.normalize(urlPath).replace(/^\.+[\\/]+/, '');
+    const filePath = path.join(root, safePath);
 
-  if (!filePath.startsWith(root)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end('Forbidden');
-    return;
-  }
-
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('Not found');
+    if (!filePath.startsWith(root)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Forbidden');
       return;
     }
 
-    const extension = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': mimeTypes[extension] || 'application/octet-stream' });
-    res.end(content);
+    fs.readFile(filePath, (error, content) => {
+      if (error) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Not found');
+        return;
+      }
+
+      const extension = path.extname(filePath).toLowerCase();
+      res.writeHead(200, { 'Content-Type': mimeTypes[extension] || 'application/octet-stream' });
+      res.end(content);
+    });
   });
-});
 
-createSignalServer(server);
+  const wss = createSignalServer(server);
 
-server.listen(port, () => {
-  console.log(`PC companion UI + MSS signaling server ready at http://127.0.0.1:${port}`);
-  console.log(`WebSocket endpoint: ws://127.0.0.1:${port}`);
-});
+  return new Promise((resolve) => {
+    server.listen(targetPort, () => {
+      resolve({ server, wss });
+    });
+  });
+}
+
+if (require.main === module) {
+  createServer(port).then(({ server }) => {
+    console.log(`PC companion UI + MSS signaling server ready at http://127.0.0.1:${port}`);
+    console.log(`WebSocket endpoint: ws://127.0.0.1:${port}`);
+    server.on('close', () => {
+      console.log('PC companion server stopped');
+    });
+  });
+}
+
+module.exports = {
+  createServer,
+  rooms,
+  peersBySocket,
+  roomFor,
+  summarizePeer,
+  summarizeShare,
+  handleMessage,
+  removePeer,
+};

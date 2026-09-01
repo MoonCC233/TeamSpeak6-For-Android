@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "start:cli": "node client.js"
+    "start:cli": "node client.js",
+    "test": "node smoke-test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"
