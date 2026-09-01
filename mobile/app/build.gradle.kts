@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.mooncc.teamspeak6"
+    namespace = "com.mooncc.teamspeak9"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mooncc.teamspeak6"
+        applicationId = "com.mooncc.teamspeak9"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
