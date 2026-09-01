@@ -1,5 +1,7 @@
 const serverInput = document.getElementById('serverInput');
 const roomInput = document.getElementById('roomInput');
+const serverUidInput = document.getElementById('serverUidInput');
+const channelIdInput = document.getElementById('channelIdInput');
 const uidInput = document.getElementById('uidInput');
 const nameInput = document.getElementById('nameInput');
 const connectBtn = document.getElementById('connectBtn');
@@ -19,6 +21,19 @@ function normalizeSignalUrl(raw) {
   if (candidate.startsWith('http://')) return `ws${candidate.slice(4)}`;
   if (candidate.startsWith('https://')) return `wss${candidate.slice(5)}`;
   return candidate;
+}
+
+async function deriveRoomId(serverUid, channelId) {
+  const uid = String(serverUid || '').trim();
+  const channel = Number(channelId ?? 0);
+  if (!uid || !Number.isFinite(channel) || channel <= 0) return '';
+  const input = `${uid}|${channel}`;
+  const bytes = new TextEncoder().encode(input);
+  const hash = await window.crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 32);
 }
 
 let socket = null;
@@ -207,16 +222,33 @@ function renderPublishers(peers) {
   syncPublisherList(peers || []);
 }
 
-function connect() {
+async function resolveRoomForHello() {
+  const explicitRoom = roomInput.value.trim();
+  if (explicitRoom && explicitRoom !== 'demo-room') {
+    return { roomId: explicitRoom, serverUid: serverUidInput.value.trim(), channelId: channelIdInput.value.trim() };
+  }
+  const serverUid = serverUidInput.value.trim();
+  const channelId = channelIdInput.value.trim();
+  if (serverUid && channelId) {
+    const derived = await deriveRoomId(serverUid, channelId);
+    if (derived) {
+      roomInput.value = derived;
+      return { roomId: derived, serverUid, channelId };
+    }
+  }
+  return { roomId: explicitRoom || '', serverUid: serverUidInput.value.trim(), channelId: channelIdInput.value.trim() };
+}
+
+async function connect() {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
     return;
   }
 
   const url = normalizeSignalUrl(serverInput.value.trim());
-  const roomId = roomInput.value.trim();
   const clientUid = uidInput.value.trim();
   const nickname = nameInput.value.trim();
+  const { roomId, serverUid, channelId } = await resolveRoomForHello();
 
   socket = new WebSocket(url);
   updateConnectionLabel('Connecting…');
@@ -226,6 +258,8 @@ function connect() {
     updateConnectionLabel('Connected');
     send('hello', {
       roomId,
+      serverUid,
+      channelId: channelId ? Number(channelId) : 0,
       clientUid: clientUid || `pc-${Date.now()}`,
       tsClientId: 9999,
       nickname: nickname || 'PC Companion',
@@ -233,7 +267,7 @@ function connect() {
     log(`Connected to ${url}`);
   });
 
-  socket.addEventListener('message', (event) => {
+  socket.addEventListener('message', async (event) => {
     const msg = JSON.parse(event.data);
     log(`Received ${msg.type}`);
 
