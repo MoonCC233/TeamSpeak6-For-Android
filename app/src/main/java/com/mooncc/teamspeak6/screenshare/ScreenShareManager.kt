@@ -122,7 +122,8 @@ class ScreenShareManager @Inject constructor(
         tsClientId: Int,
         nickname: String,
     ) {
-        if (signalingUrl.isBlank()) {
+        val normalizedUrl = normalizeSignalUrl(signalingUrl)
+        if (normalizedUrl.isBlank()) {
             leaveRoom()
             _state.value = _state.value.copy(
                 signalingUrl = "",
@@ -139,7 +140,7 @@ class ScreenShareManager @Inject constructor(
         roomId = RoomId.forChannel(serverUid, channelId)
 
         _state.value = _state.value.copy(
-            signalingUrl = signalingUrl,
+            signalingUrl = normalizedUrl,
             signaling = ScreenShareSignalingState.CONNECTING,
             remoteShares = emptyList(),
             errorMessage = null,
@@ -147,7 +148,7 @@ class ScreenShareManager @Inject constructor(
 
         observeSignaling()
         signaling.connect(
-            url = signalingUrl,
+            url = normalizedUrl,
             hello = ClientMessage.Hello(
                 roomId = roomId,
                 clientUid = clientUid,
@@ -674,6 +675,8 @@ class ScreenShareManager @Inject constructor(
         )
     }
 
+    private fun normalizeSignalUrl(raw: String): String = normalizeSignalUrlStatic(raw)
+
     private fun emitMessage(text: String) {
         scope.launch { _messages.emit(text) }
     }
@@ -700,7 +703,7 @@ class ScreenShareManager @Inject constructor(
         ScreenSharePrivacy.PRIVATE -> SharePrivacy.PRIVATE
     }
 
-    private companion object {
+    companion object {
         const val TAG = "ScreenShareManager"
 
         /** Key for the single publish peer used in server-relay mode. */
@@ -708,5 +711,17 @@ class ScreenShareManager @Inject constructor(
 
         /** Best hardware support on Android and widest desktop interop. */
         const val PREFERRED_CODEC = "H264"
+
+        @JvmStatic
+        internal fun normalizeSignalUrlStatic(raw: String): String {
+            val candidate = raw.trim()
+            if (candidate.isEmpty()) return ""
+            return when {
+                candidate.startsWith("ws://", ignoreCase = true) || candidate.startsWith("wss://", ignoreCase = true) -> candidate
+                candidate.startsWith("http://", ignoreCase = true) -> "ws" + candidate.removePrefix("http")
+                candidate.startsWith("https://", ignoreCase = true) -> "wss" + candidate.removePrefix("https")
+                else -> candidate
+            }
+        }
     }
 }
