@@ -5,6 +5,7 @@ import com.github.manevolent.ts3j.command.Command
 import com.github.manevolent.ts3j.command.SingleCommand
 import com.github.manevolent.ts3j.command.parameter.CommandOption
 import com.github.manevolent.ts3j.command.parameter.CommandSingleParameter
+import com.github.manevolent.ts3j.enums.CodecType
 import com.github.manevolent.ts3j.event.ChannelCreateEvent
 import com.github.manevolent.ts3j.event.ChannelDeletedEvent
 import com.github.manevolent.ts3j.event.ChannelDescriptionEditedEvent
@@ -29,6 +30,7 @@ import com.github.manevolent.ts3j.event.TextMessageEvent
 import com.github.manevolent.ts3j.protocol.ProtocolRole
 import com.github.manevolent.ts3j.protocol.TS3DNS
 import com.github.manevolent.ts3j.protocol.client.ClientConnectionState
+import com.github.manevolent.ts3j.protocol.packet.PacketBody1VoiceWhisper
 import com.github.manevolent.ts3j.protocol.socket.client.LocalTeamspeakClientSocket
 import com.github.manevolent.ts3j.util.Ts3Crypt
 import com.mooncc.teamspeak9.voice.audio.VoiceCaptureEngine
@@ -121,6 +123,9 @@ internal class Ts3VoiceClient(
                 client.setVoiceHandler { packet ->
                     playback.submit(packet.clientId, packet.packetId, packet.codecData ?: EMPTY)
                 }
+                client.setWhisperHandler { packet ->
+                    playback.submit(packet.clientId, packet.packetId, packet.codecData ?: EMPTY)
+                }
                 client.microphone = capture
 
                 socket = client
@@ -159,6 +164,41 @@ internal class Ts3VoiceClient(
         if (port != DEFAULT_VOICE_PORT) return InetSocketAddress(host, port)
         val srv = runCatching { TS3DNS.lookup(host).firstOrNull() }.getOrNull()
         return srv ?: InetSocketAddress(host, port)
+    }
+
+    // --- whisper -------------------------------------------------------------
+
+    /**
+     * Sends one encoded frame as a whisper to the given channels and clients.
+     *
+     * Whisper packets carry their target list inline rather than relying on the
+     * server's channel routing, so the frame reaches the listed peers even
+     * though they are in other channels. An empty [codecData] terminates the
+     * burst, matching what ts3j does for normal voice.
+     *
+     * Called from the capture thread, so this stays synchronous and swallows
+     * transport errors rather than blocking audio.
+     */
+    fun sendWhisper(
+        channelIds: IntArray,
+        clientIds: IntArray,
+        codecData: ByteArray,
+    ): Boolean {
+        val client = socket ?: return false
+        if (!client.isConnected) return false
+        if (channelIds.isEmpty() && clientIds.isEmpty()) return false
+
+        return runCatching {
+            val body = PacketBody1VoiceWhisper(ProtocolRole.CLIENT)
+            body.codecType = CodecType.OPUS_VOICE
+            body.codecData = codecData
+            body.target = MultiWhisperTarget(
+                channelIds = channelIds,
+                clientIds = clientIds,
+            )
+            // packetId and the encryption generation are assigned by the socket.
+            client.writePacket(body)
+        }.onFailure { Log.w(TAG, "whisper send failed", it) }.isSuccess
     }
 
     // --- generic command gateway --------------------------------------------

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -210,6 +212,103 @@ fun TalkRequestDialog(
         confirmButton = { TextButton(onClick = { onConfirm(message) }) { Text("申请") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
+}
+
+/**
+ * Multi-select for whisper routing: channels and individual clients can be
+ * combined, matching how the desktop client builds whisper lists.
+ */
+@Composable
+fun WhisperTargetsDialog(
+    channels: List<Channel>,
+    clients: List<Client>,
+    selectedChannelIds: Set<Int>,
+    selectedClientIds: Set<Int>,
+    onDismiss: () -> Unit,
+    onConfirm: (channelIds: List<Int>, clientIds: List<Int>) -> Unit,
+) {
+    val pickedChannels = remember { mutableStateListOf<Int>().apply { addAll(selectedChannelIds) } }
+    val pickedClients = remember { mutableStateListOf<Int>().apply { addAll(selectedClientIds) } }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("耳语目标") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "耳语只会发送给选中的频道与用户，不受当前频道限制。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (channels.isNotEmpty()) {
+                    SectionLabel("频道")
+                    channels.forEach { channel ->
+                        CheckRow(
+                            label = channel.displayName,
+                            checked = channel.id in pickedChannels,
+                            onCheckedChange = { checked ->
+                                if (checked) pickedChannels += channel.id else pickedChannels -= channel.id
+                            },
+                        )
+                    }
+                }
+                if (clients.isNotEmpty()) {
+                    SectionLabel("用户")
+                    clients.forEach { client ->
+                        CheckRow(
+                            label = client.nickname,
+                            checked = client.id in pickedClients,
+                            onCheckedChange = { checked ->
+                                if (checked) pickedClients += client.id else pickedClients -= client.id
+                            },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(pickedChannels.toList(), pickedClients.toList()) }) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    pickedChannels.clear()
+                    pickedClients.clear()
+                    onConfirm(emptyList(), emptyList())
+                },
+            ) { Text("清空") }
+        },
+    )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable

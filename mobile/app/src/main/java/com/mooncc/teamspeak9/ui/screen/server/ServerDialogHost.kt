@@ -187,6 +187,15 @@ fun ServerDialogHost(
             onConfirm = viewModel::requestTalkPower,
         )
 
+        ServerDialog.WhisperTargets -> WhisperTargetsDialog(
+            channels = flattenChannels(allChannels),
+            clients = clients.filter { it.id != state.connection.localClientId },
+            selectedChannelIds = state.media.whisperChannelIds.toSet(),
+            selectedClientIds = state.media.whisperClientIds.toSet(),
+            onDismiss = dismiss,
+            onConfirm = viewModel::applyWhisperTargets,
+        )
+
         ServerDialog.ScreenShareOptions -> ScreenShareOptionsDialog(
             config = state.screenShare.config,
             serverModeAvailable = state.screenShare.serverModeAvailable,

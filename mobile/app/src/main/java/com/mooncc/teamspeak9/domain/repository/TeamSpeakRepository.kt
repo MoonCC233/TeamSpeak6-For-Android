@@ -89,5 +89,14 @@ interface TeamSpeakRepository {
     /** Toggles our own priority-speaker flag (requires the matching permission). */
     suspend fun setPrioritySpeaker(enabled: Boolean): Result<Unit>
 
+    /** Replaces the whisper target list (channels and/or clients). */
+    suspend fun setWhisperTargets(channelIds: List<Int>, clientIds: List<Int>)
+
+    /**
+     * Starts or stops whispering. While active the microphone bypasses normal
+     * channel voice and is routed to the configured targets only.
+     */
+    suspend fun setWhisperActive(active: Boolean)
+
     fun updateLocalMedia(transform: (LocalMediaState) -> LocalMediaState)
 }

@@ -249,6 +249,8 @@ fun ServerScreen(
                     onToggleChannelCommander = viewModel::toggleChannelCommander,
                     onTogglePrioritySpeaker = viewModel::togglePrioritySpeaker,
                     onTalkPower = viewModel::onTalkPowerButton,
+                    onWhisperTargets = viewModel::showWhisperTargets,
+                    onWhisperPressed = viewModel::setWhisperActive,
                 )
                 NavigationBar(containerColor = TsChrome) {
                     NavigationBarItem(

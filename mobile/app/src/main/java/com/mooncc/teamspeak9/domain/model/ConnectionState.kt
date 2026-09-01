@@ -41,6 +41,9 @@ data class LocalMediaState(
     val isPrioritySpeaker: Boolean = false,
     val isRequestingTalkPower: Boolean = false,
     val talkRequestMessage: String = "",
+    val whisperChannelIds: List<Int> = emptyList(),
+    val whisperClientIds: List<Int> = emptyList(),
+    val whisperActive: Boolean = false,
     val isAway: Boolean = false,
     val awayMessage: String = "",
     val outputVolumePercent: Int = 100,
@@ -49,7 +52,11 @@ data class LocalMediaState(
     val noiseSuppression: Boolean = true,
     val autoGainControl: Boolean = true,
 ) {
+    /** Whether any whisper target is configured. */
+    val hasWhisperTargets: Boolean
+        get() = whisperChannelIds.isNotEmpty() || whisperClientIds.isNotEmpty()
+
     /** Whether the microphone should currently transmit. */
     val shouldTransmit: Boolean
-        get() = !micMuted && (!pushToTalkEnabled || pushToTalkActive)
+        get() = !micMuted && (whisperActive || !pushToTalkEnabled || pushToTalkActive)
 }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.KeyboardVoice
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.PanTool
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenShare
 import androidx.compose.material.icons.filled.StopScreenShare
 import androidx.compose.material3.FilledIconButton
@@ -55,6 +56,8 @@ fun VoiceControlBar(
     onToggleChannelCommander: () -> Unit,
     onTogglePrioritySpeaker: () -> Unit,
     onTalkPower: () -> Unit,
+    onWhisperTargets: () -> Unit,
+    onWhisperPressed: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -138,10 +141,30 @@ fun VoiceControlBar(
                 active = media.isRequestingTalkPower,
                 onClick = onTalkPower,
             )
+            ToggleButton(
+                icon = Icons.Default.RecordVoiceOver,
+                label = "耳语",
+                active = media.hasWhisperTargets,
+                onClick = onWhisperTargets,
+            )
         }
 
         if (media.pushToTalkEnabled) {
-            PushToTalkButton(active = media.pushToTalkActive, onPressed = onPushToTalkPressed)
+            HoldButton(
+                active = media.pushToTalkActive,
+                idleLabel = "按住说话",
+                activeLabel = "正在说话…",
+                onPressed = onPushToTalkPressed,
+            )
+        }
+
+        if (media.hasWhisperTargets) {
+            HoldButton(
+                active = media.whisperActive,
+                idleLabel = "按住耳语（${media.whisperChannelIds.size + media.whisperClientIds.size} 个目标）",
+                activeLabel = "正在耳语…",
+                onPressed = onWhisperPressed,
+            )
         }
     }
 }
@@ -185,7 +208,12 @@ private fun ToggleButton(
 }
 
 @Composable
-private fun PushToTalkButton(active: Boolean, onPressed: (Boolean) -> Unit) {
+private fun HoldButton(
+    active: Boolean,
+    idleLabel: String,
+    activeLabel: String,
+    onPressed: (Boolean) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -210,7 +238,7 @@ private fun PushToTalkButton(active: Boolean, onPressed: (Boolean) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = if (active) "正在说话…" else "按住说话",
+            text = if (active) activeLabel else idleLabel,
             style = MaterialTheme.typography.labelLarge,
             color = if (active) {
                 MaterialTheme.colorScheme.primary

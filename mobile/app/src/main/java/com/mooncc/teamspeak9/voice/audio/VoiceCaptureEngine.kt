@@ -62,6 +62,24 @@ class VoiceCaptureEngine : Microphone {
     @Volatile
     var autoGainControl: Boolean = true
 
+    /**
+     * While set, encoded frames are handed to [onWhisperFrame] instead of the
+     * ts3j queue, so the audio leaves as a whisper packet and the normal voice
+     * path stays silent.
+     */
+    @Volatile
+    var whisperActive: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            // Anything already queued belongs to the previous mode.
+            queue.clear()
+        }
+
+    /** Receives encoded frames while [whisperActive] is set. */
+    @Volatile
+    var onWhisperFrame: ((frame: ByteArray) -> Unit)? = null
+
     /** Reports the local input level so the UI can draw a meter. */
     @Volatile
     var onInputLevel: ((db: Float) -> Unit)? = null
@@ -71,6 +89,7 @@ class VoiceCaptureEngine : Microphone {
     var onTalkingChanged: ((talking: Boolean) -> Unit)? = null
 
     private var lastTalking = false
+    private var whisperBurstOpen = false
 
     @SuppressLint("MissingPermission")
     fun start(): Boolean {
@@ -120,6 +139,7 @@ class VoiceCaptureEngine : Microphone {
         }
         record = null
         encoder = null
+        whisperBurstOpen = false
         if (lastTalking) {
             lastTalking = false
             onTalkingChanged?.invoke(false)
@@ -134,7 +154,7 @@ class VoiceCaptureEngine : Microphone {
 
     override fun isMuted(): Boolean = muted
 
-    override fun isReady(): Boolean = running.get() && queue.isNotEmpty()
+    override fun isReady(): Boolean = running.get() && !whisperActive && queue.isNotEmpty()
 
     override fun getCodec(): CodecType = CodecType.OPUS_VOICE
 
@@ -167,15 +187,36 @@ class VoiceCaptureEngine : Microphone {
             val gateOpen = !voiceActivationEnabled || levelDb >= activationThresholdDb
             val shouldSend = transmitting && !muted && gateOpen
             updateTalking(shouldSend)
-            if (!shouldSend) continue
+            if (!shouldSend) {
+                endWhisperBurst()
+                continue
+            }
 
             val payload = runCatching { encoder?.encode(pcm) }.getOrNull() ?: continue
+            if (whisperActive) {
+                whisperBurstOpen = true
+                onWhisperFrame?.invoke(payload)
+                continue
+            }
+
+            endWhisperBurst()
             if (!queue.offer(payload)) {
                 // Prefer fresh audio over stale audio when the sender falls behind.
                 queue.poll()
                 queue.offer(payload)
             }
         }
+        endWhisperBurst()
+    }
+
+    /**
+     * TeamSpeak marks the end of a talk burst with an empty payload; ts3j does
+     * that for normal voice, so whisper bursts have to terminate themselves.
+     */
+    private fun endWhisperBurst() {
+        if (!whisperBurstOpen) return
+        whisperBurstOpen = false
+        onWhisperFrame?.invoke(EMPTY)
     }
 
     private fun updateTalking(talking: Boolean) {

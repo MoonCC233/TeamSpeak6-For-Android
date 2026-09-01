@@ -142,6 +142,23 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
             val localId = _connectionState.value.localClientId
             if (localId != 0) onTalkingChanged(localId, talking)
         }
+        capture.onWhisperFrame = { frame -> sendWhisperFrame(frame) }
+    }
+
+    /**
+     * Runs on the capture thread. The target snapshot is read from the state
+     * flow so retargeting mid-burst takes effect on the next frame.
+     */
+    private fun sendWhisperFrame(frame: ByteArray) {
+        val state = _localMediaState.value
+        // An empty frame closes the burst and must go out even if whispering
+        // was just switched off.
+        if (!state.whisperActive && frame.isNotEmpty()) return
+        client.sendWhisper(
+            channelIds = state.whisperChannelIds.toIntArray(),
+            clientIds = state.whisperClientIds.toIntArray(),
+            codecData = frame,
+        )
     }
 
     // ------------------------------------------------------------ connection
@@ -187,6 +204,9 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
                     inputGainPercent = resume.inputGainPercent,
                     pushToTalkEnabled = resume.pushToTalkEnabled,
                     voiceActivationThresholdDb = resume.voiceActivationThresholdDb,
+                    // Channel ids are stable across sessions; client ids are
+                    // per-connection handles and would target strangers.
+                    whisperChannelIds = resume.whisperChannelIds,
                 )
             }
         }
@@ -1063,6 +1083,28 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         return updateSelf("client_is_priority_speaker" to enabled.flag())
     }
 
+    override suspend fun setWhisperTargets(channelIds: List<Int>, clientIds: List<Int>) {
+        val channels = channelIds.distinct().take(MAX_WHISPER_TARGETS)
+        val clients = clientIds.distinct().take(MAX_WHISPER_TARGETS)
+        _localMediaState.update {
+            it.copy(
+                whisperChannelIds = channels,
+                whisperClientIds = clients,
+                whisperActive = it.whisperActive && (channels.isNotEmpty() || clients.isNotEmpty()),
+            )
+        }
+        syncAudio()
+    }
+
+    override suspend fun setWhisperActive(active: Boolean) {
+        if (active && !_localMediaState.value.hasWhisperTargets) {
+            emit(ServerEvent.Error("请先选择耳语目标", now()))
+            return
+        }
+        _localMediaState.update { it.copy(whisperActive = active) }
+        syncAudio()
+    }
+
     override fun updateLocalMedia(transform: (LocalMediaState) -> LocalMediaState) {
         _localMediaState.update(transform)
         syncAudio()
@@ -1098,6 +1140,7 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         capture.echoCancellation = state.echoCancellation
         capture.noiseSuppression = state.noiseSuppression
         capture.autoGainControl = state.autoGainControl
+        capture.whisperActive = state.whisperActive && state.hasWhisperTargets
 
         playback.muted = state.speakerMuted
         playback.masterVolumePercent = state.outputVolumePercent
@@ -1164,6 +1207,12 @@ class NativeTeamSpeakRepositoryImpl @Inject constructor(
         /** Bounds for the per-client local volume override. */
         const val MIN_CLIENT_VOLUME = 0
         const val MAX_CLIENT_VOLUME = 200
+
+        /**
+         * Whisper targets are length-prefixed with a single byte on the wire, so
+         * neither list can exceed 255 entries.
+         */
+        const val MAX_WHISPER_TARGETS = 255
 
         /** `reasonid` values the server sends with leave / move notifications. */
         const val REASON_KICK_CHANNEL = 4

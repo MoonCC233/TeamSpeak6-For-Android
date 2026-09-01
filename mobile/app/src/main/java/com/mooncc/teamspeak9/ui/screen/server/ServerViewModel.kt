@@ -70,6 +70,9 @@ sealed interface ServerDialog {
     /** Composes the message sent along with a talk-power request. */
     data object TalkRequest : ServerDialog
 
+    /** Picks the channels and clients a whisper is routed to. */
+    data object WhisperTargets : ServerDialog
+
     /** Pre-share options: mode, resolution, bitrate, privacy. */
     data object ScreenShareOptions : ServerDialog
 }
@@ -521,6 +524,32 @@ class ServerViewModel @Inject constructor(
         viewModelScope.launch {
             repository.clearLocalClientOverrides()
             statusMessage.value = "已清除所有本地静音与音量设置"
+        }
+    }
+
+    // --------------------------------------------------------------- whisper
+
+    fun showWhisperTargets() {
+        dialog.value = ServerDialog.WhisperTargets
+    }
+
+    fun applyWhisperTargets(channelIds: List<Int>, clientIds: List<Int>) {
+        dismissDialog()
+        viewModelScope.launch {
+            repository.setWhisperTargets(channelIds, clientIds)
+            val count = channelIds.size + clientIds.size
+            statusMessage.value = if (count == 0) "已清空耳语目标" else "已设置 $count 个耳语目标"
+        }
+    }
+
+    /** Held down by the whisper button: transmits to the whisper targets only. */
+    fun setWhisperActive(active: Boolean) {
+        viewModelScope.launch {
+            if (active && !repository.localMediaState.value.hasWhisperTargets) {
+                dialog.value = ServerDialog.WhisperTargets
+                return@launch
+            }
+            repository.setWhisperActive(active)
         }
     }
 
