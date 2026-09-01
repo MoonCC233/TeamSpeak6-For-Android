@@ -140,8 +140,41 @@ test('announce/watch/offer flow routes correctly within a room', async () => {
     const candidateReceived = await waitForMessage(publisher.ws, (payload) => payload.type === 'candidate');
     assert.equal(candidateReceived.from, viewer.welcome.peerId);
 
+    viewer.ws.send(JSON.stringify({
+      type: 'candidate',
+      v: 1,
+      to: publisher.welcome.peerId,
+      candidate: '',
+      sdpMid: '0',
+      sdpMLineIndex: 0,
+    }));
+
+    const emptyCandidate = await waitForMessage(publisher.ws, (payload) => payload.type === 'candidate' && payload.candidate === '');
+    assert.equal(emptyCandidate.from, viewer.welcome.peerId);
+
     viewer.ws.close();
     publisher.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  } finally {
+    server.close();
+  }
+});
+
+test('leave closes the peer and emits peer-left to remaining room members', async () => {
+  const port = 9878;
+  const server = createServer(port);
+
+  try {
+    const alpha = await joinRoom(port, 'room-bye', 'alpha', 'Alpha');
+    const beta = await joinRoom(port, 'room-bye', 'beta', 'Beta');
+
+    alpha.ws.send(JSON.stringify({ type: 'leave', v: 1 }));
+
+    const peerLeft = await waitForMessage(beta.ws, (payload) => payload.type === 'peer-left' && payload.peerId === alpha.welcome.peerId);
+    assert.equal(peerLeft.peerId, alpha.welcome.peerId);
+
+    alpha.ws.close();
+    beta.ws.close();
     await new Promise((resolve) => setTimeout(resolve, 100));
   } finally {
     server.close();

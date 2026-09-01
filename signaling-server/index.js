@@ -282,8 +282,8 @@ function handleMessage(ws, raw) {
         type: 'candidate',
         v: 1,
         from: peer.peerId,
-        candidate: message.candidate,
-        sdpMid: message.sdpMid || '',
+        candidate: String(message.candidate ?? ''),
+        sdpMid: String(message.sdpMid || ''),
         sdpMLineIndex: Number(message.sdpMLineIndex || 0),
       });
       break;
@@ -303,11 +303,18 @@ function handleMessage(ws, raw) {
 
     case 'leave': {
       removePeer(peer);
+      if (ws && ws.readyState === ws.OPEN) {
+        ws.close();
+      }
       break;
     }
 
     case 'ping': {
       send(ws, { type: 'pong', v: 1, nonce: Number(message.nonce || 0) });
+      break;
+    }
+
+    case 'pong': {
       break;
     }
 
