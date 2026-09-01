@@ -42,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import com.mooncc.teamspeak9.domain.model.Channel
 import com.mooncc.teamspeak9.domain.model.Client
 import com.mooncc.teamspeak9.domain.model.SpacerAlignment
+import com.mooncc.teamspeak9.ui.theme.TsAway
 import com.mooncc.teamspeak9.ui.theme.TsMuted
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceMuted
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceVariant
 import com.mooncc.teamspeak9.ui.theme.TsTalking
 
 private val INDENT_PER_LEVEL = 14.dp
@@ -73,17 +76,24 @@ fun ChannelRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(background, RoundedCornerShape(6.dp))
+            .background(background, RoundedCornerShape(4.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(
-                start = 6.dp + INDENT_PER_LEVEL * channel.depth,
-                end = 10.dp,
-                top = 7.dp,
-                bottom = 7.dp,
-            ),
+            .padding(end = 10.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        // Official client marks the joined channel with a vertical accent bar.
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(20.dp)
+                .background(
+                    if (isCurrentChannel) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    RoundedCornerShape(2.dp),
+                ),
+        )
+        Spacer(Modifier.width(3.dp + INDENT_PER_LEVEL * channel.depth))
+
         if (hasChildren) {
             Icon(
                 imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.ExpandMore,
@@ -91,7 +101,7 @@ fun ChannelRow(
                 modifier = Modifier
                     .size(18.dp)
                     .clickable(onClick = onToggleCollapse),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = TsOnSurfaceMuted,
             )
         } else {
             Spacer(Modifier.width(18.dp))
@@ -192,10 +202,10 @@ fun ClientRow(
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(
-                start = 6.dp + INDENT_PER_LEVEL * depth + 18.dp,
+                start = 6.dp + INDENT_PER_LEVEL * depth + 24.dp,
                 end = 10.dp,
-                top = 6.dp,
-                bottom = 6.dp,
+                top = 5.dp,
+                bottom = 5.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -259,6 +269,6 @@ private fun statusIcon(client: Client) = when {
 private fun statusTint(client: Client): Color = when {
     client.isSpeakerMuted || client.isMicMuted -> TsMuted
     client.isTalking -> TsTalking
-    client.isAway -> MaterialTheme.colorScheme.onSurfaceVariant
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    client.isAway -> TsAway
+    else -> TsOnSurfaceVariant
 }

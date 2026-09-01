@@ -1,10 +1,8 @@
 package com.mooncc.teamspeak9.ui.theme
 
 import android.app.Activity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
@@ -24,39 +22,29 @@ private val DarkColors = darkColorScheme(
     onSurface = TsOnSurface,
     surfaceVariant = TsSurfaceVariant,
     onSurfaceVariant = TsOnSurfaceVariant,
+    surfaceContainerHighest = TsSurfaceHigh,
     outline = TsOutline,
+    outlineVariant = TsOutlineStrong,
     error = TsError,
     onError = Color.White,
 )
 
-private val LightColors = lightColorScheme(
-    primary = TsBlueDark,
-    onPrimary = Color.White,
-    secondary = TsBlue,
-    background = Color(0xFFF5F7FB),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFE6ECF5),
-    error = TsError,
-)
-
 @Composable
 fun TeamSpeakTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             WindowCompat.getInsetsController(window, view).apply {
-                isAppearanceLightStatusBars = !darkTheme
-                isAppearanceLightNavigationBars = !darkTheme
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
             }
         }
     }
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = DarkColors,
         typography = TeamSpeakTypography,
         content = content,
     )

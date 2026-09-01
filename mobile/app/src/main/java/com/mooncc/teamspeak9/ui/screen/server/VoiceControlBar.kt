@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.HeadsetOff
 import androidx.compose.material.icons.filled.KeyboardVoice
@@ -30,8 +31,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mooncc.teamspeak9.domain.model.LocalMediaState
+import com.mooncc.teamspeak9.ui.theme.TsChrome
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceMuted
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceVariant
+import com.mooncc.teamspeak9.ui.theme.TsSurfaceVariant
 
 @Composable
 fun VoiceControlBar(
@@ -48,15 +54,29 @@ fun VoiceControlBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .background(TsChrome)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = channelName.ifBlank { "未加入频道" },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                Icons.Default.Forum,
+                contentDescription = null,
+                tint = TsOnSurfaceMuted,
+                modifier = Modifier.size(13.dp),
+            )
+            Text(
+                text = channelName.ifBlank { "未加入频道" },
+                style = MaterialTheme.typography.labelSmall,
+                color = TsOnSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -116,29 +136,30 @@ private fun ToggleButton(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         val containerColor = when {
-            danger -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
-            active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-            else -> MaterialTheme.colorScheme.surface
+            danger -> MaterialTheme.colorScheme.error.copy(alpha = 0.18f)
+            active -> MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+            else -> TsSurfaceVariant
         }
         val contentColor = when {
             danger -> MaterialTheme.colorScheme.error
             active -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
+            else -> TsOnSurfaceVariant
         }
         FilledIconButton(
             onClick = onClick,
+            shape = RoundedCornerShape(8.dp),
             colors = IconButtonDefaults.filledIconButtonColors(
                 containerColor = containerColor,
                 contentColor = contentColor,
             ),
-            modifier = Modifier.size(42.dp),
+            modifier = Modifier.size(36.dp),
         ) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(21.dp))
+            Icon(icon, contentDescription = label, modifier = Modifier.size(18.dp))
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = TsOnSurfaceMuted,
         )
     }
 }
@@ -150,11 +171,11 @@ private fun PushToTalkButton(active: Boolean, onPressed: (Boolean) -> Unit) {
             .fillMaxWidth()
             .background(
                 if (active) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
                 } else {
-                    MaterialTheme.colorScheme.surface
+                    TsSurfaceVariant
                 },
-                RoundedCornerShape(10.dp),
+                RoundedCornerShape(8.dp),
             )
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -164,7 +185,7 @@ private fun PushToTalkButton(active: Boolean, onPressed: (Boolean) -> Unit) {
                     onPressed(false)
                 }
             }
-            .padding(vertical = 12.dp),
+            .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -174,7 +195,7 @@ private fun PushToTalkButton(active: Boolean, onPressed: (Boolean) -> Unit) {
             color = if (active) {
                 MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                TsOnSurfaceVariant
             },
         )
     }

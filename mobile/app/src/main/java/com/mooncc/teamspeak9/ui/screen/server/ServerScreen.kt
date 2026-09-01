@@ -4,16 +4,19 @@ import android.app.Activity
 import android.media.projection.MediaProjectionManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -37,6 +40,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,6 +63,13 @@ import com.mooncc.teamspeak9.domain.model.ConnectionStatus
 import com.mooncc.teamspeak9.domain.model.ServerEvent
 import com.mooncc.teamspeak9.ui.component.ChannelRow
 import com.mooncc.teamspeak9.ui.component.ClientRow
+import com.mooncc.teamspeak9.ui.theme.TsChrome
+import com.mooncc.teamspeak9.ui.theme.TsError
+import com.mooncc.teamspeak9.ui.theme.TsOnSurface
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceMuted
+import com.mooncc.teamspeak9.ui.theme.TsOnSurfaceVariant
+import com.mooncc.teamspeak9.ui.theme.TsSuccess
+import com.mooncc.teamspeak9.ui.theme.TsWarning
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,6 +136,11 @@ fun ServerScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = TsChrome,
+                    titleContentColor = TsOnSurface,
+                    actionIconContentColor = TsOnSurfaceVariant,
+                ),
                 title = {
                     Column {
                         Text(
@@ -134,11 +151,21 @@ fun ServerScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Text(
-                            text = statusLabel(state),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .background(statusColor(state.connection.status), CircleShape),
+                            )
+                            Text(
+                                text = statusLabel(state),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -213,7 +240,7 @@ fun ServerScreen(
                     onToggleScreenShare = viewModel::onToggleScreenShare,
                     onToggleChannelCommander = viewModel::toggleChannelCommander,
                 )
-                NavigationBar {
+                NavigationBar(containerColor = TsChrome) {
                     NavigationBarItem(
                         selected = state.selectedTab == ServerTab.CHANNELS,
                         onClick = { viewModel.selectTab(ServerTab.CHANNELS) },
@@ -352,6 +379,13 @@ private fun statusLabel(state: ServerUiState): String = when (state.connection.s
     }
     ConnectionStatus.RECONNECTING -> "正在重连…"
     ConnectionStatus.ERROR -> state.connection.errorMessage ?: "连接错误"
+}
+
+private fun statusColor(status: ConnectionStatus): Color = when (status) {
+    ConnectionStatus.CONNECTED -> TsSuccess
+    ConnectionStatus.CONNECTING, ConnectionStatus.RECONNECTING -> TsWarning
+    ConnectionStatus.ERROR -> TsError
+    ConnectionStatus.DISCONNECTED -> TsOnSurfaceMuted
 }
 
 private fun currentChannelName(state: ServerUiState): String {
