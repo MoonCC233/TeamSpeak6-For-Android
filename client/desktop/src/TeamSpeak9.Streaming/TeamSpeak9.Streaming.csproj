@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows 10 2004 (19041) is the floor for Windows.Graphics.Capture with
+         GraphicsCaptureItem picker support and IsBorderRequired control. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <RootNamespace>TeamSpeak9.Streaming</RootNamespace>
+    <AssemblyName>TeamSpeak9.Streaming</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TeamSpeak9.Core\TeamSpeak9.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <!-- SIPSorceryMedia.FFmpeg needs the native FFmpeg 7.x binaries next to the app;
+         the host app publishes win-x64 and ships them under runtimes/. -->
+    <PackageReference Include="SIPSorcery" />
+    <PackageReference Include="SIPSorceryMedia.Abstractions" />
+    <PackageReference Include="SIPSorceryMedia.FFmpeg" />
+  </ItemGroup>
+
+</Project>

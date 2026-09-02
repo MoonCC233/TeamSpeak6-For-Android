@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Windows 10 2004 (19041) is required for the Windows.Graphics.Capture WinRT
+         projection used by screen sharing. Raising this also raises the minimum OS. -->
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>TeamSpeak9.App</RootNamespace>
+    <AssemblyName>TeamSpeak9</AssemblyName>
+    <ApplicationIcon></ApplicationIcon>
+    <!-- The window chrome is drawn by the app itself (see docs/desktop/ui-spec.md),
+         so DPI has to be handled per-monitor to avoid blurry borders. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- TSLib loads libopus through NativeLibraryLoader, which probes {cwd}/lib/x64. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TeamSpeak9.Core\TeamSpeak9.Core.csproj" />
+    <ProjectReference Include="..\TeamSpeak9.Streaming\TeamSpeak9.Streaming.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <!-- A plain ServiceCollection, not Microsoft.Extensions.Hosting: the generic host would
+         pull the 10.x System.Text.Json closure in through Configuration.Json, which conflicts
+         with the netstandard2.1 vendored TSLib's System.IO.Pipelines 8.0.0. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="NLog" />
+    <PackageReference Include="NLog.Extensions.Logging" />
+  </ItemGroup>
+
+  <!-- TSLib's NativeLibraryLoader probes {assemblyDir}/lib/x64 for libopus, so the native
+       library is staged there rather than at the output root. Missing libopus only breaks
+       voice at runtime, so this warns instead of failing the build; see
+       third_party/native/README.md. -->
+  <ItemGroup>
+    <None Include="..\..\third_party\native\win-x64\libopus.dll"
+          Condition="Exists('..\..\third_party\native\win-x64\libopus.dll')"
+          Link="lib\x64\libopus.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="WarnOnMissingLibopus" BeforeTargets="Build">
+    <Warning Condition="!Exists('..\..\third_party\native\win-x64\libopus.dll')"
+             Text="缺少 third_party/native/win-x64/libopus.dll，语音功能在运行时不可用。详见 third_party/native/README.md。" />
+  </Target>
+
+</Project>

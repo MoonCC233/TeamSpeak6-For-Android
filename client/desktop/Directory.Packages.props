@@ -1,0 +1,62 @@
+<Project>
+
+  <!-- Central Package Management: every PackageReference version lives here.
+       See https://learn.microsoft.com/nuget/consume-packages/central-package-management -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="App / MVVM">
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <!-- 10.0.11 rather than 8.0.x because SIPSorcery 10.0.16 requires
+         Microsoft.Extensions.Logging.Abstractions >= 10.0.11, and central transitive pinning
+         turns an older central version into an NU1605 downgrade error. Abstractions has a
+         net8.0 target and no dependencies, so this does not drag in the rest of the 10.x
+         closure - the other Microsoft.Extensions.* packages stay on 8.0.x. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup Label="Platform">
+    <!-- DPAPI, used to protect the stored identity private key at rest.
+         Not part of the framework reference set even on net8.0-windows. -->
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Logging">
+    <!-- TSLib logs through NLog directly (NLog.LogManager.GetCurrentClassLogger),
+         so NLog has to be present regardless; we route Microsoft.Extensions.Logging
+         into the same NLog targets to keep one log file. -->
+    <PackageVersion Include="NLog" Version="5.5.1" />
+    <PackageVersion Include="NLog.Extensions.Logging" Version="5.5.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Streaming (WebRTC + media)">
+    <PackageVersion Include="SIPSorcery" Version="10.0.16" />
+    <PackageVersion Include="SIPSorceryMedia.Abstractions" Version="10.0.16" />
+    <PackageVersion Include="SIPSorceryMedia.FFmpeg" Version="10.0.16" />
+  </ItemGroup>
+
+  <ItemGroup Label="Vendored TSLib dependencies">
+    <!-- Versions come from upstream TSLib.csproj @ a69a38d, except NLog and
+         Newtonsoft.Json which are floated up to the versions the app uses so that
+         only one assembly of each ends up in the output. -->
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Heijden.Dns.Portable" Version="2.0.19" />
+    <PackageVersion Include="Nullable" Version="1.3.1" />
+    <PackageVersion Include="Portable.BouncyCastle" Version="1.9.0" />
+    <PackageVersion Include="Splamy.Ed25519.Toolkit" Version="1.0.3" />
+    <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
+    <PackageVersion Include="System.Memory" Version="4.6.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,59 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "third_party", "third_party", "{7ECF2387-5CE8-4F5D-8BD1-91969803656B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TSLib", "third_party\TSLib\TSLib.csproj", "{0B3776DB-4989-497A-A1DA-6FBBF203F9B9}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{AECFC63F-2789-4725-9F86-3AF3A8F1454A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamSpeak9.Core", "src\TeamSpeak9.Core\TeamSpeak9.Core.csproj", "{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{5F1F97E0-461E-42EF-8B2A-443A78A34DBB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamSpeak9.Core.Tests", "tests\TeamSpeak9.Core.Tests\TeamSpeak9.Core.Tests.csproj", "{C63D3E63-B635-4A2B-9601-1BB53F20C86A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamSpeak9.Streaming", "src\TeamSpeak9.Streaming\TeamSpeak9.Streaming.csproj", "{BCE03546-E105-4F28-8198-52B3CD03B628}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamSpeak9.App", "src\TeamSpeak9.App\TeamSpeak9.App.csproj", "{D0E5512E-A335-4841-BD63-61B951E4B37D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0B3776DB-4989-497A-A1DA-6FBBF203F9B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B3776DB-4989-497A-A1DA-6FBBF203F9B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B3776DB-4989-497A-A1DA-6FBBF203F9B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B3776DB-4989-497A-A1DA-6FBBF203F9B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C63D3E63-B635-4A2B-9601-1BB53F20C86A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C63D3E63-B635-4A2B-9601-1BB53F20C86A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C63D3E63-B635-4A2B-9601-1BB53F20C86A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C63D3E63-B635-4A2B-9601-1BB53F20C86A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCE03546-E105-4F28-8198-52B3CD03B628}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{BCE03546-E105-4F28-8198-52B3CD03B628}.Debug|Any CPU.Build.0 = Debug|x64
+		{BCE03546-E105-4F28-8198-52B3CD03B628}.Release|Any CPU.ActiveCfg = Release|x64
+		{BCE03546-E105-4F28-8198-52B3CD03B628}.Release|Any CPU.Build.0 = Release|x64
+		{D0E5512E-A335-4841-BD63-61B951E4B37D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D0E5512E-A335-4841-BD63-61B951E4B37D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D0E5512E-A335-4841-BD63-61B951E4B37D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D0E5512E-A335-4841-BD63-61B951E4B37D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0B3776DB-4989-497A-A1DA-6FBBF203F9B9} = {7ECF2387-5CE8-4F5D-8BD1-91969803656B}
+		{292DA775-5C2F-42A0-A1C3-2ECC0A178B0B} = {AECFC63F-2789-4725-9F86-3AF3A8F1454A}
+		{C63D3E63-B635-4A2B-9601-1BB53F20C86A} = {5F1F97E0-461E-42EF-8B2A-443A78A34DBB}
+		{BCE03546-E105-4F28-8198-52B3CD03B628} = {AECFC63F-2789-4725-9F86-3AF3A8F1454A}
+		{D0E5512E-A335-4841-BD63-61B951E4B37D} = {AECFC63F-2789-4725-9F86-3AF3A8F1454A}
+	EndGlobalSection
+EndGlobal

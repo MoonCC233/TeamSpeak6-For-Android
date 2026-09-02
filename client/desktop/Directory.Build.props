@@ -1,0 +1,41 @@
+<Project>
+
+  <!-- Shared settings for every project under client/desktop.
+       The vendored TSLib deliberately opts out of most of this (see the Condition below):
+       it is upstream code on LangVersion 8.0 / netstandard2.1 and must stay diffable
+       against https://github.com/Splamy/TS3AudioBot @ a69a38d. -->
+
+  <PropertyGroup>
+    <IsVendoredProject Condition="$(MSBuildProjectDirectory.Contains('third_party'))">true</IsVendoredProject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsVendoredProject)' != 'true'">
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>portable</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NeutralLanguage>zh-Hans</NeutralLanguage>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsVendoredProject)' != 'true'">
+    <Product>TeamSpeak9</Product>
+    <Company>TeamSpeak9</Company>
+    <Authors>TeamSpeak9 contributors</Authors>
+    <Version>0.1.0</Version>
+    <Copyright>Copyright (c) TeamSpeak9 contributors</Copyright>
+    <RepositoryUrl>https://github.com/MoonCC233/TeamSpeak9</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Vendored third-party code: never fail our build on its warnings. -->
+  <PropertyGroup Condition="'$(IsVendoredProject)' == 'true'">
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <RunAnalyzers>false</RunAnalyzers>
+  </PropertyGroup>
+
+</Project>

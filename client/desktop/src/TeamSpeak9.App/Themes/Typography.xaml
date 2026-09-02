@@ -1,0 +1,70 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+  <!-- Type ramp. "Segoe UI Variable Text" is the Win11 UI face and falls back to Segoe UI
+       on Win10, so both look native without shipping a font. -->
+
+  <FontFamily x:Key="Font.Ui">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, sans-serif</FontFamily>
+  <FontFamily x:Key="Font.Display">Segoe UI Variable Display, Segoe UI Semibold, Microsoft YaHei UI, sans-serif</FontFamily>
+  <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Microsoft YaHei Mono, monospace</FontFamily>
+
+  <sys:Double x:Key="Font.Size.Caption">11</sys:Double>
+  <sys:Double x:Key="Font.Size.Small">12</sys:Double>
+  <sys:Double x:Key="Font.Size.Body">13</sys:Double>
+  <sys:Double x:Key="Font.Size.BodyLarge">14</sys:Double>
+  <sys:Double x:Key="Font.Size.Subtitle">16</sys:Double>
+  <sys:Double x:Key="Font.Size.Title">20</sys:Double>
+
+  <Style x:Key="Text.Caption" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Caption}" />
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextTertiary}" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <Style x:Key="Text.Body" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Body}" />
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <Style x:Key="Text.BodySecondary" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+  </Style>
+
+  <!-- Group headers such as 服务器 / 书签 in the sidebar. -->
+  <Style x:Key="Text.SectionHeader" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Ui}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Caption}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextTertiary}" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <Style x:Key="Text.Subtitle" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Display}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Subtitle}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <Style x:Key="Text.Title" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Display}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Title}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{StaticResource Brush.TextPrimary}" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <Style x:Key="Text.Mono" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+    <Setter Property="FontFamily" Value="{StaticResource Font.Mono}" />
+    <Setter Property="FontSize" Value="{StaticResource Font.Size.Small}" />
+  </Style>
+
+  <!-- Implicit default so any unstyled TextBlock still gets readable colours. -->
+  <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}" />
+
+</ResourceDictionary>
