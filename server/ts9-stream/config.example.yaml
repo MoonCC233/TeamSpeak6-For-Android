@@ -1,0 +1,206 @@
+# ts9-stream 配置示例
+#
+# 复制为 config.yaml 后按需修改：
+#   ts9-stream -config config.yaml
+#
+# 所有敏感项（ServerQuery 密码、令牌密钥、TURN 密钥）都支持用环境变量覆盖，
+# 前缀为 TS9STREAM_，推荐在生产环境用环境变量而不是写进文件。
+# 校验配置与 ServerQuery 连通性但不启动服务：ts9-stream -config config.yaml -check
+
+# ── 监听与 TLS ────────────────────────────────────────────────────────────────
+listen:
+  # 监听地址。默认端口 10099（TSSP v1 规范值）。
+  # 只监听内网可写成 "10.0.0.5:10099"；监听全部网卡用 ":10099"。
+  addr: ":10099"
+
+  # WebSocket 路径。客户端连接 wss://<host>:10099/tssp/v1
+  base_path: "/tssp/v1"
+
+  # 可信反向代理的 IP 或 CIDR 列表。
+  # 只有来自这些地址的请求，其 X-Forwarded-For 才会被用来识别客户端 IP。
+  # 留空（默认）= 完全忽略该头，直接用 TCP 对端地址。
+  #
+  # 直接暴露给客户端时必须留空：否则任何人都能伪造 X-Forwarded-For
+  # 来绕过按 IP 的 hello 失败限流。只有放在 nginx/Caddy 后面时才填代理地址。
+  trusted_proxies: []
+  #  - "127.0.0.1"
+  #  - "10.0.0.0/8"
+
+  # TLS 证书与私钥（PEM）。生产环境必填，两者必须同时提供。
+  # 可以用 Let's Encrypt 的 fullchain.pem / privkey.pem，
+  # 也可以用自签证书（此时客户端需要手动信任指纹）。
+  tls_cert: "/etc/ts9-stream/fullchain.pem"
+  tls_key: "/etc/ts9-stream/privkey.pem"
+
+# ── 日志 ─────────────────────────────────────────────────────────────────────
+log:
+  # debug | info | warn | error
+  level: "info"
+  # text（人类可读）| json（便于 Loki/ELK 采集）
+  format: "text"
+
+# ── 鉴权 ─────────────────────────────────────────────────────────────────────
+auth:
+  # 会话令牌的 HMAC-SHA256 密钥。必须是高强度随机串（建议 32 字节以上）。
+  # 生成方式：openssl rand -hex 32
+  # 强烈建议改用环境变量 TS9STREAM_TOKEN_SECRET，避免落盘。
+  # 注意：更换密钥会使所有已签发令牌立即失效（客户端会自动重新 hello）。
+  token_secret: ""
+
+  # 令牌有效期。客户端需在过期前用 renew 续签。
+  token_ttl: 10m
+
+  # 提前多久发送 token_expiring 事件提醒客户端续签。
+  renew_leeway: 2m
+
+  # ServerQuery 查询结果的缓存时间，用于抵御「反复 hello 放大查询」的攻击。
+  # 设得太长会让「刚换频道」的客户端短暂鉴权失败，3~5 秒比较合适。
+  query_cache_ttl: 3s
+
+# ── 虚拟服务器映射 ────────────────────────────────────────────────────────────
+# 每个条目把「客户端上报的 tsserver 地址」映射到一组 ServerQuery 凭据。
+# 客户端 hello 时带的 server_addr 必须能在这里匹配到，否则拒绝连接。
+servers:
+  - # 客户端连接 tsserver 用的地址，可以写多个别名（域名、公网 IP、内网 IP）。
+    # 缺省端口按 9987 补齐；匹配时大小写不敏感。
+    server_addr:
+      - "ts.example.com:9987"
+      - "203.0.113.10:9987"
+
+    # 该虚拟服务器的语音端口，用于 ServerQuery 的 `use port=N`。
+    # 不填则从 server_addr 的第一个地址推导。
+    virtual_port: 9987
+
+    # ServerQuery 传输方式：ssh（加密，默认端口 10022，**默认值**）
+    #                      raw（明文 telnet，默认端口 10011，仅 TS3 服务端可用）
+    # TeamSpeak 6 服务端已移除 raw 端点，只提供 ssh / http / https。
+    query_protocol: "ssh"
+    # 不填则从 server_addr 推导主机名。与 tsserver 同机部署时填 127.0.0.1。
+    query_host: "127.0.0.1"
+    query_port: 10022
+
+    # ServerQuery 账号。建议**单独创建一个只读账号**，不要用 serveradmin。
+    # 所需权限仅两条：
+    #   b_virtualserver_client_list  （clientlist）
+    #   b_client_info_view           （clientinfo）
+    # 创建方法见 docs/deploy/stream-service.md。
+    query_user: "ts9stream"
+    # 建议改用环境变量 TS9STREAM_QUERY_PASSWORD（仅对 servers[0] 生效）。
+    query_password: ""
+
+    # 单条 ServerQuery 命令的超时。
+    query_timeout: 5s
+
+# ── ICE（STUN / TURN）────────────────────────────────────────────────────────
+# 这里配置的服务器会在 hello 响应里下发给客户端，用于 NAT 穿透。
+ice:
+  stun_urls:
+    - "stun:stun.l.google.com:19302"
+
+  # TURN 中继。P2P 模式在对称 NAT 下必须有 TURN 才能连通；
+  # SFU 模式下服务端通常有公网地址，客户端一般不需要 TURN。
+  turn_urls: []
+  #  - "turn:turn.example.com:3478?transport=udp"
+  #  - "turns:turn.example.com:5349?transport=tcp"
+
+  # coturn 的 REST 风格短时凭据（coturn 配置里的 static-auth-secret）。
+  # 配置后服务端为每个客户端签发有时效的用户名/密码，比长期静态凭据安全得多。
+  # 建议用环境变量 TS9STREAM_TURN_STATIC_AUTH_SECRET。
+  turn_static_auth_secret: ""
+  turn_credential_ttl: 10m
+
+  # 如果 TURN 服务器只支持静态账号，用下面两项（与上面的 secret 二选一）。
+  turn_username: ""
+  turn_password: ""
+
+  # 需要原样下发的额外条目（例如第三方 TURN 服务商给的固定凭据）。
+  static: []
+  #  - urls: ["turn:turn.provider.net:3478"]
+  #    username: "user"
+  #    credential: "pass"
+
+# ── 资源上限与速率限制 ────────────────────────────────────────────────────────
+limits:
+  # 单条流的码率上限（kbps）。客户端 setup/update 里超出的值会被截断。
+  max_bitrate_kbps: 4000
+  # 每个频道同时进行的共享数上限。
+  max_streams_per_channel: 4
+  # 单条流的观看人数上限。
+  max_viewers_per_stream: 16
+  # 单个客户端同时发布的流数量上限。
+  max_streams_per_client: 1
+
+  # 连接建立后必须在此时间内发出 hello，否则断开。
+  hello_timeout: 10s
+
+  # 按来源 IP 的鉴权失败速率限制：窗口内失败超过 N 次则封禁一段时间。
+  hello_fail_window: 5m
+  hello_fail_max: 10
+  hello_ban_time: 5m
+
+  # 单条 WebSocket 消息上限（字节）。规范值 256 KiB，够放最大的 SDP。
+  max_message_bytes: 262144
+
+  # 并发会话上限，0 表示不限。
+  max_sessions: 0
+
+  # 媒体协商超时：setup 之后迟迟不完成协商则清理该流。
+  negotiation_timeout: 30s
+
+# ── 启用的媒体模式 ────────────────────────────────────────────────────────────
+# sfu：服务端转发媒体，多人观看时上行只有一份，但消耗服务器带宽。
+# p2p：服务端只中转信令，媒体两端直连，服务器零带宽但受 NAT 影响。
+# 只留一个即可禁用另一种；客户端会按 hello 响应里的列表选择。
+modes:
+  - "sfu"
+  - "p2p"
+
+# ── 访问控制（可选）──────────────────────────────────────────────────────────
+# 按 tsserver 的服务器组 ID 限制谁可以使用屏幕共享。留空表示不限制。
+# 组 ID 可用 ServerQuery 的 `servergrouplist` 查询。
+access:
+  # 非空时，客户端必须至少属于其中一个组才能通过鉴权。
+  allow_server_groups: []
+  # 这些组一律拒绝，优先级高于白名单（例如把「访客」组拉黑）。
+  deny_server_groups: []
+
+# ── 媒体参数 ─────────────────────────────────────────────────────────────────
+media:
+  # 允许的视频编解码，按优先级排列。目前仅支持 H264 与 VP8。
+  # SFU 不转码，因此发布者与订阅者必须协商出同一种编码。
+  video_codecs:
+    - "H264"
+    - "VP8"
+
+  # 屏幕共享附带音频时使用。
+  audio_codecs:
+    - "opus"
+
+  # 周期性向发布者请求关键帧的间隔，帮助中途加入的观看者尽快出画面。
+  # 注意：≤0 的值会被校验逻辑重置为 3s，无法关闭该周期请求。
+  # 只有在存在订阅者时才会真的发出 PLI，空闲频道不产生额外流量。
+  pli_interval: 3s
+
+  # 限制 SFU 使用的本地 UDP 端口范围，便于配置防火墙。两项必须同时设置。
+  # 每路媒体连接会占用若干端口，范围建议留够（例如 2000 个）。
+  udp_port_min: 40000
+  udp_port_max: 42000
+
+  # 部署在 NAT/云主机后面时填公网 IP，用于 1:1 NAT 候选映射。
+  # 不填则 pion 只会收集到内网地址，外部客户端无法连通。
+  public_ip: ""
+
+# ── 运行期开关 ───────────────────────────────────────────────────────────────
+runtime:
+  # 仅用于本地开发：允许明文 ws:// 并在缺少 token_secret 时自动生成临时密钥。
+  # 生产环境必须为 false。
+  dev_insecure: false
+
+  # 服务端 WebSocket 心跳间隔。
+  ping_interval: 20s
+
+  # 无任何流量时判定连接失效的时间，必须大于 ping_interval。
+  read_timeout: 60s
+
+  # 优雅退出的最长等待时间：先广播流结束与 bye，再强制关闭。
+  shutdown_grace: 10s
