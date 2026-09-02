@@ -1,0 +1,129 @@
+TeamSpeak9
+==========
+
+本文件列出本项目使用的第三方组件及其许可要求。
+
+
+1. TeamSpeak 官方服务端二进制与文档
+-----------------------------------
+
+路径：server/win/、server/linux/（**不在本仓库内**，需自行从官网下载）
+
+这些文件是 TeamSpeak Systems GmbH 的专有软件，随附其自带的许可协议
+（server/win/LICENSE.txt、server/linux/LICENSE）。它们**不适用**本仓库的许可。
+
+该许可第 7.3 条禁止对 TeamSpeak 软件进行复制、修改、逆向工程、反编译、抓取、
+出售、出借、再许可、制作衍生作品或以其他方式提供。既然复制与「以其他方式提供」
+都被禁止，把这些二进制提交进公开仓库本身就构成再分发，因此 `.gitignore` 已排除
+`server/win/` 与 `server/linux/`，开发者需自行下载到本地。
+
+因此本项目：
+  * 不分发 tsserver 二进制；
+  * 不修改 tsserver 二进制；
+  * 不逆向、不反编译其私有协议；
+  * 仅通过官方公开的 ServerQuery 接口与其交互（只读查询）；
+  * 屏幕共享通过独立的旁挂服务实现，不接入官方私有信令。
+
+
+2. TSLib（PC 客户端的 TeamSpeak 协议层）
+----------------------------------------
+
+来源：https://github.com/Splamy/TS3AudioBot （TSLib 子目录）
+作者：Splamy, Flakebi, TSLib Contributors
+许可：Open Software License 3.0 (OSL-3.0)
+引入方式：**源码 vendor**（非 submodule），位于 client/desktop/third_party/TSLib
+基线：上游 commit a69a38d
+
+**本项目对其做了改动**，详见 client/desktop/third_party/TSLib/VENDOR.md：
+  * Full/License.cs：支持 TS6 服务端的 license chain block type 8。
+    未打此补丁的 TSLib 无法连接任何 TeamSpeak 6 服务端（+38/-1，
+    补丁存于 third_party/TSLib/patches/）。
+  * TSLib.csproj：多目标收窄为 netstandard2.1，并置 IsPackable=false。
+
+**重要**：OSL-3.0 是带网络条款的 copyleft 许可。若分发 PC 客户端（包括以网络服务
+形式对外提供），必须一并提供对应的源码，并保留原始版权与许可声明。本仓库开源即可
+满足该要求，但发布安装包时须在「关于」页面与发布说明中提供源码地址。
+上游许可全文随 vendor 副本一并保留于 client/desktop/third_party/TSLib/LICENSE。
+
+
+3. Opus.NET 与 libopus（PC 客户端的语音编解码）
+---------------------------------------------
+
+路径：client/desktop/third_party/TSLib/Audio/Opus/
+
+该目录是 TSLib vendor 副本内的独立第三方组件，许可与 TSLib 本身（OSL-3.0）不同：
+
+  * Opus.NET 的 C# 绑定：Copyright 2012 John Carruthers，MIT 许可，
+    全文见 Audio/Opus/LICENSE。
+  * libopus 本体：Xiph.Org / Skype / Octasic 等，BSD-3-Clause 许可，
+    全文见 Audio/Opus/OPUS_LICENSE。
+
+**打包要求**：Audio/Opus/NativeMethods.cs 通过 [DllImport("libopus")] 加载原生库，
+静态构造即调用 Helper/NativeLibraryLoader.cs 的 PreloadLibrary()。其搜索顺序为
+{工作目录}/lib/{x64|x86}/、{工作目录}/lib/、{程序集目录}/lib/{架构}/、{程序集目录}/lib/。
+因此发布产物必须包含 lib/x64/libopus.dll，否则语音收发在运行时失败（UI 可正常启动，
+故须在打包校验中显式检查该文件）。分发时须随附上述两份许可文本。
+
+
+4. pion/webrtc（旁挂服务的 WebRTC 实现）
+----------------------------------------
+
+来源：https://github.com/pion/webrtc
+许可：MIT
+
+
+5. SIPSorcery / SIPSorceryMedia（PC 客户端的 WebRTC 与媒体）
+-----------------------------------------------------------
+
+来源：https://github.com/sipsorcery-org/sipsorcery
+      https://github.com/sipsorcery-org/SIPSorceryMedia.FFmpeg
+许可：BSD-3-Clause
+
+SIPSorceryMedia.FFmpeg 依赖 FFmpeg。FFmpeg 采用 LGPL-2.1+（部分组件为 GPL）。
+本项目仅使用 LGPL 构建，且以动态库形式加载，分发时须随附 FFmpeg 的许可文本与
+获取源码的途径；不得启用 GPL-only 组件（如 x264 的 GPL 构建）。
+
+
+6. WebRTC for Android
+---------------------
+
+来源：https://github.com/webrtc-sdk/android
+上游：WebRTC (Google)
+许可：BSD-3-Clause（含 libsrtp、libvpx、opus 等子组件的各自许可）
+
+
+7. TS6_Droid（Android 客户端的上游项目）
+----------------------------------------
+
+来源：https://github.com/flamme-demon/TS6_Droid
+派生：https://github.com/MoonCC233/TS6_Droid_CN （本项目 client/mobile 的直接来源）
+许可：GPL-3.0（见 client/mobile/LICENSE）
+引入方式：**git submodule**（路径 client/mobile，见根目录 .gitmodules）
+
+作为 submodule 引入而非并入本仓库，是为了保留上游提交历史、便于跟随上游更新，
+同时让 GPL-3.0 的边界与本仓库其余代码保持清晰可分。
+克隆本仓库需加 `--recurse-submodules`，否则 client/mobile 是空目录。
+
+其底层 tslib 由 Rust 编写，本仓库内仅包含预编译的 libtslib_jni.so，
+源码不在本仓库范围内。本项目的屏幕共享功能不依赖该库，通过独立的 Kotlin 侧
+信令与媒体通道实现。
+
+
+8. Android 端其他依赖
+---------------------
+
+Jetpack / Compose / Kotlin Coroutines / Coil 等，均为 Apache-2.0。
+完整清单见 client/mobile/gradle/libs.versions.toml。
+
+
+9. Go 端其他依赖
+----------------
+
+完整清单见 server/ts9-stream/go.mod 与 go.sum。
+
+
+10. .NET 端其他依赖
+-------------------
+
+完整清单见 client/desktop/Directory.Packages.props（集中包版本管理）
+与各 .csproj 的 PackageReference。

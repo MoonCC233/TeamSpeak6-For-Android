@@ -1,0 +1,3 @@
+[submodule "client/mobile"]
+	path = client/mobile
+	url = https://github.com/MoonCC233/TS6_Droid_CN.git
