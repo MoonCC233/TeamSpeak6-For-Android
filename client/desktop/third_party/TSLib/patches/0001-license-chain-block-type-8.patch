@@ -1,0 +1,77 @@
+diff --git a/TSLib/Full/License.cs b/TSLib/Full/License.cs
+index 92ab27f..dd0007d 100644
+--- a/TSLib/Full/License.cs
++++ b/TSLib/Full/License.cs
+@@ -106,13 +106,25 @@ public abstract class LicenseBlock
+ 				read = 6 + nullStr.read;
+ 				break;
+ 
++			case 8:
++				// TeamSpeak 6 servers (observed on beta 12.1) insert this block into their
++				// license chain. Its semantics are opaque to us; key derivation only needs the
++				// exact block length, which is: 12 opaque bytes, a null terminated issuer
++				// string, then 7 opaque bytes.
++				result = ReadNullString(data.Slice(54));
++				if (!result.Ok) return result.Error;
++				nullStr = result.Value;
++				block = new Ts6ExtensionLicenseBlock(nullStr.str);
++				read = 20 + nullStr.read;
++				break;
++
+ 			case 32:
+ 				block = new EphemeralLicenseBlock();
+ 				read = 0;
+ 				break;
+ 
+ 			default:
+-				return $"Invalid license block type {data[33]}";
++				return $"Invalid license block type {data[33]}, block starts with {HexDump(data)}";
+ 			}
+ 
+ 			block.NotValidBefore = Tools.UnixTimeStart.AddSeconds(BinaryPrimitives.ReadUInt32BigEndian(data.Slice(34)) + 0x50e22700uL);
+@@ -129,6 +141,17 @@ public abstract class LicenseBlock
+ 			return (block, allLen);
+ 		}
+ 
++		private static string HexDump(ReadOnlySpan<byte> data)
++		{
++			var len = Math.Min(data.Length, 64);
++			var sb = new System.Text.StringBuilder(len * 3);
++			for (int i = 0; i < len; i++)
++				sb.Append(data[i].ToString("X2")).Append(' ');
++			if (data.Length > len)
++				sb.Append("... (").Append(data.Length).Append(" bytes total)");
++			return sb.ToString();
++		}
++
+ 		private static R<(string str, int read), string> ReadNullString(ReadOnlySpan<byte> data)
+ 		{
+ 			var termIndex = data.IndexOf((byte)0);
+@@ -217,6 +240,19 @@ public class EphemeralLicenseBlock : LicenseBlock
+ 		public override ChainBlockType Type => ChainBlockType.Ephemeral;
+ 	}
+ 
++	/// <summary>A block kind first seen in TeamSpeak 6 server license chains.
++	/// Its payload is not interpreted, only its length is needed to derive the chain key.</summary>
++	public class Ts6ExtensionLicenseBlock : LicenseBlock
++	{
++		public override ChainBlockType Type => ChainBlockType.Ts6Extension;
++		public string Issuer { get; }
++
++		public Ts6ExtensionLicenseBlock(string issuer)
++		{
++			Issuer = issuer;
++		}
++	}
++
+ 	public enum ChainBlockType : byte
+ 	{
+ 		Intermediate = 0,
+@@ -227,6 +263,7 @@ public enum ChainBlockType : byte
+ 		//Token = 4,
+ 		//LicenseSign = 5,
+ 		//MyTsIdSign = 6,
++		Ts6Extension = 8,
+ 		Ephemeral = 32,
+ 	}
+ 

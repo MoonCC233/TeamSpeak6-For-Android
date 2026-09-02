@@ -16,6 +16,7 @@
 *.java      text eol=lf
 *.gradle    text eol=lf
 *.pro       text eol=lf
+*.patch     text eol=lf
 *.properties text eol=lf
 .gitmodules text eol=lf
 *.xml       text eol=lf
