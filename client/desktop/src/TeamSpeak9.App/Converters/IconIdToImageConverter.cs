@@ -102,9 +102,14 @@ public sealed class IconIdToImageConverter : IValueConverter
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
-            // OnLoad + a stream keeps the file unlocked, so the downloader can overwrite it.
+            // OnLoad decodes right here so the MemoryStream can go away and the file is never
+            // held open, which lets the downloader overwrite it.
+            //
+            // IgnoreImageCache must NOT be set: WPF's image cache is keyed by UriSource, and with
+            // a StreamSource there is no Uri, so FinalizeCreation ends up calling
+            // ImagingCache.RemoveFromCache(null) and throws ArgumentNullException("key"). A stream
+            // source is not cached in the first place, so the option would buy nothing anyway.
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bitmap.StreamSource = new MemoryStream(File.ReadAllBytes(path));
             bitmap.EndInit();
             bitmap.Freeze();
