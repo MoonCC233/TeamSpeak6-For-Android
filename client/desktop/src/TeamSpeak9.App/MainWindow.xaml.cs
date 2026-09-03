@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Microsoft.Extensions.DependencyInjection;
 using TeamSpeak9.App.Controls;
 using TeamSpeak9.App.ViewModels;
 using TeamSpeak9.App.Views;
@@ -18,6 +19,33 @@ public partial class MainWindow : ShellWindow
     public static readonly RoutedUICommand OpenThemeGalleryCommand =
         new("主题预览", nameof(OpenThemeGalleryCommand), typeof(MainWindow));
 
+    /// <summary>
+    /// Creates a channel. The parameter is the parent <see cref="ChannelViewModel"/>, or null for a
+    /// root channel.
+    /// </summary>
+    public static readonly RoutedUICommand CreateChannelCommand =
+        new("创建频道", nameof(CreateChannelCommand), typeof(MainWindow));
+
+    /// <summary>Edits the channel passed as the parameter.</summary>
+    public static readonly RoutedUICommand EditChannelCommand =
+        new("编辑频道", nameof(EditChannelCommand), typeof(MainWindow));
+
+    /// <summary>Deletes the channel passed as the parameter.</summary>
+    public static readonly RoutedUICommand DeleteChannelCommand =
+        new("删除频道", nameof(DeleteChannelCommand), typeof(MainWindow));
+
+    /// <summary>Makes the channel passed as the parameter the server's default channel.</summary>
+    public static readonly RoutedUICommand SetDefaultChannelCommand =
+        new("设为默认频道", nameof(SetDefaultChannelCommand), typeof(MainWindow));
+
+    /// <summary>Opens the icon browser for the channel passed as the parameter.</summary>
+    public static readonly RoutedUICommand ChannelIconCommand =
+        new("频道图标", nameof(ChannelIconCommand), typeof(MainWindow));
+
+    /// <summary>Opens the virtual server editor.</summary>
+    public static readonly RoutedUICommand EditServerCommand =
+        new("服务器设置", nameof(EditServerCommand), typeof(MainWindow));
+
     private readonly ShellViewModel? shell;
     private ThemeGalleryWindow? gallery;
 
@@ -25,7 +53,7 @@ public partial class MainWindow : ShellWindow
     public MainWindow()
     {
         InitializeComponent();
-        AddThemeGalleryBinding();
+        AddCommandBindings();
     }
 
     internal MainWindow(ShellViewModel shell)
@@ -35,7 +63,7 @@ public partial class MainWindow : ShellWindow
         this.shell = shell;
 
         InitializeComponent();
-        AddThemeGalleryBinding();
+        AddCommandBindings();
 
         DataContext = shell;
 
@@ -77,8 +105,34 @@ public partial class MainWindow : ShellWindow
             WindowState = WindowState.Maximized;
     }
 
-    private void AddThemeGalleryBinding() =>
+    private void AddCommandBindings()
+    {
         CommandBindings.Add(new CommandBinding(OpenThemeGalleryCommand, (_, _) => OpenThemeGallery()));
+        CommandBindings.Add(new CommandBinding(
+            CreateChannelCommand,
+            (_, e) => OpenChannelEditor(e.Parameter as ChannelViewModel, create: true),
+            (_, e) => e.CanExecute = shell?.IsConnected == true));
+        CommandBindings.Add(new CommandBinding(
+            EditChannelCommand,
+            (_, e) => OpenChannelEditor(e.Parameter as ChannelViewModel, create: false),
+            (_, e) => e.CanExecute = e.Parameter is ChannelViewModel));
+        CommandBindings.Add(new CommandBinding(
+            DeleteChannelCommand,
+            (_, e) => DeleteChannel(e.Parameter as ChannelViewModel),
+            (_, e) => e.CanExecute = e.Parameter is ChannelViewModel));
+        CommandBindings.Add(new CommandBinding(
+            SetDefaultChannelCommand,
+            (_, e) => SetDefaultChannel(e.Parameter as ChannelViewModel),
+            (_, e) => e.CanExecute = e.Parameter is ChannelViewModel));
+        CommandBindings.Add(new CommandBinding(
+            ChannelIconCommand,
+            (_, e) => OpenIconBrowser(e.Parameter as ChannelViewModel),
+            (_, e) => e.CanExecute = e.Parameter is ChannelViewModel));
+        CommandBindings.Add(new CommandBinding(
+            EditServerCommand,
+            (_, _) => OpenServerEditor(),
+            (_, e) => e.CanExecute = shell?.IsConnected == true));
+    }
 
     private void OpenThemeGallery()
     {
@@ -91,6 +145,81 @@ public partial class MainWindow : ShellWindow
         gallery = new ThemeGalleryWindow { Owner = this };
         gallery.Closed += (_, _) => gallery = null;
         gallery.Show();
+    }
+
+    /// <remarks>
+    /// Dialogs are resolved from the container rather than constructed directly, so their view
+    /// models get the same service instances the shell uses. <c>Owner</c> matters beyond z-order:
+    /// <c>ShutdownMode="OnMainWindowClose"</c> means an unowned dialog would keep running after the
+    /// main window closed.
+    /// </remarks>
+    private T CreateDialog<T>() where T : Window
+    {
+        var dialog = ((App)Application.Current).Services.GetRequiredService<T>();
+        dialog.Owner = this;
+        return dialog;
+    }
+
+    private async void OpenChannelEditor(ChannelViewModel? channel, bool create)
+    {
+        var dialog = CreateDialog<ChannelEditorWindow>();
+        var vm = (ChannelEditorViewModel)dialog.DataContext;
+
+        if (create)
+            await vm.LoadForCreateAsync(channel?.Node);
+        else if (channel is not null)
+            await vm.LoadForEditAsync(channel.Node);
+        else
+            return;
+
+        dialog.ShowDialog();
+    }
+
+    private async void OpenIconBrowser(ChannelViewModel? channel)
+    {
+        if (channel is null)
+            return;
+
+        var dialog = CreateDialog<IconBrowserWindow>();
+        var vm = (IconBrowserViewModel)dialog.DataContext;
+
+        await vm.LoadForChannelAsync(channel.Node);
+        dialog.ShowDialog();
+    }
+
+    private void OpenServerEditor()
+    {
+        // Loads its own data in Loaded, because the editor needs two round trips and the dialog
+        // should already be visible while they run.
+        CreateDialog<ServerEditorWindow>().ShowDialog();
+    }
+
+    private async void DeleteChannel(ChannelViewModel? channel)
+    {
+        if (channel is null || shell is null)
+            return;
+
+        // The server refuses a non-empty channel unless force is set, so the prompt has to say what
+        // will happen to the people standing in it.
+        string warning = channel.MemberCount > 0
+            ? $"频道“{channel.Name}”中还有 {channel.MemberCount} 人，删除后他们会被移到默认频道。确定删除？"
+            : $"确定删除频道“{channel.Name}”？";
+
+        if (MessageBox.Show(this, warning, "删除频道", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel)
+            != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        await shell.DeleteChannelAsync(channel.ChannelId, force: channel.MemberCount > 0);
+    }
+
+    private async void SetDefaultChannel(ChannelViewModel? channel)
+    {
+        if (channel is null || shell is null)
+            return;
+
+        await shell.SetDefaultChannelAsync(channel.ChannelId);
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)

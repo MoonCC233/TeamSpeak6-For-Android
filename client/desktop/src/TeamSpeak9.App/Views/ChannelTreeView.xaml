@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
              xmlns:conv="clr-namespace:TeamSpeak9.App.Converters"
+             xmlns:local="clr-namespace:TeamSpeak9.App"
              xmlns:vm="clr-namespace:TeamSpeak9.App.ViewModels">
 
   <!-- Middle column: server banner card, the channel tree, and the action bar. -->
@@ -224,7 +225,70 @@
     <TreeView Grid.Row="1"
               x:Name="Tree"
               ItemsSource="{Binding Channels}"
-              Margin="6,10,6,0">
+              Margin="6,10,6,0"
+              PreviewMouseRightButtonDown="OnTreePreviewRightButtonDown">
+      <TreeView.ContextMenu>
+        <!-- CommandTarget is what lets a RoutedUICommand escape the popup and reach MainWindow's
+             CommandBindings: the menu is its own visual tree, so without it the command would find
+             no handler and stay disabled. -->
+        <ContextMenu x:Name="TreeMenu">
+          <MenuItem x:Name="MenuCreateChannel"
+                    Header="创建频道"
+                    Command="{x:Static local:MainWindow.CreateChannelCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                    CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Plus}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem x:Name="MenuEditChannel"
+                    Header="编辑频道"
+                    Command="{x:Static local:MainWindow.EditChannelCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                    CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Edit}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem x:Name="MenuChannelIcon"
+                    Header="频道图标…"
+                    Command="{x:Static local:MainWindow.ChannelIconCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                    CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Image}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+          <MenuItem x:Name="MenuSetDefaultChannel"
+                    Header="设为默认频道"
+                    Command="{x:Static local:MainWindow.SetDefaultChannelCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                    CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Check}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+          <Separator />
+          <MenuItem x:Name="MenuDeleteChannel"
+                    Header="删除频道"
+                    Command="{x:Static local:MainWindow.DeleteChannelCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                    CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Trash}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+          <Separator />
+          <MenuItem x:Name="MenuServerSettings"
+                    Header="服务器设置…"
+                    Command="{x:Static local:MainWindow.EditServerCommand}"
+                    CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+            <MenuItem.Icon>
+              <controls:IconGlyph Data="{StaticResource Icon.Gear}" Style="{StaticResource Icon.Small}" />
+            </MenuItem.Icon>
+          </MenuItem>
+        </ContextMenu>
+      </TreeView.ContextMenu>
       <TreeView.ItemContainerStyle>
         <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -266,9 +330,11 @@
         </Grid.ColumnDefinitions>
 
         <Button Grid.Column="0"
+                x:Name="CreateChannelButton"
                 Style="{StaticResource Button.Secondary}"
-                IsEnabled="False"
-                ToolTip="创建频道（将在频道管理中提供）">
+                Command="{x:Static local:MainWindow.CreateChannelCommand}"
+                CommandParameter="{Binding SelectedItem, ElementName=Tree}"
+                ToolTip="创建频道（选中一个频道时创建其子频道）">
           <StackPanel Orientation="Horizontal">
             <controls:IconGlyph Data="{StaticResource Icon.Plus}" Style="{StaticResource Icon.Small}" />
             <TextBlock Text="创建频道" Margin="6,0,0,0" />
