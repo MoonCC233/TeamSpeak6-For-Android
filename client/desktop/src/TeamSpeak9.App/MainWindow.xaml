@@ -4,6 +4,7 @@
                       xmlns:sw="clr-namespace:System.Windows;assembly=PresentationFramework"
                       xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
                       xmlns:conv="clr-namespace:TeamSpeak9.App.Converters"
+                      xmlns:local="clr-namespace:TeamSpeak9.App"
                       xmlns:views="clr-namespace:TeamSpeak9.App.Views"
                       Title="TeamSpeak9"
                       Width="1280"
@@ -16,6 +17,12 @@
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityInverted" Invert="True" />
   </controls:ShellWindow.Resources>
+
+  <!-- The theme gallery is the living sample for the style regression pass (ui-spec.md §8). It is
+       no longer the window content, so it needs a keyboard way in. -->
+  <controls:ShellWindow.InputBindings>
+    <KeyBinding Key="T" Modifiers="Control+Shift" Command="{x:Static local:MainWindow.OpenThemeGalleryCommand}" />
+  </controls:ShellWindow.InputBindings>
 
   <Grid>
     <Grid.RowDefinitions>
@@ -42,6 +49,8 @@
         <controls:IconGlyph Data="{StaticResource Icon.Bell}" Style="{StaticResource Icon.Large}" />
         <TextBlock Text="teamspeak" Style="{StaticResource Text.Subtitle}" Margin="12,0,0,0" />
       </StackPanel>
+
+      <views:TopBarView Grid.Column="1" />
 
       <StackPanel Grid.Column="2"
                   Orientation="Horizontal"
@@ -73,16 +82,35 @@
     </Grid>
 
     <!-- ===== Body ===== -->
-    <!-- Placeholder content. The three-column layout lands in desktop-shell-layout; until then
-         this hosts the theme gallery so the styles can be reviewed. -->
+    <!-- Three columns with draggable splitters. The widths are applied and persisted in code-behind
+         rather than bound: GridSplitter writes ColumnDefinition.Width as a local value, which would
+         wipe out any binding on it. -->
     <Grid Grid.Row="1">
-      <views:ThemeGalleryView />
-      <TextBlock x:Name="StatusText"
-                 Style="{StaticResource Text.Caption}"
-                 HorizontalAlignment="Right"
-                 VerticalAlignment="Bottom"
-                 Margin="0,0,24,8"
-                 IsHitTestVisible="False" />
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="SidebarColumn" Width="280" MinWidth="220" MaxWidth="420" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition x:Name="ChannelColumn" Width="320" MinWidth="260" MaxWidth="520" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition x:Name="ChatColumn" Width="*" MinWidth="360" />
+      </Grid.ColumnDefinitions>
+
+      <views:ServerListView Grid.Column="0" />
+
+      <GridSplitter x:Name="SidebarSplitter"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    DragCompleted="OnSidebarSplitterDragCompleted" />
+
+      <views:ChannelTreeView Grid.Column="2" />
+
+      <GridSplitter x:Name="ChannelSplitter"
+                    Grid.Column="3"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    DragCompleted="OnChannelSplitterDragCompleted" />
+
+      <views:ChatPanelView x:Name="ChatPanel" Grid.Column="4" />
     </Grid>
   </Grid>
 </controls:ShellWindow>

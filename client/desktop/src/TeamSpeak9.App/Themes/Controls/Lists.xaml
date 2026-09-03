@@ -248,16 +248,23 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Width" Value="4" />
     <Setter Property="Cursor" Value="SizeWE" />
-    <Setter Property="Focusable" Value="False" />
+    <!-- Focusable so the built-in arrow-key resizing stays available to keyboard users; the
+         template draws a focus indicator since the default adorner is invisible on a 4px strip. -->
+    <Setter Property="Focusable" Value="True" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="GridSplitter">
           <Border x:Name="PART_Root" Background="Transparent">
-            <Border Width="1" HorizontalAlignment="Center" Background="{StaticResource Brush.BorderSubtle}" />
+            <Border x:Name="PART_Line" Width="1" HorizontalAlignment="Center" Background="{StaticResource Brush.BorderSubtle}" />
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
               <Setter TargetName="PART_Root" Property="Background" Value="{StaticResource Brush.Selected}" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="PART_Line" Property="Width" Value="2" />
+              <Setter TargetName="PART_Line" Property="Background" Value="{StaticResource Brush.Accent}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

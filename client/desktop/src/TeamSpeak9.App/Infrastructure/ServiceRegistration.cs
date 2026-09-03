@@ -52,6 +52,13 @@ internal static class ServiceRegistration
         // One connection per app, matching the single-server UI.
         services.AddSingleton<TsConnection>();
 
+        // One shell for the one window.
+        services.AddSingleton<ViewModels.ShellViewModel>();
+
+        // Explicit factory because the window's real constructor is internal, and the container's
+        // automatic constructor selection only considers public ones.
+        services.AddSingleton(sp => new MainWindow(sp.GetRequiredService<ViewModels.ShellViewModel>()));
+
         return services;
     }
 }

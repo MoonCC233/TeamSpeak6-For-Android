@@ -87,6 +87,17 @@ public class ShellWindow : Window
 
     private bool CanResize => ResizeMode is ResizeMode.CanResize or ResizeMode.CanResizeWithGrip;
 
+    /// <remarks>
+    /// Also seeds <see cref="IsMaximized"/>: setting <see cref="Window.WindowState"/> before the
+    /// window has an HWND does not raise <see cref="Window.StateChanged"/>, so a window that starts
+    /// maximized would otherwise show the maximize button instead of the restore one.
+    /// </remarks>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        IsMaximized = WindowState == WindowState.Maximized;
+    }
+
     protected override void OnStateChanged(EventArgs e)
     {
         base.OnStateChanged(e);

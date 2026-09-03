@@ -1,0 +1,49 @@
+﻿<controls:ShellWindow x:Class="TeamSpeak9.App.Views.ThemeGalleryWindow"
+                      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                      xmlns:sw="clr-namespace:System.Windows;assembly=PresentationFramework"
+                      xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
+                      xmlns:views="clr-namespace:TeamSpeak9.App.Views"
+                      Title="主题预览"
+                      Width="900"
+                      Height="760"
+                      MinWidth="640"
+                      MinHeight="480"
+                      ShowInTaskbar="False"
+                      WindowStartupLocation="CenterOwner">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Same caption arrangement as the shell: Windows owns the strip, only the buttons opt back
+         in to hit testing. -->
+    <Grid Grid.Row="0"
+          Height="{StaticResource Size.CaptionHeight}"
+          Background="{StaticResource Brush.Surface}">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0"
+                 Text="主题预览"
+                 Style="{StaticResource Text.Subtitle}"
+                 VerticalAlignment="Center"
+                 Margin="14,0,0,0" />
+
+      <Button Grid.Column="1"
+              Style="{StaticResource Button.CaptionClose}"
+              Command="{x:Static sw:SystemCommands.CloseWindowCommand}"
+              VerticalAlignment="Top"
+              Margin="0,8,8,0"
+              ToolTip="关闭">
+        <controls:IconGlyph Data="{StaticResource Icon.Close}" Style="{StaticResource Icon.Small}" />
+      </Button>
+    </Grid>
+
+    <views:ThemeGalleryView Grid.Row="1" />
+  </Grid>
+</controls:ShellWindow>

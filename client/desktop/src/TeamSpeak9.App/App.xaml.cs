@@ -71,7 +71,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
-        var window = new MainWindow(paths);
+        var window = services.GetRequiredService<MainWindow>();
         MainWindow = window;
         window.Show();
     }
@@ -93,8 +93,13 @@ public partial class App : Application
             schedulerLoop = null;
         }
 
-        services?.Dispose();
-        services = null;
+        // DisposeAsync, not Dispose: the synchronous path throws on any registration that only
+        // implements IAsyncDisposable, which TsConnection does.
+        if (services is not null)
+        {
+            services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            services = null;
+        }
 
         LoggingSetup.Shutdown();
         base.OnExit(e);

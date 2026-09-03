@@ -1,0 +1,244 @@
+﻿<UserControl x:Class="TeamSpeak9.App.Views.ServerListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
+             xmlns:conv="clr-namespace:TeamSpeak9.App.Converters">
+
+  <!-- Left column: quick connect, the connected server, a community link and the bookmark tree,
+       with our own identity pinned to the bottom. Contacts, group chats and the myTeamSpeak login
+       from the official client are deliberately absent. -->
+
+  <UserControl.Resources>
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityInverted" Invert="True" />
+    <conv:EmptyToVisibilityConverter x:Key="EmptyToVisibility" />
+    <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility" />
+    <conv:IconIdToImageConverter x:Key="IconIdToImage" />
+  </UserControl.Resources>
+
+  <Grid Background="{StaticResource Brush.Surface}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- ===== Quick connect ===== -->
+    <Grid Grid.Row="0" Margin="10,10,10,0">
+      <TextBox x:Name="QuickConnectBox"
+               Style="{StaticResource TextBox.Search}"
+               Tag="搜索或连接服务器"
+               Text="{Binding QuickConnectAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+               KeyDown="OnQuickConnectKeyDown"
+               ToolTip="输入 地址[:端口] 后按回车直接连接" />
+      <controls:IconGlyph Data="{StaticResource Icon.Search}"
+                          Style="{StaticResource Icon.Small}"
+                          HorizontalAlignment="Left"
+                          Margin="10,0,0,0"
+                          IsHitTestVisible="False" />
+    </Grid>
+
+    <ScrollViewer Grid.Row="1"
+                  Margin="0,12,0,0"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+      <StackPanel>
+
+        <!-- ===== Servers ===== -->
+        <TextBlock Text="服务器"
+                   Style="{StaticResource Text.SectionHeader}"
+                   Margin="14,0,14,6" />
+
+        <Border Style="{StaticResource Card}"
+                Margin="10,0,10,0"
+                Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Icon with a glyph fallback: IconIdToImageConverter returns null until the icon has
+                 been downloaded into the cache. -->
+            <Grid Grid.Column="0" Width="18" Height="18" VerticalAlignment="Center">
+              <controls:IconGlyph Data="{StaticResource Icon.Server}" Style="{StaticResource Icon.Small}" />
+              <Image Source="{Binding ServerIconId, Converter={StaticResource IconIdToImage}}"
+                     Stretch="Uniform" />
+            </Grid>
+
+            <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="{Binding ServerName}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding ServerOccupancyText}" Style="{StaticResource Text.Caption}" />
+            </StackPanel>
+
+            <Button Grid.Column="2"
+                    Style="{StaticResource Button.IconSmall}"
+                    Command="{Binding DisconnectCommand}"
+                    VerticalAlignment="Center"
+                    ToolTip="断开连接">
+              <controls:IconGlyph Data="{StaticResource Icon.Close}" Style="{StaticResource Icon.Small}" />
+            </Button>
+          </Grid>
+        </Border>
+
+        <TextBlock Text="未连接到任何服务器"
+                   Style="{StaticResource Text.BodySecondary}"
+                   Margin="14,0,14,0"
+                   Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityInverted}}" />
+
+        <!-- ===== Community ===== -->
+        <Button Style="{StaticResource Button.Secondary}"
+                Margin="10,12,10,0"
+                HorizontalContentAlignment="Left"
+                Command="{Binding OpenCommunitySiteCommand}"
+                ToolTip="在浏览器中打开 TeamSpeak 社区页面">
+          <StackPanel Orientation="Horizontal">
+            <controls:IconGlyph Data="{StaticResource Icon.Globe}" Style="{StaticResource Icon.Small}" />
+            <TextBlock Text="创建 TeamSpeak 社区" Margin="8,0,0,0" />
+          </StackPanel>
+        </Button>
+
+        <!-- ===== Bookmarks ===== -->
+        <Grid Margin="14,20,10,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+
+          <TextBlock Grid.Column="0" Text="书签" Style="{StaticResource Text.SectionHeader}" VerticalAlignment="Center" />
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal">
+            <ToggleButton x:Name="BookmarkSearchToggle"
+                          Style="{StaticResource Toggle.Pill}"
+                          Padding="4"
+                          Width="26"
+                          Height="26"
+                          ToolTip="搜索书签">
+              <controls:IconGlyph Data="{StaticResource Icon.Search}" Style="{StaticResource Icon.Small}" />
+            </ToggleButton>
+            <Button Style="{StaticResource Button.IconSmall}" ToolTip="新建文件夹" IsEnabled="False">
+              <controls:IconGlyph Data="{StaticResource Icon.FolderPlus}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button Style="{StaticResource Button.IconSmall}" ToolTip="添加书签" IsEnabled="False">
+              <controls:IconGlyph Data="{StaticResource Icon.Plus}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button Style="{StaticResource Button.IconSmall}" ToolTip="全部折叠" IsEnabled="False">
+              <controls:IconGlyph Data="{StaticResource Icon.CollapseAll}" Style="{StaticResource Icon.Small}" />
+            </Button>
+          </StackPanel>
+        </Grid>
+
+        <Grid Margin="10,0,10,0"
+              Visibility="{Binding IsChecked, ElementName=BookmarkSearchToggle, Converter={StaticResource BoolToVisibility}}">
+          <TextBox Style="{StaticResource TextBox.Search}"
+                   Tag="搜索书签"
+                   Text="{Binding BookmarkFilter, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+          <controls:IconGlyph Data="{StaticResource Icon.Search}"
+                              Style="{StaticResource Icon.Small}"
+                              HorizontalAlignment="Left"
+                              Margin="10,0,0,0"
+                              IsHitTestVisible="False" />
+        </Grid>
+
+        <ListBox ItemsSource="{Binding Bookmarks}" Margin="6,6,6,0">
+          <ListBox.ItemTemplate>
+            <DataTemplate>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <controls:IconGlyph Grid.Column="0"
+                                    Data="{StaticResource Icon.Bookmark}"
+                                    Style="{StaticResource Icon.Small}"
+                                    VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding DisplayName}"
+                           Margin="8,0,0,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Tooltip}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+          <ListBox.ItemContainerStyle>
+            <Style TargetType="ListBoxItem" BasedOn="{StaticResource ListItem.Base}">
+              <!-- Double click rather than selection: a single click should be able to select a
+                   bookmark for renaming without also connecting to it. -->
+              <EventSetter Event="MouseDoubleClick" Handler="OnBookmarkDoubleClick" />
+            </Style>
+          </ListBox.ItemContainerStyle>
+        </ListBox>
+
+        <TextBlock Text="还没有书签"
+                   Style="{StaticResource Text.BodySecondary}"
+                   Margin="14,4,14,0">
+          <TextBlock.Visibility>
+            <!-- Bookmarks.Count is not observable on its own, but the collection change already
+                 refreshes the binding, so a count comparison is enough here. -->
+            <Binding Path="Bookmarks.Count" Converter="{StaticResource ZeroToVisibility}" />
+          </TextBlock.Visibility>
+        </TextBlock>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- ===== Own identity ===== -->
+    <Border Grid.Row="2"
+            Background="{StaticResource Brush.SurfaceSunken}"
+            BorderBrush="{StaticResource Brush.BorderSubtle}"
+            BorderThickness="0,1,0,0"
+            Padding="10,8">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0"
+                Width="{StaticResource Size.AvatarMedium}"
+                Height="{StaticResource Size.AvatarMedium}"
+                Background="{StaticResource Brush.SurfaceOverlay}"
+                CornerRadius="{StaticResource Radius.Pill}">
+          <controls:IconGlyph Data="{StaticResource Icon.User}"
+                              Style="{StaticResource Icon.Small}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
+        </Border>
+
+        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding OwnNickname}" Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis" />
+          <StackPanel Orientation="Horizontal"
+                      Visibility="{Binding OwnChannelName, Converter={StaticResource EmptyToVisibility}}">
+            <controls:IconGlyph Data="{StaticResource Icon.Location}" Style="{StaticResource Icon.Small}" />
+            <TextBlock Text="{Binding OwnChannelName}"
+                       Style="{StaticResource Text.Caption}"
+                       Margin="4,0,0,0"
+                       TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+        </StackPanel>
+
+        <Button x:Name="SettingsButton"
+                Grid.Column="2"
+                Style="{StaticResource Button.Icon}"
+                VerticalAlignment="Center"
+                ToolTip="设置"
+                Click="OnOpenSettingsMenu">
+          <controls:IconGlyph Data="{StaticResource Icon.Gear}" />
+          <Button.ContextMenu>
+            <!-- Placement is set in code so the menu opens above the button rather than at the
+                 cursor. -->
+            <ContextMenu x:Name="SettingsMenu">
+              <MenuItem Header="设置…" IsEnabled="False" ToolTip="将在设置对话框中提供" />
+              <MenuItem Header="身份管理…" IsEnabled="False" ToolTip="将在设置对话框中提供" />
+              <Separator />
+              <!-- The gallery is the living sample for the style regression pass
+                   (docs/desktop/ui-spec.md §8). Ctrl+Shift+T opens it too. -->
+              <MenuItem Header="主题预览 (Ctrl+Shift+T)" Click="OnOpenThemeGallery" />
+            </ContextMenu>
+          </Button.ContextMenu>
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,153 @@
+﻿<UserControl x:Class="TeamSpeak9.App.Views.TopBarView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+             xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
+             xmlns:conv="clr-namespace:TeamSpeak9.App.Converters">
+
+  <!-- Middle segment of the caption strip: AFK, microphone and speaker.
+       WindowChrome swallows input over the caption, so every interactive element here has to opt
+       back in with shell:WindowChrome.IsHitTestVisibleInChrome; the panel itself deliberately does
+       not, so the gaps between the controls still drag the window. -->
+
+  <UserControl.Resources>
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+  </UserControl.Resources>
+
+  <Grid>
+    <StackPanel Orientation="Horizontal"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+
+    <!-- ===== AFK ===== -->
+    <ToggleButton Style="{StaticResource Toggle.Pill}"
+                  IsChecked="{Binding IsAway, Mode=TwoWay}"
+                  shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                  ToolTip="离开 (AFK)">
+      <StackPanel Orientation="Horizontal">
+        <controls:IconGlyph Data="{StaticResource Icon.Clock}" Style="{StaticResource Icon.Small}" />
+        <TextBlock Text="离开" Margin="6,0,0,0" />
+      </StackPanel>
+    </ToggleButton>
+
+    <!-- ===== Microphone ===== -->
+    <!-- Toggle plus a separate dropdown arrow, as in the official client: the pill mutes, the
+         arrow opens the device menu. Checked means muted, which Toggle.Pill draws in the danger
+         colour. -->
+    <StackPanel Orientation="Horizontal" Margin="10,0,0,0">
+      <ToggleButton x:Name="InputToggle"
+                    Style="{StaticResource Toggle.Pill}"
+                    IsChecked="{Binding IsInputMuted, Mode=TwoWay}"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
+        <controls:IconGlyph>
+          <controls:IconGlyph.Style>
+            <Style TargetType="controls:IconGlyph" BasedOn="{StaticResource Icon.Small}">
+              <Setter Property="Data" Value="{StaticResource Icon.Mic}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsInputMuted}" Value="True">
+                  <Setter Property="Data" Value="{StaticResource Icon.MicOff}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </controls:IconGlyph.Style>
+        </controls:IconGlyph>
+        <ToggleButton.ToolTip>
+          <ToolTip>
+            <TextBlock>
+              <TextBlock.Style>
+                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                  <Setter Property="Text" Value="麦克风：开" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsInputMuted}" Value="True">
+                      <Setter Property="Text" Value="麦克风：已静音" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </ToolTip>
+        </ToggleButton.ToolTip>
+      </ToggleButton>
+
+      <Button Style="{StaticResource Button.IconSmall}"
+              Margin="2,0,0,0"
+              shell:WindowChrome.IsHitTestVisibleInChrome="True"
+              ToolTip="选择输入设备"
+              Click="OnOpenInputMenu">
+        <controls:IconGlyph Data="{StaticResource Icon.ChevronDown}" Style="{StaticResource Icon.Small}" />
+        <Button.ContextMenu>
+          <!-- Placement is set in code so the menu opens under the arrow rather than at the cursor. -->
+          <ContextMenu x:Name="InputMenu" Placement="Bottom">
+            <MenuItem Header="默认输入设备" IsCheckable="True" IsChecked="True" />
+            <Separator />
+            <MenuItem Header="音频设置…" IsEnabled="False" ToolTip="将在音频设置中提供" />
+          </ContextMenu>
+        </Button.ContextMenu>
+      </Button>
+    </StackPanel>
+
+    <!-- ===== Speaker ===== -->
+    <StackPanel Orientation="Horizontal" Margin="10,0,0,0">
+      <ToggleButton x:Name="OutputToggle"
+                    Style="{StaticResource Toggle.Pill}"
+                    IsChecked="{Binding IsOutputMuted, Mode=TwoWay}"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
+        <controls:IconGlyph>
+          <controls:IconGlyph.Style>
+            <Style TargetType="controls:IconGlyph" BasedOn="{StaticResource Icon.Small}">
+              <Setter Property="Data" Value="{StaticResource Icon.Speaker}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsOutputMuted}" Value="True">
+                  <Setter Property="Data" Value="{StaticResource Icon.SpeakerOff}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </controls:IconGlyph.Style>
+        </controls:IconGlyph>
+        <ToggleButton.ToolTip>
+          <ToolTip>
+            <TextBlock>
+              <TextBlock.Style>
+                <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                  <Setter Property="Text" Value="扬声器：开" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsOutputMuted}" Value="True">
+                      <Setter Property="Text" Value="扬声器：已静音" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </ToolTip>
+        </ToggleButton.ToolTip>
+      </ToggleButton>
+
+      <Button Style="{StaticResource Button.IconSmall}"
+              Margin="2,0,0,0"
+              shell:WindowChrome.IsHitTestVisibleInChrome="True"
+              ToolTip="选择输出设备"
+              Click="OnOpenOutputMenu">
+        <controls:IconGlyph Data="{StaticResource Icon.ChevronDown}" Style="{StaticResource Icon.Small}" />
+        <Button.ContextMenu>
+          <ContextMenu x:Name="OutputMenu" Placement="Bottom">
+            <MenuItem Header="默认输出设备" IsCheckable="True" IsChecked="True" />
+            <Separator />
+            <MenuItem Header="音频设置…" IsEnabled="False" ToolTip="将在音频设置中提供" />
+          </ContextMenu>
+        </Button.ContextMenu>
+      </Button>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- ===== Connection state ===== -->
+    <!-- Right-aligned in the Grid rather than appended to the StackPanel, so its width does not
+         push the AFK/mic/speaker group off centre. -->
+    <TextBlock Text="{Binding StatusText}"
+               Style="{StaticResource Text.Caption}"
+               HorizontalAlignment="Right"
+               VerticalAlignment="Center"
+               Margin="14,0,14,0"
+               MaxWidth="220"
+               TextTrimming="CharacterEllipsis" />
+  </Grid>
+</UserControl>

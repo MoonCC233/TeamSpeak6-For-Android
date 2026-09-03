@@ -69,3 +69,33 @@ public sealed class NotConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => value is not bool b || !b;
 }
+
+/// <summary>
+/// Shows the element only when a bound count is zero, for "nothing here yet" placeholders.
+/// </summary>
+/// <remarks>
+/// Set <see cref="Invert"/> to show it only when the count is non-zero. Binding to
+/// <c>Collection.Count</c> works even though the property is not observable, because a collection
+/// change notification already re-evaluates the binding.
+/// </remarks>
+public sealed class ZeroToVisibilityConverter : IValueConverter
+{
+    public bool Invert { get; set; }
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        // Convert.ToInt32 rather than a cast: the bound property may be int, long or uint.
+        long count = value switch
+        {
+            null => 0,
+            IConvertible c => c.ToInt64(CultureInfo.InvariantCulture),
+            _ => 0,
+        };
+
+        bool show = Invert ? count != 0 : count == 0;
+        return show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

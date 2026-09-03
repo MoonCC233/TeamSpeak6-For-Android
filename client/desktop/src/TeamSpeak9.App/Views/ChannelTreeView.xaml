@@ -1,0 +1,304 @@
+﻿<UserControl x:Class="TeamSpeak9.App.Views.ChannelTreeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
+             xmlns:conv="clr-namespace:TeamSpeak9.App.Converters"
+             xmlns:vm="clr-namespace:TeamSpeak9.App.ViewModels">
+
+  <!-- Middle column: server banner card, the channel tree, and the action bar. -->
+
+  <UserControl.Resources>
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityInverted" Invert="True" />
+    <conv:EmptyToVisibilityConverter x:Key="EmptyToVisibility" />
+    <conv:IconIdToImageConverter x:Key="IconIdToImage" />
+    <conv:NickColorConverter x:Key="NickColor" />
+
+    <!-- ===== Channel row ===== -->
+    <DataTemplate x:Key="ChannelHeaderTemplate">
+      <Grid ToolTip="{Binding Tooltip}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Custom icon over a glyph fallback, so a channel without a cached icon still reads. -->
+        <Grid Grid.Column="0" Width="16" Height="16" VerticalAlignment="Center">
+          <controls:IconGlyph Data="{StaticResource Icon.Channel}" Style="{StaticResource Icon.Small}" />
+          <Image Source="{Binding IconId, Converter={StaticResource IconIdToImage}}" Stretch="Uniform" />
+        </Grid>
+
+        <TextBlock Grid.Column="1"
+                   Text="{Binding Name}"
+                   Margin="6,0,0,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <controls:IconGlyph Data="{StaticResource Icon.Lock}"
+                              Style="{StaticResource Icon.Small}"
+                              Margin="4,0,0,0"
+                              ToolTip="需要密码"
+                              Visibility="{Binding HasPassword, Converter={StaticResource BoolToVisibility}}" />
+          <Border Style="{StaticResource Badge}"
+                  Margin="6,0,0,0"
+                  Background="{StaticResource Brush.SurfaceOverlay}"
+                  Visibility="{Binding HasOccupancy, Converter={StaticResource BoolToVisibility}}">
+            <TextBlock Text="{Binding OccupancyText}" Style="{StaticResource Text.Caption}" />
+          </Border>
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+
+    <!-- ===== Spacer row ===== -->
+    <!-- A TS3 spacer is a layout separator, not a joinable channel, so it gets a divider treatment
+         with the alignment the server encoded in its name. -->
+    <DataTemplate x:Key="SpacerHeaderTemplate">
+      <Grid Margin="0,3">
+        <Rectangle Height="1"
+                   Fill="{StaticResource Brush.BorderSubtle}"
+                   VerticalAlignment="Center" />
+        <Border Background="{StaticResource Brush.Background}"
+                Padding="6,0"
+                Visibility="{Binding SpacerCaption, Converter={StaticResource EmptyToVisibility}}">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="HorizontalAlignment" Value="Left" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding SpacerAlignment}" Value="Center">
+                  <Setter Property="HorizontalAlignment" Value="Center" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SpacerAlignment}" Value="Right">
+                  <Setter Property="HorizontalAlignment" Value="Right" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding SpacerAlignment}" Value="Repeat">
+                  <Setter Property="HorizontalAlignment" Value="Stretch" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <TextBlock Text="{Binding SpacerCaption}"
+                     Style="{StaticResource Text.Caption}"
+                     TextTrimming="CharacterEllipsis" />
+        </Border>
+      </Grid>
+    </DataTemplate>
+
+    <!-- ===== Row templates =====
+         Typed with DataType and no x:Key so the TreeView resolves them implicitly per row. Setting
+         TreeView.ItemTemplate instead would win over the implicit lookup and force a single
+         template onto both row types. -->
+    <HierarchicalDataTemplate DataType="{x:Type vm:ChannelViewModel}" ItemsSource="{Binding Children}">
+      <ContentPresenter Content="{Binding}">
+        <ContentPresenter.Style>
+          <Style TargetType="ContentPresenter">
+            <Setter Property="ContentTemplate" Value="{StaticResource ChannelHeaderTemplate}" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding IsSpacer}" Value="True">
+                <Setter Property="ContentTemplate" Value="{StaticResource SpacerHeaderTemplate}" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </ContentPresenter.Style>
+      </ContentPresenter>
+    </HierarchicalDataTemplate>
+
+    <DataTemplate DataType="{x:Type vm:MemberViewModel}">
+      <Grid ToolTip="{Binding Tooltip}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0"
+                Width="{StaticResource Size.AvatarSmall}"
+                Height="{StaticResource Size.AvatarSmall}"
+                Background="{StaticResource Brush.SurfaceOverlay}"
+                CornerRadius="{StaticResource Radius.Pill}"
+                VerticalAlignment="Center">
+          <controls:IconGlyph Data="{StaticResource Icon.User}"
+                              Style="{StaticResource Icon.Small}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
+        </Border>
+
+        <TextBlock Grid.Column="1"
+                   Text="{Binding Name}"
+                   Foreground="{Binding Uid, Converter={StaticResource NickColor}}"
+                   Margin="6,0,0,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsSelf}" Value="True">
+                  <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsAway}" Value="True">
+                  <Setter Property="Opacity" Value="0.6" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding CanTalk}" Value="False">
+                  <Setter Property="Opacity" Value="0.6" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <controls:IconGlyph Data="{StaticResource Icon.MicOff}"
+                              Style="{StaticResource Icon.Small}"
+                              Margin="4,0,0,0"
+                              ToolTip="麦克风已关闭"
+                              Visibility="{Binding ShowInputIcon, Converter={StaticResource BoolToVisibility}}" />
+          <controls:IconGlyph Data="{StaticResource Icon.SpeakerOff}"
+                              Style="{StaticResource Icon.Small}"
+                              Margin="4,0,0,0"
+                              ToolTip="扬声器已关闭"
+                              Visibility="{Binding ShowOutputIcon, Converter={StaticResource BoolToVisibility}}" />
+          <controls:IconGlyph Data="{StaticResource Icon.Clock}"
+                              Style="{StaticResource Icon.Small}"
+                              Margin="4,0,0,0"
+                              ToolTip="离开"
+                              Visibility="{Binding IsAway, Converter={StaticResource BoolToVisibility}}" />
+          <controls:IconGlyph Data="{StaticResource Icon.Live}"
+                              Style="{StaticResource Icon.Small}"
+                              Margin="4,0,0,0"
+                              Foreground="{StaticResource Brush.Danger}"
+                              ToolTip="正在录音"
+                              Visibility="{Binding IsRecording, Converter={StaticResource BoolToVisibility}}" />
+          <TextBlock Text="{Binding CountryCode}"
+                     Style="{StaticResource Text.Caption}"
+                     Margin="6,0,0,0"
+                     Visibility="{Binding HasCountry, Converter={StaticResource BoolToVisibility}}" />
+        </StackPanel>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid Background="{StaticResource Brush.Background}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- ===== Server banner ===== -->
+    <Border Grid.Row="0"
+            Style="{StaticResource Card.Raised}"
+            Margin="10,10,10,0"
+            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibility}}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="0" Width="22" Height="22" VerticalAlignment="Center">
+          <controls:IconGlyph Data="{StaticResource Icon.Server}" />
+          <Image Source="{Binding ServerIconId, Converter={StaticResource IconIdToImage}}" Stretch="Uniform" />
+        </Grid>
+
+        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="{Binding ServerName}" Style="{StaticResource Text.Subtitle}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding ServerAddress}" Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button Style="{StaticResource Button.IconSmall}" ToolTip="添加书签" IsEnabled="False">
+            <controls:IconGlyph Data="{StaticResource Icon.Bookmark}" Style="{StaticResource Icon.Small}" />
+          </Button>
+          <Button Style="{StaticResource Button.IconSmall}"
+                  Command="{Binding ToggleChatPanelCommand}"
+                  ToolTip="显示或隐藏聊天面板">
+            <controls:IconGlyph Data="{StaticResource Icon.Chat}" Style="{StaticResource Icon.Small}" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ===== Channel tree ===== -->
+    <TreeView Grid.Row="1"
+              x:Name="Tree"
+              ItemsSource="{Binding Channels}"
+              Margin="6,10,6,0">
+      <TreeView.ItemContainerStyle>
+        <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+          <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+          <Style.Triggers>
+            <!-- The channel we are in stays emphasised regardless of what the user has clicked,
+                 like the official client. -->
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+              <Setter Property="FontWeight" Value="SemiBold" />
+            </DataTrigger>
+            <!-- A spacer is not a target: no focus, no hover, no selection. -->
+            <DataTrigger Binding="{Binding IsSpacer}" Value="True">
+              <Setter Property="Focusable" Value="False" />
+              <Setter Property="IsHitTestVisible" Value="False" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </TreeView.ItemContainerStyle>
+    </TreeView>
+
+    <TextBlock Grid.Row="1"
+               Text="连接服务器后在此显示频道"
+               Style="{StaticResource Text.BodySecondary}"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center"
+               Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibilityInverted}}" />
+
+    <!-- ===== Action bar ===== -->
+    <Border Grid.Row="2"
+            Background="{StaticResource Brush.Surface}"
+            BorderBrush="{StaticResource Brush.BorderSubtle}"
+            BorderThickness="0,1,0,0"
+            Padding="10,8">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Button Grid.Column="0"
+                Style="{StaticResource Button.Secondary}"
+                IsEnabled="False"
+                ToolTip="创建频道（将在频道管理中提供）">
+          <StackPanel Orientation="Horizontal">
+            <controls:IconGlyph Data="{StaticResource Icon.Plus}" Style="{StaticResource Icon.Small}" />
+            <TextBlock Text="创建频道" Margin="6,0,0,0" />
+          </StackPanel>
+        </Button>
+
+        <Button Grid.Column="1"
+                Style="{StaticResource Button.Primary}"
+                Margin="8,0,0,0"
+                HorizontalAlignment="Left"
+                IsEnabled="False"
+                ToolTip="共享屏幕（将在屏幕共享中提供）">
+          <StackPanel Orientation="Horizontal">
+            <controls:IconGlyph Data="{StaticResource Icon.ScreenShare}" Style="{StaticResource Icon.Small}" />
+            <TextBlock Text="开始直播" Margin="6,0,0,0" />
+          </StackPanel>
+        </Button>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal">
+          <Button x:Name="LayoutToggle"
+                  Style="{StaticResource Button.IconSmall}"
+                  Command="{Binding ToggleChatPanelCommand}"
+                  ToolTip="切换布局">
+            <controls:IconGlyph Data="{StaticResource Icon.Layout}" Style="{StaticResource Icon.Small}" />
+          </Button>
+          <Button Style="{StaticResource Button.IconSmall}" IsEnabled="False" ToolTip="设备设置">
+            <controls:IconGlyph Data="{StaticResource Icon.Sliders}" Style="{StaticResource Icon.Small}" />
+          </Button>
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

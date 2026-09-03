@@ -116,11 +116,17 @@ public sealed class AppearanceSettings
 
     public bool WindowMaximized { get; set; }
 
-    /// <summary>Width of the left sidebar in device-independent pixels.</summary>
-    public double SidebarWidth { get; set; } = 260;
+    /// <summary>Width of the left sidebar in device-independent pixels. See <c>ui-spec.md</c> §6.1.</summary>
+    public double SidebarWidth { get; set; } = 280;
 
-    /// <summary>Width of the chat column in device-independent pixels.</summary>
-    public double ChatPanelWidth { get; set; } = 380;
+    /// <summary>
+    /// Width of the channel column in device-independent pixels.
+    /// </summary>
+    /// <remarks>
+    /// There is no matching width for the chat column: it is the star-sized one, so it absorbs
+    /// whatever the window leaves over and has nothing of its own to persist.
+    /// </remarks>
+    public double ChannelPanelWidth { get; set; } = 320;
 }
 
 /// <summary>
