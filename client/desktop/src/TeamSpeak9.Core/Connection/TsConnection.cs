@@ -498,22 +498,7 @@ public sealed class TsConnection : IAsyncDisposable
     public Task RefreshAsync() => PublishSnapshotAsync();
 
     /// <summary>Turns a TSLib error into something worth showing a user.</summary>
-    private static string Describe(CommandError error)
-    {
-        if (error is null)
-            return "未知错误。";
-
-        string message = string.IsNullOrWhiteSpace(error.Message) ? error.Id.ToString() : error.Message;
-
-        if (error.MissingPermissionId is { } permission
-            && permission != TSLib.TsPermission.unknown
-            && permission != TSLib.TsPermission.undefined)
-        {
-            return $"{message}（缺少权限：{permission}）";
-        }
-
-        return string.IsNullOrWhiteSpace(error.ExtraMessage) ? message : $"{message}：{error.ExtraMessage}";
-    }
+    private static string Describe(CommandError error) => CommandErrorText.Describe(error);
 
     private static string DescribeReason(TSLib.Reason reason) => reason switch
     {
