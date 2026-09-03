@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using TeamSpeak9.App.ViewModels;
 
 namespace TeamSpeak9.App.Views;
@@ -16,6 +17,7 @@ namespace TeamSpeak9.App.Views;
 public partial class ChatPanelView : UserControl
 {
     private INotifyCollectionChanged? subscribed;
+    private bool scrollPending;
 
     public ChatPanelView()
     {
@@ -43,7 +45,9 @@ public partial class ChatPanelView : UserControl
     /// </summary>
     /// <remarks>
     /// Only auto-scrolls when the list is already at the bottom, so reading back through history is
-    /// not interrupted by incoming messages.
+    /// not interrupted by incoming messages. The decision is made here, while the extent still
+    /// describes the list without the new row, but the scroll itself is deferred: see
+    /// <see cref="ScrollToNewest"/>.
     /// </remarks>
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -59,6 +63,26 @@ public partial class ChatPanelView : UserControl
             if (bottom - scroller.VerticalOffset > 24)
                 return;
         }
+
+        // Bursts of messages otherwise queue one scroll each; only the last one would matter.
+        if (scrollPending)
+            return;
+
+        scrollPending = true;
+        Dispatcher.BeginInvoke(ScrollToNewest, DispatcherPriority.Background);
+    }
+
+    /// <remarks>
+    /// <see cref="ItemsControl.ScrollIntoView"/> forces a measure pass on the virtualizing panel.
+    /// Calling it straight out of the collection event can beat the ListBox's own handler to it, and
+    /// the generator then verifies itself against a count that has not caught up yet, which throws
+    /// "ItemsControl is inconsistent with its items source". Running at
+    /// <see cref="DispatcherPriority.Background"/> puts the scroll after the generator and layout
+    /// have settled.
+    /// </remarks>
+    private void ScrollToNewest()
+    {
+        scrollPending = false;
 
         if (MessageList.Items.Count > 0)
             MessageList.ScrollIntoView(MessageList.Items[^1]);
