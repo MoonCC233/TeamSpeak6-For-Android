@@ -39,6 +39,7 @@ public class ThemeResourceTests
         "Controls/Inputs.xaml",
         "Controls/Lists.xaml",
         "Controls/Surfaces.xaml",
+        "Controls/Markdown.xaml",
         "Window.xaml",
     ];
 
@@ -255,6 +256,9 @@ public class ThemeResourceTests
     [InlineData("ListItem.Message")]
     [InlineData("Card")]
     [InlineData("Text.Body")]
+    [InlineData("Text.SectionHeader")]
+    [InlineData("Text.Caption")]
+    [InlineData("Markdown.Message")]
     public void TheStylesTheShellBindsToExist(string key)
     {
         Sta.Run(() => Assert.IsAssignableFrom<Style>(LoadApplicationResources()[key]));

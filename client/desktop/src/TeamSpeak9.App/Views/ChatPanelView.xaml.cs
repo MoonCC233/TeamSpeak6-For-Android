@@ -108,12 +108,12 @@ public partial class ChatPanelView : UserControl
             vm.SendMessageCommand.Execute(null);
     }
 
-    private void OnBbCodeClick(object sender, RoutedEventArgs e)
+    private void OnFormatClick(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag } || tag.Length == 0)
             return;
 
-        string updated = ShellViewModel.ApplyBbCode(
+        string updated = ShellViewModel.ApplyMarkdown(
             Composer.Text,
             Composer.SelectionStart,
             Composer.SelectionLength,
@@ -123,6 +123,16 @@ public partial class ChatPanelView : UserControl
         Composer.Text = updated;
         Composer.CaretIndex = Math.Min(caret, updated.Length);
         Composer.Focus();
+    }
+
+    /// <summary>
+    /// Opens a clicked link. Routed through the ViewModel so the http(s) check and the logging stay
+    /// in one place.
+    /// </summary>
+    private void OnLinkClicked(object? sender, string url)
+    {
+        if (DataContext is ShellViewModel vm)
+            vm.OpenUrl(url);
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject root)

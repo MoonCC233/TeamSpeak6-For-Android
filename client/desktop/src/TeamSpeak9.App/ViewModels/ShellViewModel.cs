@@ -1,9 +1,11 @@
 ﻿// TeamSpeak9 - PC client
 // Licensed under the terms in the repository root.
 
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -57,6 +59,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool isAway;
     private bool prefetchRunning;
 
+    /// <summary>Channel whose description is already in <see cref="ChannelDescriptionBlocks"/>.</summary>
+    private ulong describedChannelId;
+    private bool descriptionLoading;
+
+    /// <summary>Text <see cref="WelcomeBlocks"/> was parsed from, so it is only parsed once.</summary>
+    private string welcomeSource = string.Empty;
+
     [ObservableProperty]
     private string statusText = "未连接";
 
@@ -77,6 +86,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private ChatPanelTab activeTab = ChatPanelTab.Chat;
+
+    /// <summary>Server facts for the info tab.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasServerInfo))]
+    private ImmutableArray<InfoRow> serverInfoRows = ImmutableArray<InfoRow>.Empty;
+
+    /// <summary>Facts about the channel we are in, for the info tab.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChannelInfo))]
+    private ImmutableArray<InfoRow> channelInfoRows = ImmutableArray<InfoRow>.Empty;
+
+    /// <summary>The welcome message, rendered as Markdown like every other server text.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasWelcomeMessage))]
+    private ImmutableArray<MarkdownNode> welcomeBlocks = ImmutableArray<MarkdownNode>.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChannelDescription))]
+    private ImmutableArray<MarkdownNode> channelDescriptionBlocks = ImmutableArray<MarkdownNode>.Empty;
 
     public ShellViewModel(
         TsConnection connection,
@@ -166,6 +194,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public string ChatTitle => OwnChannelName is { Length: > 0 } channel ? channel : "聊天";
 
     public bool HasMessages => Messages.Count > 0;
+
+    public bool HasServerInfo => !ServerInfoRows.IsDefaultOrEmpty;
+
+    public bool HasChannelInfo => !ChannelInfoRows.IsDefaultOrEmpty;
+
+    public bool HasWelcomeMessage => !WelcomeBlocks.IsDefaultOrEmpty;
+
+    public bool HasChannelDescription => !ChannelDescriptionBlocks.IsDefaultOrEmpty;
 
     // The pill toggles bind IsChecked to these, so "checked" means muted, which is what the
     // Toggle.Pill danger styling expects.
@@ -342,6 +378,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void SelectTab(ChatPanelTab tab) => ActiveTab = tab;
 
+    /// <remarks>
+    /// The channel description is not in <c>channellist</c>, so it is fetched the first time the
+    /// info tab is opened for a channel rather than on every snapshot.
+    /// </remarks>
+    partial void OnActiveTabChanged(ChatPanelTab value)
+    {
+        if (value == ChatPanelTab.Info)
+            LoadChannelDescription();
+    }
+
     [RelayCommand]
     private void OpenCommunitySite() => OpenUrl("https://www.teamspeak.com/en/more/community/");
 
@@ -378,31 +424,295 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private async Task RefreshAsync() => await connection.RefreshAsync();
 
     /// <summary>
-    /// Wraps the selection in a BBCode tag, or inserts an empty pair at the caret.
+    /// The token the toolbar sends for the link button; it needs its own shape, not a delimiter.
+    /// </summary>
+    public const string LinkToken = "link";
+
+    /// <summary>
+    /// Applies one of the composer toolbar's Markdown tokens to <paramref name="text"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The composer is a plain <c>TextBox</c>, so selection handling lives in the view; this only
     /// gets the resulting text. Splitting it this way keeps the ViewModel free of control state.
+    /// </para>
+    /// <para>
+    /// A token ending in a space (<c>"&gt; "</c>, <c>"- "</c>, <c>"# "</c>) is a block marker and
+    /// prefixes whole lines; <see cref="LinkToken"/> builds an inline link; anything else is an
+    /// inline delimiter that wraps the selection.
+    /// </para>
     /// </remarks>
-    public static string ApplyBbCode(string text, int selectionStart, int selectionLength, string tag, out int caret)
+    public static string ApplyMarkdown(string text, int selectionStart, int selectionLength, string token, out int caret)
     {
         ArgumentNullException.ThrowIfNull(text);
-        ArgumentException.ThrowIfNullOrWhiteSpace(tag);
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
 
-        selectionStart = Math.Clamp(selectionStart, 0, text.Length);
-        selectionLength = Math.Clamp(selectionLength, 0, text.Length - selectionStart);
+        if (token == LinkToken)
+            return InsertLink(text, selectionStart, selectionLength, out caret);
 
-        string open = $"[{tag}]";
-        string close = $"[/{tag}]";
+        return IsBlockMarker(token)
+            ? PrefixLines(text, selectionStart, selectionLength, token, out caret)
+            : Wrap(text, selectionStart, selectionLength, token, out caret);
+    }
+
+    /// <summary>
+    /// Wraps the selection in an inline delimiter, or inserts an empty pair at the caret.
+    /// </summary>
+    public static string Wrap(string text, int selectionStart, int selectionLength, string delimiter, out int caret)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentException.ThrowIfNullOrWhiteSpace(delimiter);
+
+        ClampSelection(text, ref selectionStart, ref selectionLength);
+
         string selected = text.Substring(selectionStart, selectionLength);
-        string prefix = text[..selectionStart];
-        string suffix = text[(selectionStart + selectionLength)..];
 
         caret = selectionLength == 0
-            ? selectionStart + open.Length
-            : selectionStart + open.Length + selectionLength + close.Length;
+            ? selectionStart + delimiter.Length
+            : selectionStart + (delimiter.Length * 2) + selectionLength;
 
-        return string.Concat(prefix, open, selected, close, suffix);
+        return string.Concat(
+            text[..selectionStart],
+            delimiter,
+            selected,
+            delimiter,
+            text[(selectionStart + selectionLength)..]);
+    }
+
+    /// <summary>
+    /// Prefixes every line the selection touches with a block marker such as <c>"&gt; "</c>.
+    /// </summary>
+    /// <remarks>
+    /// The marker is added unconditionally rather than toggled, so clicking quote twice nests the
+    /// quote — which is what Markdown means by <c>"&gt; &gt; "</c>.
+    /// </remarks>
+    public static string PrefixLines(string text, int selectionStart, int selectionLength, string prefix, out int caret)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+
+        ClampSelection(text, ref selectionStart, ref selectionLength);
+
+        int selectionEnd = selectionStart + selectionLength;
+        int blockStart = selectionStart == 0 ? 0 : text.LastIndexOf('\n', selectionStart - 1) + 1;
+        int newline = text.IndexOf('\n', selectionEnd);
+        int blockEnd = newline < 0 ? text.Length : newline;
+
+        string[] lines = text[blockStart..blockEnd].Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+            lines[i] = prefix + lines[i];
+
+        string replaced = string.Join('\n', lines);
+
+        // An empty selection only ever shifts one line, so keep the caret where the user left it.
+        caret = selectionLength == 0
+            ? selectionStart + prefix.Length
+            : blockStart + replaced.Length;
+
+        return string.Concat(text[..blockStart], replaced, text[blockEnd..]);
+    }
+
+    /// <summary>
+    /// Inserts an inline link. A selected URL becomes the target, anything else becomes the label.
+    /// </summary>
+    public static string InsertLink(string text, int selectionStart, int selectionLength, out int caret)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        ClampSelection(text, ref selectionStart, ref selectionLength);
+
+        string selected = text.Substring(selectionStart, selectionLength);
+        bool selectionIsUrl = Markdown.IsSafeUrl(selected);
+        string label = selectionIsUrl ? string.Empty : selected;
+        string target = selectionIsUrl ? selected : string.Empty;
+
+        // Caret goes wherever the user still has to type: the label for a URL or an empty
+        // selection, the target once there is a label to keep.
+        caret = label.Length == 0
+            ? selectionStart + 1
+            : selectionStart + label.Length + 3;
+
+        return string.Concat(
+            text[..selectionStart],
+            "[",
+            label,
+            "](",
+            target,
+            ")",
+            text[(selectionStart + selectionLength)..]);
+    }
+
+    private static bool IsBlockMarker(string token) => token.Length > 1 && token[^1] == ' ';
+
+    /// <summary>Clears every info tab field, for a disconnect.</summary>
+    private void ClearInfo()
+    {
+        welcomeSource = string.Empty;
+        describedChannelId = 0;
+        ServerInfoRows = ImmutableArray<InfoRow>.Empty;
+        ChannelInfoRows = ImmutableArray<InfoRow>.Empty;
+        WelcomeBlocks = ImmutableArray<MarkdownNode>.Empty;
+        ChannelDescriptionBlocks = ImmutableArray<MarkdownNode>.Empty;
+    }
+
+    /// <summary>
+    /// Builds the info tab's server rows.
+    /// </summary>
+    /// <remarks>
+    /// A pure function over the snapshot, and <c>internal</c> so the tests can cover the formatting
+    /// without a server. Fields the snapshot leaves empty are skipped rather than shown blank,
+    /// because a fresh connection fills them in over several snapshots.
+    /// </remarks>
+    internal static ImmutableArray<InfoRow> BuildServerRows(ServerSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var rows = ImmutableArray.CreateBuilder<InfoRow>(10);
+
+        void Add(string label, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                rows.Add(new InfoRow(label, value));
+        }
+
+        Add("名称", snapshot.DisplayName);
+        Add("语音提示名", snapshot.PhoneticName);
+        Add("地址", snapshot.Address);
+        Add("在线人数", snapshot.MaxClients > 0
+            ? string.Create(CultureInfo.CurrentCulture, $"{snapshot.ClientCount} / {snapshot.MaxClients}")
+            : snapshot.ClientCount.ToString(CultureInfo.CurrentCulture));
+        Add("版本", snapshot.Version);
+        Add("平台", snapshot.Platform);
+        Add("协议版本", snapshot.ProtocolVersion > 0
+            ? snapshot.ProtocolVersion.ToString(CultureInfo.CurrentCulture)
+            : string.Empty);
+        Add("许可类型", DescribeLicense(snapshot.License));
+        Add("语音加密", DescribeEncryption(snapshot.VoiceEncryption));
+        Add("创建时间", FormatDate(snapshot.Created));
+
+        return rows.ToImmutable();
+    }
+
+    /// <summary>
+    /// Builds the info tab's rows for the channel we are in, or none when we are not in one.
+    /// </summary>
+    /// <remarks>
+    /// The description is not here: <c>channellist</c> does not carry it, so it needs its own
+    /// request and is rendered as Markdown rather than as a row.
+    /// </remarks>
+    internal static ImmutableArray<InfoRow> BuildChannelRows(ChannelNode? channel)
+    {
+        if (channel is null)
+            return ImmutableArray<InfoRow>.Empty;
+
+        var rows = ImmutableArray.CreateBuilder<InfoRow>(8);
+
+        void Add(string label, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                rows.Add(new InfoRow(label, value));
+        }
+
+        Add("名称", channel.Name);
+        Add("主题", channel.Topic);
+        Add("语音提示名", channel.PhoneticName);
+        Add("类型", DescribeChannelKind(channel.Kind));
+        Add("人数", string.Create(
+            CultureInfo.CurrentCulture,
+            $"{channel.MemberCount} / {channel.MaxClients}"));
+        Add("编解码器", DescribeCodec(channel.Codec));
+        Add("编码质量", channel.CodecQuality.ToString(CultureInfo.CurrentCulture));
+
+        // 0 is the default and says nothing, so only a real requirement is worth a row.
+        if (channel.NeededTalkPower > 0)
+            Add("所需发言权限", channel.NeededTalkPower.ToString(CultureInfo.CurrentCulture));
+
+        var flags = ChannelFlags(channel);
+        Add("状态", flags);
+
+        return rows.ToImmutable();
+    }
+
+    /// <remarks>
+    /// The password, silence and encryption flags matter to a user in the channel but each would be
+    /// a near-empty row of its own, so they are joined into one.
+    /// </remarks>
+    private static string ChannelFlags(ChannelNode channel)
+    {
+        var flags = new List<string>(4);
+        if (channel.IsDefault)
+            flags.Add("默认频道");
+        if (channel.HasPassword)
+            flags.Add("需要密码");
+        if (channel.ForcedSilence)
+            flags.Add("强制静音");
+        if (channel.IsUnencrypted)
+            flags.Add("语音未加密");
+
+        return string.Join("、", flags);
+    }
+
+    internal static string DescribeLicense(ServerLicense license) => license switch
+    {
+        ServerLicense.NoLicense => "无授权",
+        ServerLicense.Athp => "ATHP 授权主机",
+        ServerLicense.Lan => "局域网授权",
+        ServerLicense.Npl => "非营利授权",
+        _ => "未知",
+    };
+
+    internal static string DescribeEncryption(VoiceEncryptionMode mode) => mode switch
+    {
+        VoiceEncryptionMode.Individual => "由各频道决定",
+        VoiceEncryptionMode.Disabled => "全服关闭",
+        VoiceEncryptionMode.Enabled => "全服强制",
+        _ => "未知",
+    };
+
+    internal static string DescribeChannelKind(ChannelKind kind) => kind switch
+    {
+        ChannelKind.Permanent => "永久",
+        ChannelKind.SemiPermanent => "半永久",
+        ChannelKind.Temporary => "临时",
+        _ => "未知",
+    };
+
+    /// <remarks>
+    /// <see cref="AudioCodec.Raw"/> is a TSLib extension that official clients cannot decode, but a
+    /// channel could still be set to it, so it gets a label rather than falling through to "未知".
+    /// </remarks>
+    internal static string DescribeCodec(AudioCodec codec) => codec switch
+    {
+        AudioCodec.OpusVoice => "Opus 语音",
+        AudioCodec.OpusMusic => "Opus 音乐",
+        AudioCodec.CeltMono => "CELT 单声道",
+        AudioCodec.SpeexNarrowband => "Speex 窄带",
+        AudioCodec.SpeexWideband => "Speex 宽带",
+        AudioCodec.SpeexUltraWideband => "Speex 超宽带",
+        AudioCodec.Raw => "未压缩",
+        _ => "未知",
+    };
+
+    /// <summary>
+    /// Formats a server timestamp, or returns an empty string when the server did not send one.
+    /// </summary>
+    /// <remarks>
+    /// TSLib decodes these from a unix timestamp, so an absent value arrives as
+    /// <see cref="DateTime.MinValue"/> or as the epoch rather than as null.
+    /// </remarks>
+    internal static string FormatDate(DateTime value)
+    {
+        if (value == default || value.Year <= 1970)
+            return string.Empty;
+
+        var local = value.Kind == DateTimeKind.Utc ? value.ToLocalTime() : value;
+        return local.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+    }
+
+    private static void ClampSelection(string text, ref int start, ref int length)
+    {
+        start = Math.Clamp(start, 0, text.Length);
+        length = Math.Clamp(length, 0, text.Length - start);
     }
 
     public void Dispose()
@@ -532,6 +842,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             Channels.Clear();
             treeState.Reset();
+            ClearInfo();
         }
 
         if (e.Current == ConnectionState.Failed && e.HasDetail)
@@ -548,6 +859,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         RebuildTree(snapshot);
         PrefetchIcons(snapshot);
+        RebuildInfo(snapshot);
 
         OnPropertyChanged(nameof(ServerName));
         OnPropertyChanged(nameof(ServerIconId));
@@ -561,6 +873,106 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(OwnChannelName));
         OnPropertyChanged(nameof(OwnUid));
         OnPropertyChanged(nameof(ChatTitle));
+    }
+
+    /// <summary>
+    /// Refreshes the info tab from a snapshot.
+    /// </summary>
+    /// <remarks>
+    /// Snapshots arrive whenever anything on the server changes, so the welcome message is only
+    /// re-parsed when its text actually differs, and the channel description — which needs a
+    /// separate <c>channelinfo</c> round trip — is dropped and re-fetched only when we move to a
+    /// different channel.
+    /// </remarks>
+    private void RebuildInfo(ServerSnapshot snapshot)
+    {
+        ServerInfoRows = BuildServerRows(snapshot);
+
+        var channel = snapshot.OwnChannel;
+        ChannelInfoRows = BuildChannelRows(channel);
+
+        if (!string.Equals(welcomeSource, snapshot.WelcomeMessage, StringComparison.Ordinal))
+        {
+            welcomeSource = snapshot.WelcomeMessage;
+            WelcomeBlocks = Markdown.Parse(snapshot.WelcomeMessage);
+        }
+
+        ulong channelId = channel?.ChannelId ?? 0;
+        if (channelId == describedChannelId)
+            return;
+
+        describedChannelId = 0;
+        ChannelDescriptionBlocks = ImmutableArray<MarkdownNode>.Empty;
+
+        if (ActiveTab == ChatPanelTab.Info)
+            LoadChannelDescription();
+    }
+
+    /// <summary>
+    /// Fetches the current channel's description, which <c>channellist</c> does not carry.
+    /// </summary>
+    /// <remarks>
+    /// Fire and forget, guarded against re-entry: opening the info tab and a snapshot arriving can
+    /// both ask for it. A failure leaves the description empty, which the view simply collapses.
+    /// </remarks>
+    private void LoadChannelDescription()
+    {
+        if (descriptionLoading || !connection.IsConnected)
+            return;
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0 || channelId == describedChannelId)
+            return;
+
+        descriptionLoading = true;
+        _ = RunAsync(channelId);
+
+        async Task RunAsync(ulong id)
+        {
+            try
+            {
+                await FetchAsync(id);
+            }
+            catch (Exception ex)
+            {
+                // A missing description is cosmetic; never let it take the shell down.
+                log.LogWarning(ex, "Reading the description of channel {Cid} failed.", id);
+            }
+            finally
+            {
+                descriptionLoading = false;
+            }
+
+            // A channel change during the request could not start its own fetch because of the
+            // re-entry guard, so pick it up here rather than waiting for the next snapshot.
+            if (ActiveTab == ChatPanelTab.Info)
+                LoadChannelDescription();
+        }
+
+        async Task FetchAsync(ulong id)
+        {
+            var outcome = await channels.GetDetailsAsync(id);
+
+            // Record nothing if the user moved on while the request was in flight, so the retry
+            // above fetches the channel they are actually in now.
+            if (connection.Snapshot.OwnChannelId != id)
+                return;
+
+            if (!outcome.Ok || outcome.Value is null)
+            {
+                // Counted as answered anyway: a refused channelinfo will keep being refused, and
+                // snapshots arrive often enough to turn a retry into a request storm.
+                log.LogDebug(
+                    "Could not read the description of channel {Cid}: {Message}",
+                    id,
+                    outcome.Message);
+                describedChannelId = id;
+                return;
+            }
+
+            describedChannelId = id;
+            ChannelDescriptionBlocks = Markdown.Parse(outcome.Value.Description);
+        }
     }
 
     /// <summary>
@@ -712,3 +1124,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     partial void OnBookmarkFilterChanged(string value) => RebuildBookmarks();
 }
+
+/// <summary>One label/value pair on the chat panel's info tab.</summary>
+public sealed record InfoRow(string Label, string Value);
