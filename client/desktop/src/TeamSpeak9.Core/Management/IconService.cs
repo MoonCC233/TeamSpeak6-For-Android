@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TeamSpeak9.Core.Connection;
 using TeamSpeak9.Core.Model;
 using TeamSpeak9.Core.Settings;
+using TeamSpeak9.Core.Threading;
 using TSLib;
 using TSLib.Commands;
 using TSLib.Helper;
@@ -79,20 +80,29 @@ public sealed class IconService
 
     private readonly TsConnection connection;
     private readonly AppPaths paths;
+    private readonly IUiDispatcher ui;
     private readonly ILogger<IconService> log;
 
-    public IconService(TsConnection connection, AppPaths paths, ILogger<IconService> log)
+    public IconService(TsConnection connection, AppPaths paths, IUiDispatcher ui, ILogger<IconService> log)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(ui);
         ArgumentNullException.ThrowIfNull(log);
 
         this.connection = connection;
         this.paths = paths;
+        this.ui = ui;
         this.log = log;
     }
 
-    /// <summary>Raised after an icon's cache file changes, so views can drop memoized bitmaps.</summary>
+    /// <summary>
+    /// Raised after an icon's cache file changes, so views can drop memoized bitmaps.
+    /// </summary>
+    /// <remarks>
+    /// Always raised on the UI thread, mirroring <see cref="TsConnection"/>'s events. Cache writes
+    /// happen on whatever thread finished the transfer, and handlers walk WPF-bound collections.
+    /// </remarks>
     public event EventHandler<IconId>? IconCached;
 
     /// <summary>Where <see cref="DownloadAsync"/> writes.</summary>
@@ -485,7 +495,7 @@ public sealed class IconService
         {
             Directory.CreateDirectory(paths.IconCacheDirectory);
             await File.WriteAllBytesAsync(CachePathFor(id), content, cancellationToken).ConfigureAwait(false);
-            IconCached?.Invoke(this, id);
+            RaiseIconCached(id);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -502,12 +512,34 @@ public sealed class IconService
             if (File.Exists(path))
                 File.Delete(path);
 
-            IconCached?.Invoke(this, id);
+            RaiseIconCached(id);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             log.LogDebug(ex, "删除图标缓存 {Icon} 失败", id);
         }
+    }
+
+    /// <summary>
+    /// Raises <see cref="IconCached"/> on the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every caller reaches this from a transfer continuation that ran with
+    /// <c>ConfigureAwait(false)</c>, so the current thread is usually a thread-pool thread.
+    /// Handlers notify WPF-bound view models, which throws unless it happens on the dispatcher.
+    /// </para>
+    /// <para>Internal rather than private so the marshalling can be tested without a live transfer.</para>
+    /// </remarks>
+    internal void RaiseIconCached(IconId id)
+    {
+        if (IconCached is null)
+            return;
+
+        if (ui.IsOnUiThread)
+            IconCached.Invoke(this, id);
+        else
+            ui.Post(() => IconCached?.Invoke(this, id));
     }
 
     /// <summary>

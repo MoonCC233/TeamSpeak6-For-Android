@@ -617,6 +617,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// until the cache entry is dropped and the bindings are asked again. Raising
     /// <see cref="ChannelViewModel.IconId"/> on every row is cheaper than rebuilding the tree and
     /// keeps expansion and selection untouched.
+    /// <para>
+    /// Touches WPF-bound state, so it relies on <see cref="IconService.IconCached"/> being raised
+    /// on the dispatcher rather than on the thread that finished the file transfer.
+    /// </para>
     /// </remarks>
     private void OnIconCached(object? sender, IconId e)
     {
