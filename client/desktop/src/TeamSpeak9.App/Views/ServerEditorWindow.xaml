@@ -1,0 +1,794 @@
+﻿<controls:ShellWindow x:Class="TeamSpeak9.App.Views.ServerEditorWindow"
+                      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                      xmlns:sw="clr-namespace:System.Windows;assembly=PresentationFramework"
+                      xmlns:controls="clr-namespace:TeamSpeak9.App.Controls"
+                      xmlns:conv="clr-namespace:TeamSpeak9.App.Converters"
+                      Title="服务器设置"
+                      Width="820"
+                      Height="720"
+                      MinWidth="680"
+                      MinHeight="520"
+                      ShowInTaskbar="False"
+                      WindowStartupLocation="CenterOwner">
+
+  <controls:ShellWindow.Resources>
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisible" />
+    <conv:EnumMatchConverter x:Key="EnumMatch" />
+
+    <Style x:Key="FormLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.BodySecondary}">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+
+    <Style x:Key="FormRow" TargetType="Grid">
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <Style x:Key="SectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Text.SectionHeader}">
+      <Setter Property="Margin" Value="0,6,0,10" />
+    </Style>
+
+    <Style x:Key="FormHint" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+      <Setter Property="Margin" Value="0,4,0,0" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="NumberBox" TargetType="TextBox" BasedOn="{StaticResource TextBox.Base}">
+      <Setter Property="Width" Value="120" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+
+    <Style x:Key="PageTab" TargetType="RadioButton" BasedOn="{StaticResource Toggle.Tab}">
+      <Setter Property="GroupName" Value="ServerPages" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+    </Style>
+
+    <!-- Each page is a Grid whose visibility follows ActivePage. A DataTrigger rather than a
+         converter binding, because EnumMatchConverter yields a bool and chaining it into a
+         Visibility would need a second converter. -->
+    <Style x:Key="PagePanel" TargetType="Grid">
+      <Setter Property="Visibility" Value="Collapsed" />
+    </Style>
+  </controls:ShellWindow.Resources>
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Same caption arrangement as the shell: Windows owns the strip, only the buttons opt back
+         in to hit testing. -->
+    <Grid Grid.Row="0"
+          Height="{StaticResource Size.CaptionHeight}"
+          Background="{StaticResource Brush.Surface}">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+
+      <TextBlock Grid.Column="0"
+                 Text="服务器设置"
+                 Style="{StaticResource Text.Subtitle}"
+                 VerticalAlignment="Center"
+                 Margin="14,0,0,0" />
+
+      <Button Grid.Column="1"
+              Style="{StaticResource Button.CaptionClose}"
+              Command="{x:Static sw:SystemCommands.CloseWindowCommand}"
+              VerticalAlignment="Top"
+              Margin="0,8,8,0"
+              ToolTip="关闭">
+        <controls:IconGlyph Data="{StaticResource Icon.Close}" Style="{StaticResource Icon.Small}" />
+      </Button>
+    </Grid>
+
+    <!-- ===== Tabs ===== -->
+    <Border Grid.Row="1"
+            Background="{StaticResource Brush.Surface}"
+            BorderBrush="{StaticResource Brush.BorderSubtle}"
+            BorderThickness="0,1,0,1"
+            Padding="14,8">
+      <WrapPanel Orientation="Horizontal">
+        <RadioButton x:Name="TabGeneral" Content="常规" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=General}" />
+        <RadioButton x:Name="TabMessages" Content="消息" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Messages}" />
+        <RadioButton x:Name="TabSecurity" Content="安全" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Security}" />
+        <RadioButton x:Name="TabBanner" Content="横幅" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Banner}" />
+        <RadioButton x:Name="TabLogging" Content="日志" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Logging}" />
+        <RadioButton x:Name="TabAntiflood" Content="防洪" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Antiflood}" />
+        <RadioButton x:Name="TabTransfers" Content="文件传输" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Transfers}" />
+        <RadioButton x:Name="TabStatistics" Content="统计信息" Style="{StaticResource PageTab}"
+                     IsChecked="{Binding ActivePage, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Statistics}" />
+      </WrapPanel>
+    </Border>
+
+    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="18,12,18,12">
+      <Grid>
+
+        <!-- ============ General ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="General">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="服务器标识" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="服务器名称" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="NameBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       MaxLength="64"
+                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="拼音名称" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="PhoneticBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       Text="{Binding PhoneticName}" />
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="容量" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="最大客户端数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="MaxClientsBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding MaxClients}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="保留槽位" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="ReservedSlotsBox"
+                         Style="{StaticResource NumberBox}"
+                         Text="{Binding ReservedSlots}" />
+                <TextBlock Text="为拥有保留槽位权限的客户端预留的名额，必须小于最大客户端数。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="其他" Style="{StaticResource SectionHeader}" />
+
+            <CheckBox x:Name="WeblistBox"
+                      Content="在 TeamSpeak 公共服务器列表中公开本服务器"
+                      IsChecked="{Binding WeblistEnabled}"
+                      Margin="0,0,0,10" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="临时频道默认删除延迟" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="TempChannelDelayBox"
+                         Style="{StaticResource NumberBox}"
+                         Text="{Binding TempChannelDeleteDelaySeconds}" />
+                <TextBlock Text="单位为秒，新建临时频道时的默认值。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Messages ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Messages">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="欢迎消息" Style="{StaticResource SectionHeader}" />
+            <TextBox x:Name="WelcomeMessageBox"
+                     Style="{StaticResource TextBox.Multiline}"
+                     Height="110"
+                     Text="{Binding WelcomeMessage}" />
+            <TextBlock Text="客户端连接成功后显示在服务器聊天窗口中，支持 BBCode。"
+                       Style="{StaticResource FormHint}" />
+
+            <Separator Margin="0,14,0,10" />
+            <TextBlock Text="主机消息" Style="{StaticResource SectionHeader}" />
+            <TextBox x:Name="HostmessageBox"
+                     Style="{StaticResource TextBox.Multiline}"
+                     Height="110"
+                     Text="{Binding Hostmessage}" />
+
+            <Grid Style="{StaticResource FormRow}" Margin="0,10,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="主机消息显示方式" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <ComboBox x:Name="HostmessageModeBox"
+                          Width="260"
+                          HorizontalAlignment="Left"
+                          ItemsSource="{Binding MessageDisplayOptions}"
+                          DisplayMemberPath="Label"
+                          SelectedValuePath="Value"
+                          SelectedValue="{Binding HostmessageDisplay}" />
+                <TextBlock Text="“弹窗显示并断开连接”会在显示后立即断开客户端，通常用于维护公告。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Security ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Security">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="访问控制" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="服务器密码" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <StackPanel Orientation="Horizontal">
+                  <PasswordBox x:Name="ServerPasswordBox"
+                               Width="260"
+                               PasswordChanged="OnPasswordChanged" />
+                  <Button x:Name="ClearPasswordButton"
+                          Style="{StaticResource Button.Ghost}"
+                          Content="清除密码"
+                          Margin="10,0,0,0"
+                          Command="{Binding ClearPasswordCommand}"
+                          ToolTip="立即取消服务器密码，无需保存" />
+                </StackPanel>
+                <TextBlock Text="{Binding PasswordHint}" Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="所需身份安全等级" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="SecurityLevelBox"
+                         Style="{StaticResource NumberBox}"
+                         Text="{Binding IdentitySecurityLevel}" />
+                <TextBlock Text="0 到 8。等级越高，客户端首次生成身份需要的计算时间越长。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="语音" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="语音加密" Style="{StaticResource FormLabel}" />
+              <ComboBox x:Name="EncryptionBox"
+                        Grid.Column="1"
+                        Width="260"
+                        HorizontalAlignment="Left"
+                        ItemsSource="{Binding EncryptionOptions}"
+                        DisplayMemberPath="Label"
+                        SelectedValuePath="Value"
+                        SelectedValue="{Binding VoiceEncryption}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="优先发言者音量衰减" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Slider x:Name="DimmSlider"
+                        Width="240"
+                        Minimum="0"
+                        Maximum="1"
+                        TickFrequency="0.05"
+                        IsSnapToTickEnabled="True"
+                        VerticalAlignment="Center"
+                        Value="{Binding PrioritySpeakerDimm}" />
+                <TextBlock Text="{Binding PrioritySpeakerDimm, StringFormat={}{0:0.00}}"
+                           Style="{StaticResource Text.Mono}"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0" />
+              </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="强制静音人数阈值" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="ForcedSilenceBox"
+                         Style="{StaticResource NumberBox}"
+                         Text="{Binding MinClientsBeforeForcedSilence}" />
+                <TextBlock Text="频道人数达到该值后，未获得谈话权限的客户端将被静音。0 表示不启用。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="投诉" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="自动封禁所需投诉数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ComplaintsCountBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding ComplaintsAutobanCount}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="自动封禁时长（分钟）" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ComplaintsBanTimeBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding ComplaintsAutobanMinutes}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="投诉过期时长（分钟）" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ComplaintsRemoveTimeBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding ComplaintsRemoveMinutes}" />
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Banner ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Banner">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="服务器横幅" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="横幅图片 URL" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="BannerUrlBox"
+                         Style="{StaticResource TextBox.Base}"
+                         Text="{Binding BannerGfxUrl}" />
+                <TextBlock Text="留空表示不显示横幅。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="点击横幅打开" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="BannerLinkBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       Text="{Binding BannerLinkUrl}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="缩放方式" Style="{StaticResource FormLabel}" />
+              <ComboBox x:Name="BannerScalingBox"
+                        Grid.Column="1"
+                        Width="260"
+                        HorizontalAlignment="Left"
+                        ItemsSource="{Binding BannerScalingOptions}"
+                        DisplayMemberPath="Label"
+                        SelectedValuePath="Value"
+                        SelectedValue="{Binding BannerScaling}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="刷新间隔（秒）" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1">
+                <TextBox x:Name="BannerRefreshBox"
+                         Style="{StaticResource NumberBox}"
+                         Text="{Binding BannerRefreshSeconds}" />
+                <TextBlock Text="0 表示只加载一次。"
+                           Style="{StaticResource FormHint}" />
+              </StackPanel>
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="主机按钮" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="按钮图片 URL" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ButtonGfxBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       Text="{Binding ButtonGfxUrl}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="按钮链接" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ButtonUrlBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       Text="{Binding ButtonUrl}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="按钮提示文字" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="ButtonTooltipBox"
+                       Grid.Column="1"
+                       Style="{StaticResource TextBox.Base}"
+                       Text="{Binding ButtonTooltip}" />
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Logging ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Logging">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="写入服务器日志的事件类别" Style="{StaticResource SectionHeader}" />
+            <CheckBox x:Name="LogClientBox" Content="客户端连接与断开" IsChecked="{Binding LogClient}" Margin="0,0,0,10" />
+            <CheckBox x:Name="LogQueryBox" Content="ServerQuery 登录与命令" IsChecked="{Binding LogQuery}" Margin="0,0,0,10" />
+            <CheckBox x:Name="LogChannelBox" Content="频道创建、修改与删除" IsChecked="{Binding LogChannel}" Margin="0,0,0,10" />
+            <CheckBox x:Name="LogPermissionsBox" Content="权限与组变更" IsChecked="{Binding LogPermissions}" Margin="0,0,0,10" />
+            <CheckBox x:Name="LogServerBox" Content="服务器属性变更" IsChecked="{Binding LogServer}" Margin="0,0,0,10" />
+            <CheckBox x:Name="LogFileTransferBox" Content="文件上传与下载" IsChecked="{Binding LogFileTransfer}" Margin="0,0,0,10" />
+            <TextBlock Text="日志文件位于服务端 logs 目录，本客户端不读取。"
+                       Style="{StaticResource FormHint}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Antiflood ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Antiflood">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="洪水保护" Style="{StaticResource SectionHeader}" />
+            <TextBlock Text="每个客户端有一个洪水点数计数器：发送命令会累加点数，服务器每秒按下面的“每秒衰减点数”扣减。达到阈值后依次阻止命令、阻止插件命令、封禁 IP。"
+                       Style="{StaticResource Text.BodySecondary}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,14" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="每秒衰减点数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="FloodTickReduceBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding FloodPointsTickReduce}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="阻止命令点数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="FloodCommandBlockBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding FloodPointsCommandBlock}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="阻止插件命令点数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="FloodPluginBlockBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding FloodPointsPluginBlock}" />
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="封禁 IP 点数" Style="{StaticResource FormLabel}" />
+              <TextBox x:Name="FloodIpBlockBox"
+                       Grid.Column="1"
+                       Style="{StaticResource NumberBox}"
+                       Text="{Binding FloodPointsIpBlock}" />
+            </Grid>
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Transfers ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Transfers">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="带宽上限" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="下载带宽（KB/秒）" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <CheckBox x:Name="DownloadBandwidthUnlimitedBox"
+                          Content="不限"
+                          IsChecked="{Binding DownloadBandwidthUnlimited}"
+                          VerticalAlignment="Center" />
+                <TextBox x:Name="DownloadBandwidthBox"
+                         Style="{StaticResource NumberBox}"
+                         Margin="14,0,0,0"
+                         IsEnabled="{Binding IsDownloadBandwidthLimited}"
+                         Text="{Binding DownloadBandwidthKbps}" />
+              </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="上传带宽（KB/秒）" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <CheckBox x:Name="UploadBandwidthUnlimitedBox"
+                          Content="不限"
+                          IsChecked="{Binding UploadBandwidthUnlimited}"
+                          VerticalAlignment="Center" />
+                <TextBox x:Name="UploadBandwidthBox"
+                         Style="{StaticResource NumberBox}"
+                         Margin="14,0,0,0"
+                         IsEnabled="{Binding IsUploadBandwidthLimited}"
+                         Text="{Binding UploadBandwidthKbps}" />
+              </StackPanel>
+            </Grid>
+
+            <Separator Margin="0,6,0,10" />
+            <TextBlock Text="月度配额" Style="{StaticResource SectionHeader}" />
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="下载配额（MB/月）" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <CheckBox x:Name="DownloadQuotaUnlimitedBox"
+                          Content="不限"
+                          IsChecked="{Binding DownloadQuotaUnlimited}"
+                          VerticalAlignment="Center" />
+                <TextBox x:Name="DownloadQuotaBox"
+                         Style="{StaticResource NumberBox}"
+                         Margin="14,0,0,0"
+                         IsEnabled="{Binding IsDownloadQuotaLimited}"
+                         Text="{Binding DownloadQuotaMb}" />
+              </StackPanel>
+            </Grid>
+
+            <Grid Style="{StaticResource FormRow}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Text="上传配额（MB/月）" Style="{StaticResource FormLabel}" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <CheckBox x:Name="UploadQuotaUnlimitedBox"
+                          Content="不限"
+                          IsChecked="{Binding UploadQuotaUnlimited}"
+                          VerticalAlignment="Center" />
+                <TextBox x:Name="UploadQuotaBox"
+                         Style="{StaticResource NumberBox}"
+                         Margin="14,0,0,0"
+                         IsEnabled="{Binding IsUploadQuotaLimited}"
+                         Text="{Binding UploadQuotaMb}" />
+              </StackPanel>
+            </Grid>
+
+            <TextBlock Text="配额按自然月统计，服务器在每月 1 日重置计数。"
+                       Style="{StaticResource FormHint}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- ============ Statistics ============ -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid" BasedOn="{StaticResource PagePanel}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding ActivePage}" Value="Statistics">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <StackPanel>
+            <TextBlock Text="运行状态（只读）" Style="{StaticResource SectionHeader}" />
+            <ItemsControl x:Name="StatisticsList" ItemsSource="{Binding Statistics}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="200" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Label}" Style="{StaticResource Text.BodySecondary}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Value}"
+                               Style="{StaticResource Text.Mono}"
+                               TextWrapping="Wrap" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Grid>
+      </Grid>
+    </ScrollViewer>
+
+    <!-- ===== Footer ===== -->
+    <Border Grid.Row="3"
+            Background="{StaticResource Brush.Surface}"
+            BorderBrush="{StaticResource Brush.BorderSubtle}"
+            BorderThickness="0,1,0,0"
+            Padding="18,12">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock x:Name="StatusLabel"
+                   Grid.Column="0"
+                   Text="{Binding StatusText}"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   Margin="0,0,12,0"
+                   Visibility="{Binding HasStatus, Converter={StaticResource BoolToVisible}}">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Foreground" Value="{StaticResource Brush.TextSecondary}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusIsError}" Value="True">
+                  <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal">
+          <Button x:Name="CancelButton"
+                  Style="{StaticResource Button.Secondary}"
+                  Content="取消"
+                  IsCancel="True"
+                  MinWidth="88" />
+          <Button x:Name="SaveButton"
+                  Style="{StaticResource Button.Primary}"
+                  Content="保存"
+                  IsDefault="True"
+                  MinWidth="88"
+                  Margin="10,0,0,0"
+                  Command="{Binding SaveCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</controls:ShellWindow>

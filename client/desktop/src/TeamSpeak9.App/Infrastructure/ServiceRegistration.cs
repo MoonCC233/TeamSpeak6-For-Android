@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
 using TeamSpeak9.Core.Connection;
 using TeamSpeak9.Core.Identity;
+using TeamSpeak9.Core.Management;
 using TeamSpeak9.Core.Security;
 using TeamSpeak9.Core.Settings;
 using TeamSpeak9.Core.Threading;
@@ -52,12 +53,26 @@ internal static class ServiceRegistration
         // One connection per app, matching the single-server UI.
         services.AddSingleton<TsConnection>();
 
+        // Management layer. Stateless wrappers over the connection, so singletons are fine.
+        services.AddSingleton<ChannelService>();
+        services.AddSingleton<IconService>();
+        services.AddSingleton<ServerService>();
+
         // One shell for the one window.
         services.AddSingleton<ViewModels.ShellViewModel>();
 
-        // Explicit factory because the window's real constructor is internal, and the container's
-        // automatic constructor selection only considers public ones.
+        // Dialog view models are transient: each dialog gets a fresh one, and closing the dialog
+        // has to drop the state it accumulated.
+        services.AddTransient<ViewModels.ChannelEditorViewModel>();
+        services.AddTransient<ViewModels.IconBrowserViewModel>();
+        services.AddTransient<ViewModels.ServerEditorViewModel>();
+
+        // Explicit factories because these windows' real constructors are internal, and the
+        // container's automatic constructor selection only considers public ones.
         services.AddSingleton(sp => new MainWindow(sp.GetRequiredService<ViewModels.ShellViewModel>()));
+        services.AddTransient(sp => new Views.ChannelEditorWindow(sp.GetRequiredService<ViewModels.ChannelEditorViewModel>()));
+        services.AddTransient(sp => new Views.IconBrowserWindow(sp.GetRequiredService<ViewModels.IconBrowserViewModel>()));
+        services.AddTransient(sp => new Views.ServerEditorWindow(sp.GetRequiredService<ViewModels.ServerEditorViewModel>()));
 
         return services;
     }

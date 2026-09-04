@@ -90,7 +90,7 @@
           <DataTemplate>
             <Grid Margin="6,0,6,0">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="{StaticResource Size.AvatarSmall}" />
+                <ColumnDefinition Width="{StaticResource Size.AvatarSmallColumn}" />
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
               <Grid.RowDefinitions>

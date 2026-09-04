@@ -8,8 +8,10 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TeamSpeak9.App.Converters;
 using TeamSpeak9.Core.Connection;
 using TeamSpeak9.Core.Identity;
+using TeamSpeak9.Core.Management;
 using TeamSpeak9.Core.Model;
 using TeamSpeak9.Core.Settings;
 using TSLib.Commands;
@@ -43,6 +45,8 @@ public enum ChatPanelTab
 public sealed partial class ShellViewModel : ObservableObject, IDisposable
 {
     private readonly TsConnection connection;
+    private readonly ChannelService channels;
+    private readonly IconService icons;
     private readonly AppSettings settings;
     private readonly SettingsStore settingsStore;
     private readonly IdentityStore identityStore;
@@ -51,6 +55,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private bool disposed;
     private bool isAway;
+    private bool prefetchRunning;
 
     [ObservableProperty]
     private string statusText = "未连接";
@@ -75,18 +80,24 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public ShellViewModel(
         TsConnection connection,
+        ChannelService channels,
+        IconService icons,
         AppSettings settings,
         SettingsStore settingsStore,
         IdentityStore identityStore,
         ILogger<ShellViewModel> log)
     {
         ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(channels);
+        ArgumentNullException.ThrowIfNull(icons);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(identityStore);
         ArgumentNullException.ThrowIfNull(log);
 
         this.connection = connection;
+        this.channels = channels;
+        this.icons = icons;
         this.settings = settings;
         this.settingsStore = settingsStore;
         this.identityStore = identityStore;
@@ -101,6 +112,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         connection.MessageReceived += OnMessageReceived;
         connection.Poked += OnPoked;
         connection.ServerError += OnServerError;
+        icons.IconCached += OnIconCached;
 
         RebuildBookmarks();
     }
@@ -405,6 +417,23 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         connection.MessageReceived -= OnMessageReceived;
         connection.Poked -= OnPoked;
         connection.ServerError -= OnServerError;
+        icons.IconCached -= OnIconCached;
+    }
+
+    /// <summary>Deletes a channel and surfaces any server-side refusal in the chat log.</summary>
+    public async Task DeleteChannelAsync(ulong channelId, bool force)
+    {
+        var outcome = await channels.DeleteAsync(channelId, force);
+        if (!outcome.Ok)
+            AppendSystemMessage(outcome.Message);
+    }
+
+    /// <summary>Makes a channel the server's default channel.</summary>
+    public async Task SetDefaultChannelAsync(ulong channelId)
+    {
+        var outcome = await channels.SetDefaultAsync(channelId);
+        if (!outcome.Ok)
+            AppendSystemMessage(outcome.Message);
     }
 
     private async Task ConnectToAsync(
@@ -518,6 +547,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private void OnSnapshotChanged(object? sender, ServerSnapshot snapshot)
     {
         RebuildTree(snapshot);
+        PrefetchIcons(snapshot);
 
         OnPropertyChanged(nameof(ServerName));
         OnPropertyChanged(nameof(ServerIconId));
@@ -546,6 +576,69 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Channels.Clear();
         foreach (var root in snapshot.Channels)
             Channels.Add(new ChannelViewModel(root, treeState, snapshot));
+    }
+
+    /// <summary>
+    /// Downloads any channel and server icons that are not in the on-disk cache yet.
+    /// </summary>
+    /// <remarks>
+    /// Fire and forget, and guarded by a flag: snapshots arrive far more often than the prefetch
+    /// takes to run, and the download is deliberately serialised inside <see cref="IconService"/>
+    /// because the server hands out only a few file transfer slots.
+    /// </remarks>
+    private void PrefetchIcons(ServerSnapshot snapshot)
+    {
+        if (prefetchRunning)
+            return;
+
+        prefetchRunning = true;
+        _ = RunPrefetchAsync(snapshot);
+
+        async Task RunPrefetchAsync(ServerSnapshot current)
+        {
+            try
+            {
+                await icons.PrefetchAsync(current);
+            }
+            catch (Exception ex)
+            {
+                // Missing icons are cosmetic; never let them take the shell down.
+                log.LogWarning(ex, "Icon prefetch failed.");
+            }
+            finally
+            {
+                prefetchRunning = false;
+            }
+        }
+    }
+
+    /// <remarks>
+    /// The converter caches negative lookups too, so a freshly downloaded icon stays invisible
+    /// until the cache entry is dropped and the bindings are asked again. Raising
+    /// <see cref="ChannelViewModel.IconId"/> on every row is cheaper than rebuilding the tree and
+    /// keeps expansion and selection untouched.
+    /// <para>
+    /// Touches WPF-bound state, so it relies on <see cref="IconService.IconCached"/> being raised
+    /// on the dispatcher rather than on the thread that finished the file transfer.
+    /// </para>
+    /// </remarks>
+    private void OnIconCached(object? sender, IconId e)
+    {
+        IconIdToImageConverter.Invalidate(e);
+
+        foreach (var item in Channels)
+            NotifyIconChanged(item);
+
+        OnPropertyChanged(nameof(ServerIconId));
+
+        static void NotifyIconChanged(ChannelTreeItem item)
+        {
+            if (item is ChannelViewModel channel)
+                channel.NotifyIconChanged();
+
+            foreach (var child in item.Children)
+                NotifyIconChanged(child);
+        }
     }
 
     private void RebuildBookmarks()

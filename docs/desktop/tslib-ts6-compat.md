@@ -304,12 +304,12 @@ ftgetchannelfilehttptoken cid={channelID}|scid={avatars|icons|chat|listuserfiles
 
 ## 5. `channeledit` 属性写入矩阵（19 项逐条实测）
 
-探针对同一个频道逐条发 `channeledit`（一条命令只改一个属性，避免一个坏键掩盖其他键）。
-结果：**17 项可写，2 项被拒且都属预期**。
+探针对同一个频道逐条发 `channeledit`（一条命令只改一个属性，避免一个坏键掩盖其他键），
+随后又用合并命令复验。结果：**19 项全部可写**，但其中 4 项有条件，见 §5.1–§5.4。
 
 | 属性 | 结果 | 备注 |
 |---|---|---|
-| `channel_name` | ✅ | |
+| `channel_name` | ⚠️ | 可写，但**重发频道当前的名字会被拒**，见 §5.1 |
 | `channel_topic` | ✅ | |
 | `channel_description` | ✅ | |
 | `channel_password` | ✅ | 传空串即清除密码 |
@@ -323,16 +323,61 @@ ftgetchannelfilehttptoken cid={channelID}|scid={avatars|icons|chat|listuserfiles
 | `channel_flag_maxfamilyclients_inherited` | ✅ | |
 | `channel_needed_talk_power` | ✅ | |
 | `channel_name_phonetic` | ✅ | |
-| `channel_flag_permanent` | ✅ | |
+| `channel_flag_permanent` | ⚠️ | 只有**与 `channel_flag_semi_permanent` 成对**发送才可靠，见 §5.2 |
 | `channel_banner_gfx_url` | ✅ | **TS6 新增**，读回 `https://example.invalid/banner.png` |
 | `channel_banner_mode` | ✅ | **TS6 新增**，读回 `2` |
-| `channel_flag_semi_permanent` | ❌ `channel_invalid_flags` | 目标频道已是 permanent，语义冲突 —— **预期** |
-| `channel_delete_delay` | ❌ `parameter_invalid` | permanent 频道没有删除延迟 —— **预期** |
+| `channel_flag_semi_permanent` | ⚠️ | 同上，单独发送会 `channel_invalid_flags` |
+| `channel_delete_delay` | ⚠️ | **只有临时频道接受**，见 §5.3 |
 | `channel_icon_id` | ❌ | 见 §4.2，不在 17/19 计数内 |
 
-**PC 端注意**：`channel_flag_semi_permanent` 与 `channel_delete_delay` 只在频道类型允许时才发。
-频道类型切换（permanent ↔ semi-permanent ↔ temporary）应作为一次原子编辑：
-先设 flag，再设与之相容的 `channel_delete_delay`，并在 UI 上按当前类型灰掉不适用的字段。
+### 5.1 `channel_name` 是「重发即报错」字段
+
+`channeledit channel_name=<频道自己当前的名字>` 返回 **771 `channel_name_inuse`**。服务端把这个键
+一律当作改名请求，改成自己的名字等于和自己撞名。其余 15 个普通字段重发原值都没问题，
+`serveredit virtualserver_name=<原名>` 也没问题，这是 `channeledit` 独有的坑。
+
+只有**字节完全相同**才会被拒，`ceshi` → `CESHI` 是合法改名，所以客户端判等必须用序数比较
+（C# 的 `StringComparison.Ordinal`）。撞别人的名字返回同一个错误码，两种情况无法从响应区分。
+
+⇒ **PC 端**：编辑时若名字未改动，`channel_name` 必须整个省略。
+
+### 5.2 两个类型 flag 必须成对发送
+
+| 命令 | 结果 |
+|---|---|
+| `channel_flag_semi_permanent=1`（目标为永久频道） | ❌ 775 `channel_invalid_flags` |
+| `channel_flag_permanent=0`（目标为永久频道） | ✅ ok，但频道变成**临时**，空频道立即消失 |
+| `channel_flag_permanent=0&channel_flag_semi_permanent=1` | ✅ ok，切到半永久 |
+| `channel_flag_permanent=1`（目标为半永久频道） | ❌ 775 |
+| `channel_flag_permanent=1&channel_flag_semi_permanent=0` | ✅ ok，切到永久 |
+| 成对重发频道**已有**的类型 | ✅ ok，幂等 |
+| `channel_flag_permanent=1&channel_flag_semi_permanent=1` | ❌ 775（唯一非法组合） |
+| 完全不带 flag 的完整编辑 | ✅ ok，类型不变 |
+
+单发一个 flag 只在它恰好与当前状态一致时才不报错，因此**成对发送是唯一可靠的类型切换方式**。
+早先记录的「TSLib 成对发 flag 被 `channel_invalid_flags` 拒绝」是误判。
+
+默认频道另有约束：把 `channel_flag_default=1` 的频道改成临时或半永久返回
+**774 `default channel requires permanent`**。
+
+### 5.3 `channel_delete_delay` 只对临时频道合法
+
+| 频道类型 | `channeledit channel_delete_delay=N` | `channelcreate` 带 delay |
+|---|---|---|
+| 临时 | ✅ ok（含 `N=0`） | ✅ ok |
+| 半永久 | ❌ 1538 `parameter_invalid`（含 `N=0`） | ❌ 1538 |
+| 永久 | ❌ 1538（含 `N=0`） | ❌ 1538 |
+
+不是值的问题，纯粹是类型的问题。所以判定条件是 `Kind == Temporary`，**不是** `Kind != Permanent`。
+
+### 5.4 一条 `channeledit` 可以带齐全部字段
+
+实测把 `channel_name` + 15 个普通字段 + 两个类型 flag + `channel_delete_delay` +
+`channel_flag_default=1` 塞进**同一条** `channeledit` ⇒ **0 ok**，`channelinfo` 读回全部正确，
+`channellist -flags` 确认默认频道也切过去了。
+
+⇒ **PC 端**：一次编辑就是一条命令，不需要分步提交。`channelcreate` 仍不吃 banner 两个字段，
+创建路径需要一次后续 `channeledit` 补横幅。
 
 ---
 

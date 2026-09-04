@@ -82,8 +82,13 @@ public sealed class IconIdToImageConverter : IValueConverter
             case uint unsigned:
                 id = IconId.FromUnsigned(unsigned);
                 return true;
-            case long or ulong:
-                id = IconId.FromSigned(unchecked((int)System.Convert.ToUInt64(value, CultureInfo.InvariantCulture)));
+            // Truncating each width separately: Convert.ToUInt64 overflows on a negative long, and
+            // tsserver sends negative ids for custom icons.
+            case long wide:
+                id = IconId.FromSigned(unchecked((int)wide));
+                return true;
+            case ulong twosComplement:
+                id = IconId.FromSigned(unchecked((int)twosComplement));
                 return true;
             case string text:
                 return IconId.TryParse(text, out id);
@@ -102,17 +107,25 @@ public sealed class IconIdToImageConverter : IValueConverter
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
-            // OnLoad + a stream keeps the file unlocked, so the downloader can overwrite it.
+            // OnLoad decodes right here so the MemoryStream can go away and the file is never
+            // held open, which lets the downloader overwrite it.
+            //
+            // IgnoreImageCache must NOT be set: WPF's image cache is keyed by UriSource, and with
+            // a StreamSource there is no Uri, so FinalizeCreation ends up calling
+            // ImagingCache.RemoveFromCache(null) and throws ArgumentNullException("key"). A stream
+            // source is not cached in the first place, so the option would buy nothing anyway.
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bitmap.StreamSource = new MemoryStream(File.ReadAllBytes(path));
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
         }
-        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or FileFormatException or NotSupportedException or ArgumentException)
         {
-            // A truncated or non-image file is expected while a download is in flight.
+            // A file being overwritten by the downloader, or something that is not an image at all.
+            // The two failure shapes differ: unrecognisable bytes give NotSupportedException, while a
+            // file whose header is valid but whose body is truncated gives FileFormatException, which
+            // derives from FormatException rather than IOException despite living in System.IO.
             return null;
         }
     }

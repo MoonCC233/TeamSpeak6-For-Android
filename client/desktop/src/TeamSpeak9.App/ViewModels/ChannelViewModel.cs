@@ -48,6 +48,11 @@ public sealed class ChannelViewModel : ChannelTreeItem
 
     public IconId IconId => Node.IconId;
 
+    /// <summary>
+    /// Re-reads <see cref="IconId"/>, so a row picks up an icon that has just finished downloading.
+    /// </summary>
+    internal void NotifyIconChanged() => OnPropertyChanged(nameof(IconId));
+
     public override bool IsSpacer => Node.IsSpacer;
 
     /// <summary>
