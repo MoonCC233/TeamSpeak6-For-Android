@@ -35,6 +35,12 @@
     <PackageReference Include="NLog.Extensions.Logging" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>TeamSpeak9.App.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <!-- TSLib's NativeLibraryLoader probes {assemblyDir}/lib/x64 for libopus, so the native
        library is staged there rather than at the output root. Missing libopus only breaks
        voice at runtime, so this warns instead of failing the build; see

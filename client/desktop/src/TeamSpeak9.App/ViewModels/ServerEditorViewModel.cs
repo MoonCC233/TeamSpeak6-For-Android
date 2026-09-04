@@ -280,7 +280,11 @@ public sealed partial class ServerEditorViewModel : ObservableObject
         }
     }
 
-    private void ApplyDraft(ServerDraft draft)
+    /// <summary>
+    /// Copies a loaded draft into the bindable scalars.
+    /// </summary>
+    /// <remarks>Internal rather than private so tests can round-trip a draft without a server.</remarks>
+    internal void ApplyDraft(ServerDraft draft)
     {
         Name = draft.Name;
         PhoneticName = draft.PhoneticName;
@@ -358,7 +362,8 @@ public sealed partial class ServerEditorViewModel : ObservableObject
         kbps = unlimited ? 0 : bytesPerSecond / 1024.0;
     }
 
-    private void ApplyStatistics(ServerStatistics stats)
+    /// <remarks>Internal rather than private so tests can check the 19 rows without a server.</remarks>
+    internal void ApplyStatistics(ServerStatistics stats)
     {
         Statistics.Clear();
         void Add(string label, string value) => Statistics.Add(new StatisticRow(label, value));
@@ -384,7 +389,8 @@ public sealed partial class ServerEditorViewModel : ObservableObject
         Add("最低 iOS 版本", FormatVersion(stats.MinIosVersion));
     }
 
-    private ServerDraft ToDraft() => new()
+    /// <remarks>Internal rather than private so tests can assert the clamping without a server.</remarks>
+    internal ServerDraft ToDraft() => new()
     {
         Name = Name.Trim(),
         PhoneticName = PhoneticName.Trim(),
