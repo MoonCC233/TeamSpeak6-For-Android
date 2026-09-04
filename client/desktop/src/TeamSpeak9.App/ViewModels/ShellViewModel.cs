@@ -48,6 +48,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 {
     private readonly TsConnection connection;
     private readonly ChannelService channels;
+    private readonly FileService files;
     private readonly IconService icons;
     private readonly AppSettings settings;
     private readonly SettingsStore settingsStore;
@@ -62,6 +63,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// <summary>Channel whose description is already in <see cref="ChannelDescriptionBlocks"/>.</summary>
     private ulong describedChannelId;
     private bool descriptionLoading;
+
+    /// <summary>Channel whose file area is already in <see cref="FileRows"/>.</summary>
+    private ulong listedChannelId;
+    private bool filesLoading;
 
     /// <summary>Text <see cref="WelcomeBlocks"/> was parsed from, so it is only parsed once.</summary>
     private string welcomeSource = string.Empty;
@@ -106,9 +111,30 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HasChannelDescription))]
     private ImmutableArray<MarkdownNode> channelDescriptionBlocks = ImmutableArray<MarkdownNode>.Empty;
 
+    /// <summary>Entries of the current channel's file area, for the files tab.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFiles))]
+    private ImmutableArray<FileRow> fileRows = ImmutableArray<FileRow>.Empty;
+
+    /// <summary>Directory <see cref="FileRows"/> was listed from.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAtFilesRoot))]
+    private string filesPath = FileService.RootPath;
+
+    /// <summary>Why the file list is empty: loading, nothing here, or an error.</summary>
+    [ObservableProperty]
+    private string filesStatus = string.Empty;
+
+    /// <summary>Selected file row, driving the download and delete buttons.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanDownloadFile))]
+    [NotifyPropertyChangedFor(nameof(HasFileSelection))]
+    private FileRow? selectedFile;
+
     public ShellViewModel(
         TsConnection connection,
         ChannelService channels,
+        FileService files,
         IconService icons,
         AppSettings settings,
         SettingsStore settingsStore,
@@ -117,6 +143,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(channels);
+        ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(icons);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(settingsStore);
@@ -125,6 +152,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
         this.connection = connection;
         this.channels = channels;
+        this.files = files;
         this.icons = icons;
         this.settings = settings;
         this.settingsStore = settingsStore;
@@ -202,6 +230,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public bool HasWelcomeMessage => !WelcomeBlocks.IsDefaultOrEmpty;
 
     public bool HasChannelDescription => !ChannelDescriptionBlocks.IsDefaultOrEmpty;
+
+    public bool HasFiles => !FileRows.IsDefaultOrEmpty;
+
+    /// <summary>False once the user has navigated into a subdirectory, enabling the up button.</summary>
+    public bool IsAtFilesRoot => FilesPath == FileService.RootPath;
+
+    public bool HasFileSelection => SelectedFile is not null;
+
+    /// <summary>Only files can be downloaded; a directory selection leaves the button disabled.</summary>
+    public bool CanDownloadFile => SelectedFile?.IsFile == true;
 
     // The pill toggles bind IsChecked to these, so "checked" means muted, which is what the
     // Toggle.Pill danger styling expects.
@@ -380,12 +418,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     /// <remarks>
     /// The channel description is not in <c>channellist</c>, so it is fetched the first time the
-    /// info tab is opened for a channel rather than on every snapshot.
+    /// info tab is opened for a channel rather than on every snapshot. The file list is fetched the
+    /// same way, for the same reason: neither is worth a round trip until it is on screen.
     /// </remarks>
     partial void OnActiveTabChanged(ChatPanelTab value)
     {
         if (value == ChatPanelTab.Info)
             LoadChannelDescription();
+        else if (value == ChatPanelTab.Files)
+            LoadChannelFiles();
     }
 
     [RelayCommand]
@@ -553,6 +594,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ChannelInfoRows = ImmutableArray<InfoRow>.Empty;
         WelcomeBlocks = ImmutableArray<MarkdownNode>.Empty;
         ChannelDescriptionBlocks = ImmutableArray<MarkdownNode>.Empty;
+        ClearFiles();
+    }
+
+    /// <summary>Drops the file listing, for a disconnect or a channel change.</summary>
+    private void ClearFiles()
+    {
+        listedChannelId = 0;
+        FilesPath = FileService.RootPath;
+        FileRows = ImmutableArray<FileRow>.Empty;
+        SelectedFile = null;
+        FilesStatus = string.Empty;
     }
 
     /// <summary>
@@ -709,6 +761,53 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         return local.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
     }
 
+    /// <summary>
+    /// Turns the service's file entries into display rows.
+    /// </summary>
+    /// <remarks>
+    /// Pure, and <c>internal</c> so the tests can cover the formatting without a server. The order
+    /// is whatever <see cref="FileService.Sort"/> produced — directories first — and is kept as is.
+    /// </remarks>
+    internal static ImmutableArray<FileRow> BuildFileRows(IReadOnlyList<ChannelFileEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        if (entries.Count == 0)
+            return ImmutableArray<FileRow>.Empty;
+
+        var rows = ImmutableArray.CreateBuilder<FileRow>(entries.Count);
+        foreach (var entry in entries)
+        {
+            rows.Add(new FileRow(
+                entry.Name,
+                entry.FullPath,
+                entry.IsFile ? FormatFileSize(entry.Size) : "文件夹",
+                FormatDate(entry.Modified),
+                entry.IsFile));
+        }
+
+        return rows.ToImmutable();
+    }
+
+    /// <summary>Formats a byte count the way the file list shows it.</summary>
+    internal static string FormatFileSize(ulong bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+
+        double value = bytes;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        // Bytes are whole by definition, so a fractional part would only be noise.
+        return unit == 0
+            ? string.Create(CultureInfo.CurrentCulture, $"{bytes} {units[0]}")
+            : string.Create(CultureInfo.CurrentCulture, $"{value:0.##} {units[unit]}");
+    }
+
     private static void ClampSelection(string text, ref int start, ref int length)
     {
         start = Math.Clamp(start, 0, text.Length);
@@ -744,6 +843,246 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var outcome = await channels.SetDefaultAsync(channelId);
         if (!outcome.Ok)
             AppendSystemMessage(outcome.Message);
+    }
+
+    /// <summary>Re-lists the directory the files tab is showing.</summary>
+    public async Task RefreshFilesAsync() => await ListFilesAsync(FilesPath, force: true);
+
+    /// <summary>Opens a directory row, or does nothing for a file.</summary>
+    public async Task OpenFolderAsync(FileRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (!row.IsFile)
+            await ListFilesAsync(row.Path, force: true);
+    }
+
+    /// <summary>Navigates to the parent directory.</summary>
+    public async Task NavigateUpAsync()
+    {
+        if (IsAtFilesRoot)
+            return;
+
+        await ListFilesAsync(FileService.Parent(FilesPath), force: true);
+    }
+
+    /// <summary>
+    /// Downloads <paramref name="row"/> to <paramref name="localPath"/>.
+    /// </summary>
+    /// <remarks>
+    /// The caller has already asked the user where to put it; failures land in the chat log because
+    /// the files tab has no place of its own to show them without hiding the list.
+    /// </remarks>
+    public async Task DownloadFileAsync(FileRow row, string localPath)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
+
+        if (!row.IsFile)
+            return;
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+            return;
+
+        FilesStatus = $"正在下载 {row.Name}…";
+        try
+        {
+            var outcome = await files.DownloadAsync(channelId, row.Path, localPath);
+            FilesStatus = outcome.Ok ? $"已保存 {row.Name}。" : string.Empty;
+            if (!outcome.Ok)
+                AppendSystemMessage(outcome.Message);
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Downloading {Path} failed.", row.Path);
+            FilesStatus = string.Empty;
+            AppendSystemMessage($"下载失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>Uploads a local file into the directory the files tab is showing.</summary>
+    public async Task UploadFileAsync(string localPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+            return;
+
+        string directory = FilesPath;
+        FilesStatus = "正在上传…";
+        try
+        {
+            var outcome = await files.UploadAsync(channelId, directory, localPath);
+            if (!outcome.Ok)
+            {
+                FilesStatus = string.Empty;
+                AppendSystemMessage(outcome.Message);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Uploading {Local} failed.", localPath);
+            FilesStatus = string.Empty;
+            AppendSystemMessage($"上传失败：{ex.Message}");
+            return;
+        }
+
+        await ListFilesAsync(directory, force: true);
+    }
+
+    /// <summary>Deletes a file or directory from the channel's file area.</summary>
+    public async Task DeleteFileAsync(FileRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+            return;
+
+        var outcome = await files.DeleteAsync(channelId, row.Path);
+        if (!outcome.Ok)
+        {
+            AppendSystemMessage(outcome.Message);
+            return;
+        }
+
+        await ListFilesAsync(FilesPath, force: true);
+    }
+
+    /// <summary>Creates a directory inside the one the files tab is showing.</summary>
+    public async Task CreateFolderAsync(string name)
+    {
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+            return;
+
+        string directory = FilesPath;
+        var outcome = await files.CreateDirectoryAsync(channelId, directory, name);
+        if (!outcome.Ok)
+        {
+            AppendSystemMessage(outcome.Message);
+            return;
+        }
+
+        await ListFilesAsync(directory, force: true);
+    }
+
+    /// <summary>Renames a file or directory in place.</summary>
+    public async Task RenameFileAsync(FileRow row, string newName)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+            return;
+
+        var outcome = await files.RenameAsync(channelId, row.Path, newName);
+        if (!outcome.Ok)
+        {
+            AppendSystemMessage(outcome.Message);
+            return;
+        }
+
+        await ListFilesAsync(FilesPath, force: true);
+    }
+
+    /// <summary>
+    /// Lists the current channel's file area when the files tab needs it.
+    /// </summary>
+    /// <remarks>
+    /// Fire and forget, mirroring <see cref="LoadChannelDescription"/>: opening the tab and moving
+    /// to another channel can both ask for it, so the request is guarded and a channel change during
+    /// the request is picked up afterwards.
+    /// </remarks>
+    private void LoadChannelFiles()
+    {
+        if (!connection.IsConnected)
+            return;
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0 || channelId == listedChannelId)
+            return;
+
+        _ = ListFilesAsync(FileService.RootPath, force: false);
+    }
+
+    /// <summary>
+    /// Lists one directory into <see cref="FileRows"/>.
+    /// </summary>
+    /// <param name="force">
+    /// True for a user-initiated navigation or refresh, which must run even if the channel is
+    /// already listed. False for the lazy load, which must not repeat itself.
+    /// </param>
+    private async Task ListFilesAsync(string path, bool force)
+    {
+        if (filesLoading)
+            return;
+
+        if (!connection.IsConnected)
+        {
+            ClearFiles();
+            FilesStatus = "未连接。";
+            return;
+        }
+
+        ulong channelId = connection.Snapshot.OwnChannelId;
+        if (channelId == 0)
+        {
+            ClearFiles();
+            return;
+        }
+
+        if (!force && channelId == listedChannelId)
+            return;
+
+        filesLoading = true;
+        // Recorded up front so the snapshots arriving during the request do not treat what is on
+        // screen as belonging to another channel and clear it mid-load.
+        listedChannelId = channelId;
+        FilesStatus = "正在加载…";
+        try
+        {
+            var outcome = await files.ListAsync(channelId, path);
+
+            // Drop the answer if the user moved on while it was in flight; the retry below fetches
+            // the channel they are actually in now.
+            if (connection.Snapshot.OwnChannelId != channelId)
+                return;
+
+            if (!outcome.Ok || outcome.Value is null)
+            {
+                // Counted as listed anyway: a refused ftgetfilelist will keep being refused, and the
+                // tab would otherwise retry on every snapshot.
+                FileRows = ImmutableArray<FileRow>.Empty;
+                SelectedFile = null;
+                FilesPath = FileService.Normalize(path);
+                FilesStatus = outcome.Message is { Length: > 0 } message ? message : "无法读取文件列表。";
+                return;
+            }
+
+            FilesPath = FileService.Normalize(path);
+            FileRows = BuildFileRows(outcome.Value);
+            SelectedFile = null;
+            FilesStatus = FileRows.IsDefaultOrEmpty ? "这个文件夹是空的。" : string.Empty;
+        }
+        catch (Exception ex)
+        {
+            // The file area is a side panel; never let it take the shell down.
+            log.LogWarning(ex, "Listing {Path} of channel {Cid} failed.", path, channelId);
+            FilesStatus = "无法读取文件列表。";
+        }
+        finally
+        {
+            filesLoading = false;
+        }
+
+        // A channel change during the request could not start its own listing because of the
+        // re-entry guard, so pick it up here rather than waiting for the next snapshot.
+        if (ActiveTab == ChatPanelTab.Files)
+            LoadChannelFiles();
     }
 
     private async Task ConnectToAsync(
@@ -898,6 +1237,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
 
         ulong channelId = channel?.ChannelId ?? 0;
+        if (channelId == describedChannelId && channelId == listedChannelId)
+            return;
+
+        if (channelId != listedChannelId)
+        {
+            // A different channel means a different file area, so what is on screen is stale.
+            ClearFiles();
+
+            if (ActiveTab == ChatPanelTab.Files)
+                LoadChannelFiles();
+        }
+
         if (channelId == describedChannelId)
             return;
 
@@ -1127,3 +1478,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
 /// <summary>One label/value pair on the chat panel's info tab.</summary>
 public sealed record InfoRow(string Label, string Value);
+
+/// <summary>One entry on the chat panel's files tab.</summary>
+/// <param name="Name">Entry name, without any directory part.</param>
+/// <param name="Path">Full path inside the channel, which every transfer command takes.</param>
+/// <param name="SizeText">Formatted size, or a label for a directory.</param>
+/// <param name="ModifiedText">Formatted local modification time, or empty when absent.</param>
+public sealed record FileRow(string Name, string Path, string SizeText, string ModifiedText, bool IsFile);

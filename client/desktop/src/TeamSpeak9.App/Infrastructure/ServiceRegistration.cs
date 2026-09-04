@@ -55,6 +55,7 @@ internal static class ServiceRegistration
 
         // Management layer. Stateless wrappers over the connection, so singletons are fine.
         services.AddSingleton<ChannelService>();
+        services.AddSingleton<FileService>();
         services.AddSingleton<IconService>();
         services.AddSingleton<ServerService>();
 

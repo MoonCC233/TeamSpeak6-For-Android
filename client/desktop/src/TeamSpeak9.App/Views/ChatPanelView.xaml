@@ -10,6 +10,8 @@
   <UserControl.Resources>
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
     <conv:ZeroToVisibilityConverter x:Key="ZeroToVisibility" />
+    <conv:EmptyToVisibilityConverter x:Key="EmptyToVisibility" />
+    <conv:NotConverter x:Key="Not" />
     <conv:NickColorConverter x:Key="NickColor" />
     <conv:EnumMatchConverter x:Key="EnumMatch" />
 
@@ -317,12 +319,10 @@
       </StackPanel>
     </ScrollViewer>
 
-    <TextBlock Grid.Row="1"
-               Text="频道文件将在此显示"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center">
-      <TextBlock.Style>
-        <Style TargetType="TextBlock" BasedOn="{StaticResource Text.BodySecondary}">
+    <!-- ===== Files ===== -->
+    <Grid Grid.Row="1">
+      <Grid.Style>
+        <Style TargetType="Grid">
           <Setter Property="Visibility" Value="Collapsed" />
           <Style.Triggers>
             <DataTrigger Binding="{Binding ActiveTab}" Value="Files">
@@ -330,8 +330,168 @@
             </DataTrigger>
           </Style.Triggers>
         </Style>
-      </TextBlock.Style>
-    </TextBlock>
+      </Grid.Style>
+
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+
+      <!-- Toolbar: navigation on the left, the current path in the middle, actions on the right. -->
+      <Border Grid.Row="0"
+              BorderBrush="{StaticResource Brush.BorderSubtle}"
+              BorderThickness="0,0,0,1"
+              Padding="10,6">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+
+          <Button Grid.Column="0"
+                  x:Name="FilesUpButton"
+                  Style="{StaticResource Button.IconSmall}"
+                  Click="OnFilesUpClick"
+                  IsEnabled="{Binding IsAtFilesRoot, Converter={StaticResource Not}}"
+                  ToolTip="上一层">
+            <controls:IconGlyph Data="{StaticResource Icon.ChevronLeft}" Style="{StaticResource Icon.Small}" />
+          </Button>
+
+          <TextBlock Grid.Column="1"
+                     Text="{Binding FilesPath}"
+                     Style="{StaticResource Text.Caption}"
+                     Margin="8,0"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     ToolTip="{Binding FilesPath}" />
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal">
+            <Button x:Name="FilesRefreshButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesRefreshClick"
+                    IsEnabled="{Binding IsConnected}"
+                    ToolTip="刷新">
+              <controls:IconGlyph Data="{StaticResource Icon.Refresh}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button x:Name="FilesNewFolderButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesNewFolderClick"
+                    IsEnabled="{Binding IsConnected}"
+                    ToolTip="新建文件夹">
+              <controls:IconGlyph Data="{StaticResource Icon.FolderPlus}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button x:Name="FilesUploadButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesUploadClick"
+                    IsEnabled="{Binding IsConnected}"
+                    ToolTip="上传文件">
+              <controls:IconGlyph Data="{StaticResource Icon.Upload}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button x:Name="FilesDownloadButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesDownloadClick"
+                    IsEnabled="{Binding CanDownloadFile}"
+                    ToolTip="下载所选文件">
+              <controls:IconGlyph Data="{StaticResource Icon.Download}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button x:Name="FilesRenameButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesRenameClick"
+                    IsEnabled="{Binding HasFileSelection}"
+                    ToolTip="重命名">
+              <controls:IconGlyph Data="{StaticResource Icon.Edit}" Style="{StaticResource Icon.Small}" />
+            </Button>
+            <Button x:Name="FilesDeleteButton"
+                    Style="{StaticResource Button.IconSmall}"
+                    Click="OnFilesDeleteClick"
+                    IsEnabled="{Binding HasFileSelection}"
+                    ToolTip="删除">
+              <controls:IconGlyph Data="{StaticResource Icon.Trash}" Style="{StaticResource Icon.Small}" />
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- The implicit ListBox style already virtualises and brings its own ScrollViewer. -->
+      <ListBox x:Name="FileList"
+               Grid.Row="1"
+               ItemsSource="{Binding FileRows}"
+               SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+               Padding="8,6"
+               ItemContainerStyle="{StaticResource ListItem.Base}"
+               MouseDoubleClick="OnFileListDoubleClick">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+
+              <controls:IconGlyph Grid.Column="0" VerticalAlignment="Center">
+                <controls:IconGlyph.Style>
+                  <!-- BasedOn rather than the Style attribute: a DataTrigger cannot be attached to
+                       an attribute-set style. -->
+                  <Style TargetType="{x:Type controls:IconGlyph}" BasedOn="{StaticResource Icon.Small}">
+                    <Setter Property="Data" Value="{StaticResource Icon.Folder}" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding IsFile}" Value="True">
+                        <Setter Property="Data" Value="{StaticResource Icon.File}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </controls:IconGlyph.Style>
+              </controls:IconGlyph>
+
+              <TextBlock Grid.Column="1"
+                         Text="{Binding Name}"
+                         Style="{StaticResource Text.Body}"
+                         Margin="8,0,8,0"
+                         VerticalAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip="{Binding Path}" />
+
+              <TextBlock Grid.Column="2"
+                         Text="{Binding SizeText}"
+                         Style="{StaticResource Text.Caption}"
+                         MinWidth="72"
+                         TextAlignment="Right"
+                         VerticalAlignment="Center" />
+
+              <TextBlock Grid.Column="3"
+                         Text="{Binding ModifiedText}"
+                         Style="{StaticResource Text.Caption}"
+                         MinWidth="112"
+                         Margin="12,0,0,0"
+                         TextAlignment="Right"
+                         VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <!-- Empty, loading and error all land here, so the list itself never shows a fake row. -->
+      <TextBlock Grid.Row="1"
+                 Text="{Binding FilesStatus}"
+                 Style="{StaticResource Text.BodySecondary}"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 Margin="24,0"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center"
+                 Visibility="{Binding FilesStatus, Converter={StaticResource EmptyToVisibility}}" />
+
+      <TextBlock Grid.Row="2"
+                 Text="连接服务器后可浏览频道文件"
+                 Style="{StaticResource Text.Caption}"
+                 HorizontalAlignment="Center"
+                 Margin="0,0,0,10"
+                 Visibility="{Binding IsDisconnected, Converter={StaticResource BoolToVisibility}}" />
+    </Grid>
 
     <!-- ===== Composer ===== -->
     <Border Grid.Row="2"

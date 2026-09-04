@@ -4,6 +4,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using TeamSpeak9.App.ViewModels;
+using TeamSpeak9.Core.Management;
 using TeamSpeak9.Core.Model;
 
 namespace TeamSpeak9.App.Tests.ViewModels;
@@ -631,5 +632,129 @@ public class InfoLabelTests
         var local = new DateTime(2024, 5, 6, 7, 8, 0, DateTimeKind.Unspecified);
 
         Assert.Equal("2024-05-06 07:08", ShellViewModel.FormatDate(local));
+    }
+}
+
+/// <summary>The byte counts shown in the file tab's size column.</summary>
+public class FormatFileSizeTests
+{
+    [Theory]
+    [InlineData(0UL, "0 B")]
+    [InlineData(1UL, "1 B")]
+    [InlineData(1023UL, "1023 B")]
+    public void ByteCountsAreWholeNumbers(ulong bytes, string expected)
+    {
+        // A fractional byte count would only be noise.
+        Assert.Equal(expected, ShellViewModel.FormatFileSize(bytes));
+    }
+
+    [Theory]
+    [InlineData(1024UL, "1 KB")]
+    [InlineData(1536UL, "1.5 KB")]
+    [InlineData(1048576UL, "1 MB")]
+    [InlineData(1073741824UL, "1 GB")]
+    [InlineData(1099511627776UL, "1 TB")]
+    public void LargerCountsScaleToTheNextUnit(ulong bytes, string expected)
+    {
+        Assert.Equal(expected, ShellViewModel.FormatFileSize(bytes));
+    }
+
+    [Fact]
+    public void TheScaledValueKeepsAtMostTwoDecimals()
+    {
+        Assert.Equal("1.51 KB", ShellViewModel.FormatFileSize(1546));
+    }
+
+    [Fact]
+    public void TheLargestUnitIsNotExceeded()
+    {
+        // ulong.MaxValue is ~16 EB; the unit table stops at TB, so it must stay there rather than
+        // walking off the end of the array.
+        Assert.EndsWith(" TB", ShellViewModel.FormatFileSize(ulong.MaxValue), StringComparison.Ordinal);
+    }
+}
+
+/// <summary>The file tab's rows, built from what <c>FileService</c> listed.</summary>
+public class BuildFileRowsTests
+{
+    private static ChannelFileEntry Entry(
+        string name,
+        bool isFile,
+        ulong size = 0,
+        DateTime modified = default,
+        string directory = "/") => new()
+        {
+            Name = name,
+            Directory = directory,
+            Size = size,
+            Modified = modified,
+            IsFile = isFile,
+        };
+
+    [Fact]
+    public void AnEmptyListingProducesNoRows()
+    {
+        Assert.Empty(ShellViewModel.BuildFileRows([]));
+    }
+
+    [Fact]
+    public void ADirectoryShowsTheWordFolderInsteadOfASize()
+    {
+        // The server reports 0 bytes for a directory, and "0 B" would read as an empty file.
+        var row = Assert.Single(ShellViewModel.BuildFileRows([Entry("logs", isFile: false)]));
+
+        Assert.Equal("文件夹", row.SizeText);
+        Assert.False(row.IsFile);
+    }
+
+    [Fact]
+    public void AFileShowsItsFormattedSize()
+    {
+        var row = Assert.Single(ShellViewModel.BuildFileRows([Entry("a.txt", isFile: true, size: 2048)]));
+
+        Assert.Equal("2 KB", row.SizeText);
+        Assert.True(row.IsFile);
+    }
+
+    [Fact]
+    public void EachRowCarriesTheFullChannelPathSoCommandsCanUseItDirectly()
+    {
+        var row = Assert.Single(ShellViewModel.BuildFileRows(
+            [Entry("a.txt", isFile: true, directory: "/logs")]));
+
+        Assert.Equal("a.txt", row.Name);
+        Assert.Equal("/logs/a.txt", row.Path);
+    }
+
+    [Fact]
+    public void TheModifiedColumnUsesTheSameFormatAsTheRestOfTheUi()
+    {
+        var modified = new DateTime(2024, 5, 6, 7, 8, 0, DateTimeKind.Unspecified);
+
+        var row = Assert.Single(ShellViewModel.BuildFileRows([Entry("a.txt", isFile: true, modified: modified)]));
+
+        Assert.Equal("2024-05-06 07:08", row.ModifiedText);
+    }
+
+    [Fact]
+    public void AnAbsentTimestampLeavesTheColumnBlank()
+    {
+        var row = Assert.Single(ShellViewModel.BuildFileRows([Entry("a.txt", isFile: true)]));
+
+        Assert.Empty(row.ModifiedText);
+    }
+
+    [Fact]
+    public void TheOrderTheServiceSortedIntoIsPreserved()
+    {
+        // FileService.Sort already put directories first; re-ordering here would undo that.
+        var rows = ShellViewModel.BuildFileRows(
+        [
+            Entry("logs", isFile: false),
+            Entry("b.txt", isFile: true),
+            Entry("a.txt", isFile: true),
+        ]);
+
+        Assert.Equal(["logs", "b.txt", "a.txt"], rows.Select(r => r.Name));
     }
 }
