@@ -75,13 +75,12 @@ public sealed class ScreenSharePublisher : IAsyncDisposable
         ScreenCaptureOptions options)
     {
         ArgumentNullException.ThrowIfNull(log);
-        ArgumentNullException.ThrowIfNull(ui);
-        ArgumentNullException.ThrowIfNull(captureFactory);
-        ArgumentNullException.ThrowIfNull(encoder);
-        ArgumentNullException.ThrowIfNull(tssp);
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(profile);
-        ArgumentNullException.ThrowIfNull(options);
+                ArgumentNullException.ThrowIfNull(ui);
+                ArgumentNullException.ThrowIfNull(captureFactory);
+                ArgumentNullException.ThrowIfNull(encoder);
+                ArgumentNullException.ThrowIfNull(tssp);
+                ArgumentNullException.ThrowIfNull(target);
+                ArgumentNullException.ThrowIfNull(profile);
 
         _log = log;
         _ui = ui;
