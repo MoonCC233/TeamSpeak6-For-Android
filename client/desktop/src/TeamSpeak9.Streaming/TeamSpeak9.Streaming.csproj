@@ -15,10 +15,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <!-- H.264 encoding. The NuGet package carries only managed assemblies; the native FFmpeg 7.x
-         binaries are staged by the host app from third_party/native/win-x64 and are optional -
-         ScreenVideoEncoder falls back to the managed VP8 encoder when they are missing. -->
-    <PackageReference Include="SIPSorcery" />
+    <!-- H.264 encoding. The NuGet packages carry only managed assemblies; the native FFmpeg 7.x
+             binaries are staged by the host app (TeamSpeak9.App) from third_party/native/win-x64 into
+             FFmpeg/bin/x64 and are optional - ScreenVideoEncoder falls back to the managed VP8 encoder
+             when they are missing. -->
+        <PackageReference Include="SIPSorcery" />
     <PackageReference Include="SIPSorceryMedia.Abstractions" />
     <!-- Managed VP8 fallback; brings its own vpxmd.dll. -->
     <PackageReference Include="SIPSorceryMedia.Encoders" />
