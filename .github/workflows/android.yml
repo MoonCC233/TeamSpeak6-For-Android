@@ -138,9 +138,12 @@ jobs:
 
           # keystore 只落在 runner 的临时目录，绝不进工作区，避免被后续步骤打包进产物。
           keystore="$RUNNER_TEMP/release.jks"
+          aligned="$RUNNER_TEMP/aligned.apk"
+          # 无论后续哪一步失败，都在退出时清理 keystore 与对齐后的 APK。
+          trap 'rm -f "$keystore" "$aligned"' EXIT
+
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore"
 
-          aligned="$RUNNER_TEMP/aligned.apk"
           "${buildtools}zipalign" -p -f 4 "$unsigned" "$aligned"
 
           # apksigner 从环境变量读口令，避免出现在进程命令行里。
@@ -156,8 +159,6 @@ jobs:
 
           "${buildtools}apksigner" verify --print-certs \
             "artifacts/TS6Droid-${{ steps.meta.outputs.version }}-release.apk"
-
-          rm -f "$keystore" "$aligned"
 
       - name: Write checksums
         shell: bash

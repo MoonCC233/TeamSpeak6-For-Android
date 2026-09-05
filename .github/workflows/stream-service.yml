@@ -107,7 +107,8 @@ jobs:
           cp config.example.yaml dist/
           cp ../../docs/deploy/stream-service.md dist/
           cd dist
-          sha256sum ts9-stream-* > SHA256SUMS.txt
+          # 覆盖所有可分发文件（二进制、配置示例、部署文档），排除 SHA256SUMS.txt 本身。
+          sha256sum * > SHA256SUMS.txt
           ls -lh
           cat SHA256SUMS.txt
 
