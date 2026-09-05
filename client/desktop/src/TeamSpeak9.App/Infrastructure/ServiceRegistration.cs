@@ -4,6 +4,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NLog.Extensions.Logging;
+using TeamSpeak9.Core.Audio;
 using TeamSpeak9.Core.Connection;
 using TeamSpeak9.Core.Identity;
 using TeamSpeak9.Core.Management;
@@ -55,8 +56,16 @@ internal static class ServiceRegistration
 
         // Management layer. Stateless wrappers over the connection, so singletons are fine.
         services.AddSingleton<ChannelService>();
+        services.AddSingleton<FileService>();
         services.AddSingleton<IconService>();
         services.AddSingleton<ServerService>();
+
+        // Audio. The WASAPI implementations live in the app layer so Core stays platform neutral
+        // and free of CA1416 Windows-only annotations.
+        services.AddSingleton<IAudioDeviceEnumerator, Audio.WasapiDeviceEnumerator>();
+        services.AddSingleton<IAudioDeviceFactory, Audio.WasapiDeviceFactory>();
+        services.AddSingleton<AudioPipeline>();
+        services.AddSingleton<Audio.AudioService>();
 
         // One shell for the one window.
         services.AddSingleton<ViewModels.ShellViewModel>();
