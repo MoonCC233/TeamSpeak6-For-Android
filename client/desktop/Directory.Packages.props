@@ -40,6 +40,15 @@
     <PackageVersion Include="SIPSorceryMedia.FFmpeg" Version="10.0.16" />
   </ItemGroup>
 
+  <ItemGroup Label="Audio (WASAPI capture / render)">
+    <!-- Device enumeration plus capture and render. NAudio.Wasapi's only dependency is
+         NAudio.Core, which has none of its own, so this adds nothing else to the closure
+         and cannot trip the NU1605 downgrade check that central transitive pinning turns on.
+         Windows-only, which is why it is referenced from TeamSpeak9.App (net8.0-windows)
+         rather than TeamSpeak9.Core (net8.0). -->
+    <PackageVersion Include="NAudio.Wasapi" Version="2.2.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Vendored TSLib dependencies">
     <!-- Versions come from upstream TSLib.csproj @ a69a38d, except NLog and
          Newtonsoft.Json which are floated up to the versions the app uses so that

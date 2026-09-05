@@ -31,6 +31,8 @@
          with the netstandard2.1 vendored TSLib's System.IO.Pipelines 8.0.0. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
+    <!-- WASAPI capture/render. Windows-only, so it lives here rather than in Core. -->
+    <PackageReference Include="NAudio.Wasapi" />
     <PackageReference Include="NLog" />
     <PackageReference Include="NLog.Extensions.Logging" />
   </ItemGroup>

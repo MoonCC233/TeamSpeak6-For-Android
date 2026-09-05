@@ -10,7 +10,9 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using TeamSpeak9.App.Audio;
 using TeamSpeak9.App.Converters;
+using TeamSpeak9.Core.Audio;
 using TeamSpeak9.Core.Connection;
 using TeamSpeak9.Core.Identity;
 using TeamSpeak9.Core.Management;
@@ -50,6 +52,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly ChannelService channels;
     private readonly FileService files;
     private readonly IconService icons;
+    private readonly AudioService audio;
     private readonly AppSettings settings;
     private readonly SettingsStore settingsStore;
     private readonly IdentityStore identityStore;
@@ -59,6 +62,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private bool disposed;
     private bool isAway;
     private bool prefetchRunning;
+
+    private ImmutableArray<AudioDeviceViewModel> inputDeviceRows = ImmutableArray<AudioDeviceViewModel>.Empty;
+    private ImmutableArray<AudioDeviceViewModel> outputDeviceRows = ImmutableArray<AudioDeviceViewModel>.Empty;
 
     /// <summary>Channel whose description is already in <see cref="ChannelDescriptionBlocks"/>.</summary>
     private ulong describedChannelId;
@@ -136,6 +142,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ChannelService channels,
         FileService files,
         IconService icons,
+        AudioService audio,
         AppSettings settings,
         SettingsStore settingsStore,
         IdentityStore identityStore,
@@ -145,6 +152,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(channels);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(icons);
+        ArgumentNullException.ThrowIfNull(audio);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(identityStore);
@@ -154,6 +162,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         this.channels = channels;
         this.files = files;
         this.icons = icons;
+        this.audio = audio;
         this.settings = settings;
         this.settingsStore = settingsStore;
         this.identityStore = identityStore;
@@ -169,8 +178,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         connection.Poked += OnPoked;
         connection.ServerError += OnServerError;
         icons.IconCached += OnIconCached;
+        audio.DevicesChanged += OnAudioDevicesChanged;
+        audio.TransmittingChanged += OnAudioTransmittingChanged;
 
         RebuildBookmarks();
+        RebuildDeviceMenus();
     }
 
     /// <summary>Bookmark rows for the left column, filtered by <see cref="BookmarkFilter"/>.</summary>
@@ -254,6 +266,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             settings.Audio.InputMuted = value;
             OnPropertyChanged();
             PersistSettings();
+            audio.ApplySettings();
             _ = PushMuteStateAsync("client_input_muted", value);
         }
     }
@@ -269,9 +282,25 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             settings.Audio.OutputMuted = value;
             OnPropertyChanged();
             PersistSettings();
+            audio.ApplySettings();
             _ = PushMuteStateAsync("client_output_muted", value);
         }
     }
+
+    /// <summary>Capture endpoints for the top bar's microphone menu.</summary>
+    public ImmutableArray<AudioDeviceViewModel> InputDevices => inputDeviceRows;
+
+    /// <summary>Render endpoints for the top bar's speaker menu.</summary>
+    public ImmutableArray<AudioDeviceViewModel> OutputDevices => outputDeviceRows;
+
+    /// <summary>Selected capture device id; empty means follow the Windows default.</summary>
+    public string SelectedInputDeviceId => audio.SelectedInputDeviceId;
+
+    /// <summary>Selected render device id; empty means follow the Windows default.</summary>
+    public string SelectedOutputDeviceId => audio.SelectedOutputDeviceId;
+
+    /// <summary>Whether our own microphone is currently passing audio, for the top bar indicator.</summary>
+    public bool IsTransmitting => audio.IsTransmitting;
 
     /// <summary>AFK pill. Maps onto the server's away flag.</summary>
     public bool IsAway
@@ -460,6 +489,68 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void ToggleChatPanel() => IsChatPanelVisible = !IsChatPanelVisible;
+
+    /// <summary>
+    /// Picks a capture or render device. The menu binds the row itself, so a single command serves
+    /// both lists and the kind comes from the device rather than from which menu was clicked.
+    /// </summary>
+    [RelayCommand]
+    private void SelectDevice(AudioDeviceViewModel? row)
+    {
+        if (row is null)
+            return;
+
+        if (row.Device.Kind == AudioDeviceKind.Input)
+            audio.SelectInputDevice(row.Id);
+        else
+            audio.SelectOutputDevice(row.Id);
+
+        RebuildDeviceMenus();
+    }
+
+    /// <summary>Re-enumerates the endpoints, for when the user plugs a headset in.</summary>
+    [RelayCommand]
+    private void RefreshAudioDevices() => audio.RefreshDevices();
+
+    /// <remarks>Already on the UI thread: <see cref="AudioService"/> marshals before raising.</remarks>
+    private void OnAudioDevicesChanged() => RebuildDeviceMenus();
+
+    /// <remarks>Already on the UI thread: <see cref="AudioService"/> marshals before raising.</remarks>
+    private void OnAudioTransmittingChanged(bool value) => OnPropertyChanged(nameof(IsTransmitting));
+
+    /// <summary>
+    /// Rebuilds both device menus from the current endpoint lists and selection.
+    /// </summary>
+    /// <remarks>
+    /// A selection that no longer exists (device unplugged) leaves no row checked, which is
+    /// honest: the pipeline silently falls back to the system default in that case, and the
+    /// setting still points at the missing device in case it comes back.
+    /// </remarks>
+    private void RebuildDeviceMenus()
+    {
+        inputDeviceRows = Rows(audio.InputDevices, audio.SelectedInputDeviceId);
+        outputDeviceRows = Rows(audio.OutputDevices, audio.SelectedOutputDeviceId);
+
+        OnPropertyChanged(nameof(InputDevices));
+        OnPropertyChanged(nameof(OutputDevices));
+        OnPropertyChanged(nameof(SelectedInputDeviceId));
+        OnPropertyChanged(nameof(SelectedOutputDeviceId));
+
+        static ImmutableArray<AudioDeviceViewModel> Rows(
+            IReadOnlyList<AudioDeviceInfo> devices,
+            string selectedId)
+        {
+            var builder = ImmutableArray.CreateBuilder<AudioDeviceViewModel>(devices.Count);
+            foreach (var device in devices)
+            {
+                builder.Add(new AudioDeviceViewModel(
+                    device,
+                    string.Equals(device.Id, selectedId, StringComparison.Ordinal)));
+            }
+
+            return builder.MoveToImmutable();
+        }
+    }
 
     [RelayCommand]
     private async Task RefreshAsync() => await connection.RefreshAsync();
@@ -827,6 +918,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         connection.Poked -= OnPoked;
         connection.ServerError -= OnServerError;
         icons.IconCached -= OnIconCached;
+        audio.DevicesChanged -= OnAudioDevicesChanged;
+        audio.TransmittingChanged -= OnAudioTransmittingChanged;
     }
 
     /// <summary>Deletes a channel and surfaces any server-side refusal in the chat log.</summary>
