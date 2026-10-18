@@ -74,10 +74,12 @@
 | `pad/` | EchoSixHIYA/WebSpeak-client-for-TeamSpeak | `master@32d84435` | AGPL-3.0-only |
 | `references/teamspeak-js/` | EchoSixHIYA/teamspeak-js | `main@bd80a322` | MIT |
 
-### 本机环境状态
+### 本机环境状态（2026-10-18 更新）
 
-✅ 已具备：JDK 21、Node 24 + pnpm、GitHub 网络（本地代理 `127.0.0.1:7897`）；
-❌ 待安装：Android SDK、NDK `27.2.12479018`、Rust + cargo-ndk（构建前置，涉及 A1b / A2）。
+✅ 已具备：JDK 21、Node 24 + pnpm、GitHub 网络（本地代理 `127.0.0.1:7897`）、
+Android SDK（`D:\Android\Sdk`：platform-35 / build-tools 35.0.0 / build-tools 34.0.0 / platform-tools / NDK `27.2.12479018`）、
+Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS BuildTools 2022（MSVC 14.44，Rust 宿主编译链接）。
+❌ 待接入：arm64 真机（USB 调试）与可用的 TS3/TS6 测试服务器。
 
 > 注意：`phone/` 预编译 JNI 库仅 `arm64-v8a` 为最新 → 模拟器不可用，需 arm64 真机或重建 `.so`。
 
@@ -92,8 +94,9 @@
 | 编号 | 任务 | 产出物 | 验收标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | A1 | 建立开发基线（调研）：引入上游代码，梳理模块结构、构建方式、功能清单；核对许可证 | `docs/A1-phone-baseline.md` | 结构与功能清单完整；许可证合规检查通过 | ✅ 2026-10-18 |
-| A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | ⬜ 阻塞：需 Android SDK（+真机） |
-| A2 | 需求验证与协议规格：从 `pad/` 与 `references/teamspeak-js/` 提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量（命令透传/通知解析） | 技术方案 + 改动点清单 | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | 🔄 下一步 |
+| A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK（`phone/app/build/outputs/apk/debug/app-debug.apk`） | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | 🔄 `assembleDebug` 成功（2026-10-18）；真机连服待设备接入 |
+| A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
+| A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | 🔄 vendor+补丁完成，host 编译验证中；真机/服务器闭环待环境 |
 | A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | ⬜ |
 | A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | ⬜ |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
@@ -105,12 +108,12 @@
 | 编号 | 任务 | 产出物 | 验收标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | B1 | 获取并运行 Web 端 WebSpeak，拆解交互设计与完整功能清单 | `docs/B1-webspeak-spec.md`（功能清单 F1–F14 + 技术规格） | 清单覆盖 Web 端全部可感知功能，与 Web 端实际行为一致 | ✅ 2026-10-18 |
-| B2 | 技术选型与工程初始化：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md` | 工程可构建、可运行、可连接 TS3/TS6 | 🔄 ADR 已提议，待路线确认 |
-| B2s | **Node 运行时 spike（路线前提）**：在 Node 18.20.4 下运行内嵌网关 + TS SDK，对真实服务器验证连通/音频/屏幕共享信令 | spike 结论报告 | 结论明确（通过 / 修补路径 / 转 A'） | ⬜ 优先（依赖路线确认） |
-| B3 | 大屏信息架构与导航设计：频道树 / 成员列表 / 语音控制 / 聊天 / 屏幕共享等区域布局 | UI 设计实现 | 与 Web 版布局与操作路径一致，充分利用大屏 | ⬜ |
-| B4 | 功能逐项复刻：按 B1 清单（F1–F14）逐条实现并对照验收 | 功能全集 | 清单逐项通过，行为与 Web 端一致 | ⬜ |
-| B5 | 屏幕共享完整支持：发布与观看，与 WebSpeak 互通（发布端为原生 MediaProjection 桥） | 可互通的屏幕共享 | 与 WebSpeak 及 TS6 原生客户端互相可见、可观看 | ⬜ |
-| B6 | 手机/Pad 双端资源与逻辑复用策略：提取可共享模块（协议、音频、屏幕共享媒体层） | 共享模块 | 减少重复实现，两端独立可发布 | ⬜ |
+| B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（方案 A' 已采纳） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 |
+| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | spike 结论报告 | 各项能力结论明确；发布桥技术方案确定 | ⬜ 优先 |
+| B3 | 壳应用体验打磨：横屏/大屏全屏、刘海安全区、返回键、后台音频前台服务、常亮 | 壳应用 | 平板全屏体验流畅，后台场景语音不断 | ⬜ |
+| B4 | 功能对齐 Web 版：壳内功能由 Web 本体提供，跟踪 F1–F14 逐项验证并记录缺口 | 验证清单 | 清单逐项与 Web 版一致（管理台/皮肤编辑器按产品决策降级） | ⬜ |
+| B5 | 屏幕共享：观看（WebView 内）+ 发布（原生 MediaProjection 桥），与 WebSpeak/TS6 原生客户端互通 | 可互通的功能 | 互通验收通过 | ⬜ |
+| B6 | 双端共享：A3/A4 原生媒体层与 Pad 发布桥统一设计 | 共享模块 | 减少重复实现，两端独立可发布 | ⬜ |
 
 ---
 
@@ -187,7 +190,9 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ 上游四项目引入工作区（`phone/` `tslib/` `pad/` `references/teamspeak-js/`），提交 SHA 已锁定（见第 2 节）
 - ✅ **ADR-0001 提议**：Pad 路线建议"增强官方 Capacitor 容器"，前置 Node 运行时 spike → `docs/adr/0001-pad-approach.md`
 - ✅ **ADR-0002 采纳**：许可证合规与仓库组织方式 → `docs/adr/0002-licensing-and-workspace.md`
-- 🔜 **下一步（待确认后执行）**：
-  1. 安装 Android SDK / NDK +（后续）Rust 工具链 → 解锁 A1b 构建验证与 A2 的 tslib 改动
-  2. Pad 路线确认 → 启动 B2s（Node 运行时 spike）
-  3. A2：从 `pad/` 与 `references/teamspeak-js/` 提取 TS6 屏幕共享完整信令流程，评估 `tslib/` 改动量
+- ✅ **决策**：Pad 端采用**方案 A'（远程网关 + WebView 壳）**，ADR-0001 已定稿
+- ✅ **环境**：Android SDK（platform-35 / build-tools 35.0.0 / NDK 27.2.12479018）、Rust 1.99.1（含 `aarch64-linux-android` 目标）、VS BuildTools 全部就位；cargo-ndk 安装中
+- ✅ **A2 完成**：TS6 屏幕共享协议规格（7 命令 + 7 通知 + 信令 JSON + 双流程）→ `docs/A2-screen-share-protocol.md`；确认 `tsclientlib` 需打"未知通知透传"补丁（已定 vendor 方案）
+- ✅ **A1b 构建成功**：`assembleDebug` 通过（9m17s，Gradle 8.14 经本地代理下载依赖）；APK 产出于 `phone/app/build/outputs/apk/debug/app-debug.apk`；真机连服验证待设备接入
+- 🔄 **A2b 进行中**：`tsclientlib` vendor 完成（上游 `ee3bc6f4` + declarations 子模块 `83cb8a9`，见 `tslib/vendor/tsclientlib/VENDOR-INFO.md`）；"未知通知透传"补丁已应用（`lib.rs` 透传 + `sync.rs` 忽略 + `Cargo.toml` 改 path 依赖）；host 编译验证进行中
+- 🔜 **后续**：A2b 真机/服务器闭环 → A3/A4 屏幕共享实现；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）

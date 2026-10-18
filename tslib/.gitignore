@@ -1,7 +1,8 @@
 # Rust
 /target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock：本仓库 fork 版本提交 lockfile（含 vendor 补丁依赖的解析结果），
+# 以保证构建可复现——上游原为忽略（见 docs/adr/0002-licensing-and-workspace.md）。
 
 # IDE
 .idea/

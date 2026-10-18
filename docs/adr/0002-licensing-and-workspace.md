@@ -36,6 +36,8 @@
 
 **上游同步方式**：需要拉取上游更新时，重新浅克隆对应上游，与 `phone/`/`pad/` 做 diff，人工挑选合并；上游 SHA 记录在根 README 与本节，更新时同步修订。
 
+**第三方依赖 vendor 策略**：对需要打补丁的第三方库（首个案例：`tsclientlib`，用于 TS6 屏幕共享通知透传，见 `docs/A2-screen-share-protocol.md` §7.1），同样以整树 vendor 方式置于对应子项目内（如 `tslib/vendor/tsclientlib/`），保留其 LICENSE 文件并记录上游 SHA；`Cargo.toml` 以 path 依赖引用（不使用 `[patch]` git 源，避免构建期网络依赖）。vendor 树须通过 `[workspace] exclude` 排除在我们的 Cargo workspace 之外（防止其 dev-dependencies 参与解析，历史上导致 `jni-sys` 版本死锁）；`tslib/Cargo.lock` 予以提交以锁定解析结果，保证构建可复现。
+
 ## 影响
 
 - 新增代码按所在目录归属许可：`phone/` 内新增 → GPL-3.0；`pad/` 内新增 → AGPL-3.0-only；`tslib/` 内新增 → MIT OR Apache-2.0。

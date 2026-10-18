@@ -15,6 +15,11 @@ members = [
     "examples/send-msg",
 ]
 
+# vendor 的第三方依赖树不属于本 workspace（避免其 dev-dependencies 参与依赖解析，
+# 例如 tsclientlib 的 dev-dep cpal 0.18 → jni 0.22 → jni-sys ^0.4.1 与
+# tslib-jni 的 jni 0.21 → jni-sys ^0.3 冲突）。
+exclude = ["vendor/tsclientlib"]
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
@@ -35,10 +40,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # TeamSpeak protocol (tsclientlib)
-tsclientlib = { git = "https://github.com/ReSpeak/tsclientlib.git" }
-tsproto = { git = "https://github.com/ReSpeak/tsclientlib.git" }
-tsproto-packets = { git = "https://github.com/ReSpeak/tsclientlib.git" }
-tsproto-types = { git = "https://github.com/ReSpeak/tsclientlib.git" }
+# TS6-ANDROID-PATCH: 改用 vendor 本地副本（上游 ee3bc6f4 + 未知通知透传补丁），
+# 详见 tslib/vendor/tsclientlib/VENDOR-INFO.md 与 docs/A2-screen-share-protocol.md §7.1。
+tsclientlib = { path = "vendor/tsclientlib/tsclientlib" }
+tsproto = { path = "vendor/tsclientlib/tsproto" }
+tsproto-packets = { path = "vendor/tsclientlib/utils/tsproto-packets" }
+tsproto-types = { path = "vendor/tsclientlib/utils/tsproto-types" }
 
 # Audio
 opus = "0.3"

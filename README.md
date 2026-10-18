@@ -35,9 +35,13 @@
 | JDK 21 | ✅ 已安装 | Gradle / Android 构建 |
 | Node.js 24 + pnpm 12 | ✅ 已安装 | `pad/` 网关与前端开发 |
 | GitHub 网络 | ✅ 经本地代理 `127.0.0.1:7897`（`git -c http.proxy=...`） | 拉取依赖与上游更新 |
-| Android SDK（platform-35 / build-tools / platform-tools） | ❌ 未安装 | 构建 `phone/` 与 `pad/` 的安卓产物 |
-| Android NDK `27.2.12479018` | ❌ 未安装 | 重建 `tslib` 原生库（屏幕共享协议改动时必需） |
-| Rust + cargo-ndk | ❌ 未安装 | 修改 `tslib/` 并交叉编译 arm64 库 |
+| Android SDK | ✅ `D:\Android\Sdk`（platform-35、build-tools 35.0.0、platform-tools、NDK `27.2.12479018`） | 构建 `phone/` 与 `pad/` 的安卓产物 |
+| Rust 1.99 + `aarch64-linux-android` 目标 + cargo-ndk | ✅ 已安装（`~\.cargo\bin`） | 修改 `tslib/` 并交叉编译 arm64 库 |
+| VS Build Tools 2022（MSVC 14.44） | ✅ 已安装 | Rust 在 Windows 上的宿主编译链接 |
+
+> 构建提示：Gradle 首次构建需下载依赖，直连超时的环境可加代理参数再执行：
+> `$env:JAVA_TOOL_OPTIONS='-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897'`
+> （Cargo 同理可用 `$env:HTTP_PROXY` / `$env:HTTPS_PROXY`。）
 
 > 注意：`phone/` 的预编译 JNI 库当前仅 `arm64-v8a` 为最新（x86_64 已过期、无 32 位），**模拟器不可直接运行**，需 arm64 真机或自行重建 `.so`。
 
