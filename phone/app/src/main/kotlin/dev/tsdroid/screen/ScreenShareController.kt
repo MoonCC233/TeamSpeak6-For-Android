@@ -21,8 +21,10 @@ import org.webrtc.DefaultVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
+import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RtpTransceiver
 import org.webrtc.ScreenCapturerAndroid
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
@@ -190,7 +192,8 @@ object ScreenShareController {
                     object : MediaProjection.Callback() {
                         override fun onStop() {
                             Log.i(TAG, "MediaProjection stopped by user or system")
-                            signaling.execute { cleanupPublisher("projection stopped") }
+                            // 统一走服务停止路径（ACTION_STOP → stopPublishing）：
+                            // 先向服务器发送 stopstream 再清理资源，避免留下幽灵流会话。
                             ScreenShareService.stop(app)
                         }
                     },
@@ -226,7 +229,15 @@ object ScreenShareController {
         }
     }
 
-    /** 停止发布（UI 与通知栏按钮入口） */
+    /**
+     * 停止发布：先向服务器发送 stopstream，再清理本地采集与 PeerConnection。
+     *
+     * ⚠️ 这里**不能**回调 [ScreenShareService.stop]——否则会与
+     * `onStartCommand(ACTION_STOP) → stopPublishing()` 形成主线程无限递归
+     * （「Stop requested from notification」风暴 bug）。停止前台服务的
+     * 唯一入口是 [ScreenShareService.stop]：UI 直接调用它，通知栏按钮
+     * 走 PendingIntent → onStartCommand(ACTION_STOP) → stopSelf()。
+     */
     fun stopPublishing() {
         signaling.execute {
             val streamId = publisher?.streamId
@@ -234,7 +245,6 @@ object ScreenShareController {
                 tsClient?.stopScreenShare(streamId)
             }
             cleanupPublisher("user stop")
-            appContext?.let { ScreenShareService.stop(it) }
         }
     }
 
@@ -274,19 +284,61 @@ object ScreenShareController {
             return
         }
         state.peers[viewerId] = pc
-        state.videoTrack?.let { pc.addTrack(it, listOf(VIDEO_STREAM_LABEL)) }
+        // 发布端视频方向必须是 sendonly：TS6 客户端对收到的 offer 执行
+        // 「会话版本改写 + SDP 校验」管线（StreamP2P::HandleRemoteOffer →
+        // MangleSessionVersion），其中 a=sendrecv 会被静默拒收、不产生任何
+        // 错误回复。变体矩阵 W2 与 V6/V7 对照已证实（docs/A3 §6）。
+        // 用 addTransceiver 在创建时即指定 SEND_ONLY：addTrack 默认 sendrecv，
+        // 且事后 setDirection 在首轮真机实测中未生效（offer 仍为 sendrecv）。
+        state.videoTrack?.let { track ->
+            pc.addTransceiver(
+                track,
+                RtpTransceiver.RtpTransceiverInit(
+                    RtpTransceiver.RtpTransceiverDirection.SEND_ONLY,
+                    listOf(VIDEO_STREAM_LABEL),
+                ),
+            )
+        }
+        // 占位音频 m= 线：TS6 客户端要求 offer 至少包含两条媒体线
+        // （m=video + m=audio）。缺失音频线时同样被静默拒收（V5 ❌ / V6 ✅）。
+        // inactive 表示不发送、也不接收音频；只是满足协议结构要求。
+        pc.addTransceiver(
+            MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+            RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.INACTIVE),
+        )
 
         pc.createOffer(
             object : SdpObserverAdapter() {
                 override fun onCreateSuccess(sdp: SessionDescription) {
+                    // 兜底：确保视频段为 a=sendonly——若引擎方向设置仍未生效，
+                    // 在视频段内原位改写；setLocalDescription 采用改写后的描述，
+                    // 保证线上字节与信令内容一致。
+                    val fixed = ensureVideoSendOnly(sdp.description)
+                    val finalDesc = SessionDescription(sdp.type, fixed)
+                    // 联调留档：将最终 offer 原样写入应用外部目录，便于 adb pull
+                    // 做字节级核对（/sdcard/Android/data/<包名>/files/screenshare/last-offer.sdp）
+                    runCatching {
+                        val dir = java.io.File(appContext?.getExternalFilesDir(null), "screenshare")
+                        dir.mkdirs()
+                        java.io.File(dir, "last-offer.sdp").writeText(fixed)
+                    }
+                    Log.i(
+                        TAG,
+                        "Offer for viewer $viewerId: ${fixed.length}B" +
+                            " sendonly=${fixed.contains("a=sendonly")}" +
+                            " audioLine=${fixed.contains("m=audio")}" +
+                            " crlfEnd=${fixed.endsWith("\r\n")}" +
+                            " rewritten=${fixed != sdp.description}",
+                    )
+                    Log.d(TAG, "Offer SDP (viewer $viewerId):\n$fixed")
                     pc.setLocalDescription(
                         object : SdpObserverAdapter() {
                             override fun onSetSuccess() {
-                                tsClient?.respondScreenShareJoin(streamId, viewerId, sdp.description)
+                                tsClient?.respondScreenShareJoin(streamId, viewerId, finalDesc.description)
                                 Log.i(TAG, "Offer sent to viewer $viewerId (stream $streamId)")
                             }
                         },
-                        sdp,
+                        finalDesc,
                     )
                 }
             },
@@ -631,6 +683,23 @@ object ScreenShareController {
         config.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         config.continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
         return config
+    }
+
+    /**
+     * 将 offer 中视频媒体段内的首个 a=sendrecv 原位改写为 a=sendonly（兜底）。
+     *
+     * 仅处理 m=video 起始的媒体段，避免误伤其它段（当前音频段为 inactive）。
+     * 视频段本就不含 sendrecv 时原样返回，保证幂等。
+     */
+    private fun ensureVideoSendOnly(sdp: String): String {
+        val videoStart = sdp.indexOf("m=video")
+        if (videoStart < 0) return sdp
+        val nextMedia = sdp.indexOf("\r\nm=", videoStart)
+        val videoEnd = if (nextMedia < 0) sdp.length else nextMedia + 2
+        val section = sdp.substring(videoStart, videoEnd)
+        if (!section.contains("a=sendrecv")) return sdp
+        val fixedSection = section.replaceFirst("a=sendrecv", "a=sendonly")
+        return sdp.substring(0, videoStart) + fixedSection + sdp.substring(videoEnd)
     }
 
     /** 等比缩放到上限内，并对宽高取偶数（编码器要求） */

@@ -310,7 +310,9 @@ fun ServerScreen(
                         // 屏幕共享（A3）：开始/停止共享本机屏幕
                         IconButton(onClick = {
                             if (isPublishing) {
-                                ScreenShareController.stopPublishing()
+                                // 统一停止入口：startService(ACTION_STOP)
+                                // → stopPublishing() → stopSelf()
+                                ScreenShareService.stop(context)
                             } else {
                                 val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                                     as? MediaProjectionManager

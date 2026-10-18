@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import dev.tsdroid.MainActivity
@@ -34,6 +35,17 @@ class ScreenShareService : Service() {
         private const val NOTIFICATION_ID = 0x5353
 
         private const val ACTION_STOP = "dev.tsdroid.action.STOP_SCREEN_SHARE"
+
+        /**
+         * ACTION_STOP 去重闩锁。
+         *
+         * 历史 bug：`onStartCommand(ACTION_STOP) → stopPublishing()` 若再回调
+         * [ScreenShareService.stop]，会形成 `startService → onStartCommand → …`
+         * 主线程无限递归（实测 ~3000 次/秒的「Stop requested from notification」风暴）。
+         * [ScreenShareController.stopPublishing] 已不再回调本服务；此闩锁作为
+         * 防御层，确保任何重复的停止意图最多只触发一次清理。
+         */
+        private val stopHandled = AtomicBoolean(false)
 
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
@@ -71,11 +83,19 @@ class ScreenShareService : Service() {
         }
 
         if (intent.action == ACTION_STOP) {
-            Log.i(TAG, "Stop requested from notification")
-            ScreenShareController.stopPublishing()
+            if (stopHandled.compareAndSet(false, true)) {
+                Log.i(TAG, "Stop requested from notification")
+                ScreenShareController.stopPublishing()
+            } else {
+                Log.w(TAG, "Duplicate stop request ignored")
+            }
+            // 真正结束前台服务（此前缺少这两步，导致服务悬活 + 递归风暴）
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
             return START_NOT_STICKY
         }
 
+        stopHandled.set(false)
         val streamName = intent.getStringExtra(EXTRA_STREAM_NAME)
             ?: getString(R.string.screen_share_default_name)
         startForegroundCompat(streamName)

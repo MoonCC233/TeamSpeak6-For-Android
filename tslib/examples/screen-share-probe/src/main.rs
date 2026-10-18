@@ -66,6 +66,10 @@ struct Args {
     #[arg(long)]
     auto_respond: bool,
 
+    /// --auto-respond 时使用的 offer SDP 文件（默认占位 SDP；用于 SDP 变体对照实验）
+    #[arg(long)]
+    offer_file: Option<String>,
+
     /// 收到 offer 时自动回复 answer 与 ICE 候选（验证 C5 → N6 往返；需配合 --source-clid）
     #[arg(long)]
     auto_answer: bool,
@@ -231,11 +235,22 @@ fn handle_auto_actions(
             viewer_id,
         } => {
             if args.auto_respond {
+                // ⚠️ 不要 trim SDP！精确回放实验需要原样字节（含结尾 \r\n）。
+                // 缺失行终止符会导致真实客户端在 HandleRemoteOffer 内部静默失败
+                // （MangleSessionVersion 失败，debug 级不可见）。
+                let offer = match &args.offer_file {
+                    Some(path) => std::fs::read_to_string(path)
+                        .map_err(|e| anyhow::anyhow!("读取 offer 文件 {path} 失败: {e}"))?,
+                    None => DUMMY_SDP.to_string(),
+                };
                 report(
                     start,
-                    format!("# 收到观看请求 clid={viewer_id}，自动回复占位 offer"),
+                    format!(
+                        "# 收到观看请求 clid={viewer_id}，自动回复 offer（{} 字节）",
+                        offer.len()
+                    ),
                 );
-                client.respond_screen_share_join(stream_id, *viewer_id, DUMMY_SDP)?;
+                client.respond_screen_share_join(stream_id, *viewer_id, &offer)?;
                 report(start, "# 已发送 respondjoinstreamrequest（decision=1）");
             }
         }
