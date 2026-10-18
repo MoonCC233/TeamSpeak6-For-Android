@@ -269,6 +269,7 @@
     <string name="screen_share_watching_title">Screen share</string>
     <string name="screen_share_join_failed">Could not join the screen share</string>
     <string name="screen_share_close">Close</string>
+    <string name="screen_share_start_failed">Could not start the screen share</string>
     <string name="screen_share_not_connected">Not connected to the server</string>
 
 </resources>

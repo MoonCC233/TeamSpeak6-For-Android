@@ -98,3 +98,18 @@
 3. 自定义 ICE/TURN 设置项（对齐 WebSpeak 的管理端配置语义）；
 4. 发布码率自适应与统计（`getStats` 指标上屏）；
 5. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）。
+
+## 8. 真机验证步骤（设备接入后执行）
+
+1. **构建 + 安装**：`cd phone && ./gradlew.bat :app:assembleDebug` →
+   `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+2. **关键日志**：`adb logcat -s ScreenShare ScreenShareService TsClient tslib-jni`
+   （媒体会话 / 前台服务 / 事件桥 / Rust 侧）
+3. **发布端（A3）**：连接服务器 → 顶栏共享图标 → 系统授权 → 日志应出现
+   `Publisher started` → `Our stream started`；TS6 原生客户端 / WebSpeak 中应出现直播条目并可观看
+4. **观看端（A4）**：他端发布 → 顶栏下方出现"观看"横幅 → 打开观看窗口 → 日志应出现
+   `Join requested` → `Answer sent` → `Video sink attached`
+5. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
+   应收到 `StreamStarted`；再用两个探针实例（`--publish` / `--join --source-clid <clid>`）交叉验证
+   `JoinRequest`、offer/answer 与 ICE 中继。
+6. **验收记录**：结果追加到 TASK.md 第 8 节进度记录（含机型 / 系统版本 / 对端类型）。

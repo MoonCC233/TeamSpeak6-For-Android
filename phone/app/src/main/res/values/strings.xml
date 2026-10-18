@@ -269,6 +269,7 @@
     <string name="screen_share_watching_title">Partage d\'écran</string>
     <string name="screen_share_join_failed">Impossible de rejoindre le partage d\'écran</string>
     <string name="screen_share_close">Fermer</string>
+    <string name="screen_share_start_failed">Impossible de démarrer le partage d\'écran</string>
     <string name="screen_share_not_connected">Non connecté au serveur</string>
 
 </resources>

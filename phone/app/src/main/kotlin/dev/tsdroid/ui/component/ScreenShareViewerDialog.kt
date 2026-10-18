@@ -1,5 +1,9 @@
 package dev.tsdroid.ui.component
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,6 +64,15 @@ fun ScreenShareViewerDialog(
         }
     }
 
+    // 观看期间保持屏幕常亮（被动观看场景下息屏会中断体验）
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(activity) {
+        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -98,4 +111,11 @@ fun ScreenShareViewerDialog(
             }
         }
     }
+}
+
+/** 向上遍历 ContextWrapper 找到宿主 Activity（用于窗口标志操作） */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

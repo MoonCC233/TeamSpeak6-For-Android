@@ -216,6 +216,18 @@ fun ServerScreen(
         }
     }
 
+    // 屏幕共享错误提示（join_rejected / start_failed）
+    val screenShareError by ScreenShareController.lastError.collectAsStateWithLifecycle()
+    LaunchedEffect(screenShareError) {
+        val error = screenShareError ?: return@LaunchedEffect
+        val messageRes = when (error) {
+            "start_failed" -> R.string.screen_share_start_failed
+            else -> R.string.screen_share_join_failed
+        }
+        Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
+        ScreenShareController.clearError()
+    }
+
     // Sync chat state to ViewModel for unread tracking
     LaunchedEffect(chatOpen, chatTab, pmTargetUid) {
         viewModel.setChatState(chatOpen, chatTab, pmTargetUid)
