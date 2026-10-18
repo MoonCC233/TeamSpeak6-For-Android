@@ -93,6 +93,14 @@ class TsClient {
     private val _commandErrors = MutableSharedFlow<String>(replay = 1, extraBufferCapacity = 16)
     val commandErrors: SharedFlow<String> = _commandErrors.asSharedFlow()
 
+    // 屏幕共享事件（TS6 扩展协议）。带少量 replay：UI（如频道界面状态条）订阅
+    // 往往晚于事件到达；Activity 侧另可用 requestStreamInfo 主动补查当前状态。
+    private val _screenShareEvents = MutableSharedFlow<ScreenShareEvent>(
+        replay = 16,
+        extraBufferCapacity = 32,
+    )
+    val screenShareEvents: SharedFlow<ScreenShareEvent> = _screenShareEvents.asSharedFlow()
+
     private val downloadCallbacks = ConcurrentHashMap<String, CompletableDeferred<ByteArray>>()
     private val uploadCallbacks = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
     // path → channelId of the in-flight request; completion events carry only
@@ -339,6 +347,15 @@ class TsClient {
                 // Force refresh to propagate updated permission_hints
                 refreshState()
             }
+            "screen_share" -> {
+                val json = event.data["json"] as? String ?: return
+                val parsed = ScreenShareEventParser.parse(json)
+                if (parsed != null) {
+                    _screenShareEvents.tryEmit(parsed)
+                } else {
+                    Log.w(TAG, "Unrecognized screen_share payload: $json")
+                }
+            }
         }
     }
 
@@ -386,12 +403,14 @@ class TsClient {
         return false
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun resetState() {
         _state.value = ConnectionState.DISCONNECTED
         _channels.value = emptyList()
         _users.value = emptyList()
         _serverInfo.value = null
         cachedClientId = null
+        _screenShareEvents.resetReplayCache()
     }
 
     private fun closeClient(c: Client, reason: String) {
@@ -500,6 +519,77 @@ class TsClient {
         Log.i(TAG, "setInputMuted($muted) client=${if (client != null) "present" else "NULL"}")
         launchNativeCommand("setInputMuted") {
             this.setInputMuted(muted)
+        }
+    }
+
+    // ===== 屏幕共享（TS6 扩展协议，见 docs/A2-screen-share-protocol.md） =====
+
+    /** 查询某客户端当前的屏幕共享状态；结果以 [ScreenShareEvent.StreamInfo] 送达 */
+    fun requestStreamInfo(clientId: Int) {
+        launchNativeCommand("requestStreamInfo") {
+            this.requestStreamInfo(clientId)
+        }
+    }
+
+    /** 发起屏幕共享（发布端）；服务端回执为 [ScreenShareEvent.StreamStarted] */
+    fun setupScreenShare(name: String, withAudio: Boolean = false) {
+        launchNativeCommand("setupScreenShare") {
+            this.setupScreenShare(name, withAudio)
+        }
+    }
+
+    /** 停止自己的屏幕共享 */
+    fun stopScreenShare(streamId: String) {
+        launchNativeCommand("stopScreenShare") {
+            this.stopScreenShare(streamId)
+        }
+    }
+
+    /** 请求观看他人的屏幕共享（观看端） */
+    fun joinScreenShare(streamId: String, sourceClientId: Int) {
+        launchNativeCommand("joinScreenShare") {
+            this.joinScreenShare(streamId, sourceClientId)
+        }
+    }
+
+    /** 回复观看请求（发布端，携带为观看者创建的 WebRTC offer） */
+    fun respondScreenShareJoin(streamId: String, viewerId: Int, offerSdp: String) {
+        launchNativeCommand("respondScreenShareJoin") {
+            this.respondScreenShareJoin(streamId, viewerId, offerSdp)
+        }
+    }
+
+    /** 转发屏幕共享信令（answer / ICE 候选 JSON） */
+    fun sendScreenShareSignal(streamId: String, peerId: Int, json: String) {
+        launchNativeCommand("sendScreenShareSignal") {
+            this.sendScreenShareSignal(streamId, peerId, json)
+        }
+    }
+
+    /** 以 answer 信令回复对端（观看端） */
+    fun sendScreenShareAnswer(streamId: String, peerId: Int, sdp: String) {
+        launchNativeCommand("sendScreenShareAnswer") {
+            this.sendScreenShareAnswer(streamId, peerId, sdp)
+        }
+    }
+
+    /** 发送 ICE 候选信令（mid / mLine 未知时分别传 null / -1） */
+    fun sendScreenShareIceCandidate(
+        streamId: String,
+        peerId: Int,
+        candidate: String,
+        mid: String?,
+        mLine: Int,
+    ) {
+        launchNativeCommand("sendScreenShareIceCandidate") {
+            this.sendScreenShareIceCandidate(streamId, peerId, candidate, mid, mLine)
+        }
+    }
+
+    /** 移出/拒绝观看者（发布端） */
+    fun removeScreenShareViewer(streamId: String, viewerId: Int) {
+        launchNativeCommand("removeScreenShareViewer") {
+            this.removeScreenShareViewer(streamId, viewerId)
         }
     }
 

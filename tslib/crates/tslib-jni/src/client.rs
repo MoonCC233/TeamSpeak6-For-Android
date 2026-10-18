@@ -644,3 +644,218 @@ pub extern "system" fn Java_dev_tslib_Client_nativeSendAudio(
 
     to_jni_result(&mut env, handle.client.send_audio(&bytes, audio_codec));
 }
+
+// ===== 屏幕共享（TS6 扩展协议，见 docs/A2-screen-share-protocol.md） =====
+
+/// `Client.requestStreamInfo(clientId)` — 查询某客户端当前的屏幕共享状态。
+/// 结果通过 `screen_share` 事件送达。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeRequestStreamInfo(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    client_id: jint,
+) {
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle.client.request_stream_info(client_id as u16),
+    );
+}
+
+/// `Client.setupScreenShare(name, withAudio)` — 发起屏幕共享（发布端）。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeSetupScreenShare(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    name: JString,
+    with_audio: jboolean,
+) {
+    let name = match require_string(&mut env, &name) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle.client.setup_screen_share(&name, with_audio != 0),
+    );
+}
+
+/// `Client.stopScreenShare(streamId)` — 停止自己的屏幕共享。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeStopScreenShare(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(&mut env, handle.client.stop_screen_share(&stream_id));
+}
+
+/// `Client.joinScreenShare(streamId, sourceClientId)` — 请求观看他人的流。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeJoinScreenShare(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    source_client_id: jint,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .join_screen_share(&stream_id, source_client_id as u16),
+    );
+}
+
+/// `Client.respondScreenShareJoin(streamId, viewerId, offerSdp)` — 回复观看请求
+/// （携带发布端为该观看者创建的 offer）。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeRespondScreenShareJoin(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    viewer_id: jint,
+    offer_sdp: JString,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let offer = match require_string(&mut env, &offer_sdp) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .respond_screen_share_join(&stream_id, viewer_id as u16, &offer),
+    );
+}
+
+/// `Client.sendScreenShareSignal(streamId, peerId, json)` — 转发信令（answer / ICE）。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeSendScreenShareSignal(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    peer_id: jint,
+    json: JString,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let json = match require_string(&mut env, &json) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .send_screen_share_signal(&stream_id, peer_id as u16, &json),
+    );
+}
+
+/// `Client.sendScreenShareAnswer(streamId, peerId, sdp)` — 以 `cmd=answer` 信令回复对端 SDP。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeSendScreenShareAnswer(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    peer_id: jint,
+    sdp: JString,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let sdp = match require_string(&mut env, &sdp) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    let json = tslib_core::screen_share::answer_signal_json(&sdp);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .send_screen_share_signal(&stream_id, peer_id as u16, &json),
+    );
+}
+
+/// `Client.sendScreenShareIceCandidate(streamId, peerId, candidate, mid, mLine)` — ICE 候选信令。
+/// `mid` / `mLine` 未知时分别传 null / -1。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeSendScreenShareIceCandidate(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    peer_id: jint,
+    candidate: JString,
+    mid: JString,
+    m_line: jint,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let candidate = match require_string(&mut env, &candidate) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let mid = get_string(&mut env, &mid);
+    let m_line = if m_line < 0 { None } else { Some(m_line as u32) };
+    let handle = ptr_to_handle(ptr);
+    let json =
+        tslib_core::screen_share::ice_candidate_signal_json(&candidate, mid.as_deref(), m_line);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .send_screen_share_signal(&stream_id, peer_id as u16, &json),
+    );
+}
+
+/// `Client.removeScreenShareViewer(streamId, viewerId)` — 移出/拒绝观看者。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeRemoveScreenShareViewer(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    viewer_id: jint,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .remove_screen_share_viewer(&stream_id, viewer_id as u16),
+    );
+}

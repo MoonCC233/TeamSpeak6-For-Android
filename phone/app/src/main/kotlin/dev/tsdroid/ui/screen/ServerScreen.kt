@@ -1,5 +1,7 @@
 package dev.tsdroid.ui.screen
 
+import android.content.Context
+import android.media.projection.MediaProjectionManager
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -82,6 +84,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.tsdroid.data.PrivateConversations
 import dev.tsdroid.han.R
+import dev.tsdroid.screen.ScreenShareController
+import dev.tsdroid.service.ScreenShareService
+import dev.tsdroid.service.TsConnectionService
 import dev.tsdroid.bridge.AudioBridge
 import dev.tsdroid.bridge.MicMode
 import dev.tslib.ConnectionState
@@ -97,6 +102,7 @@ import dev.tsdroid.ui.component.LiquidGlassPanel
 import dev.tsdroid.ui.component.LocalGlassWallpaper
 import dev.tsdroid.ui.component.ShareTarget
 import dev.tsdroid.ui.component.ServerInfoSheet
+import dev.tsdroid.ui.component.ScreenShareViewerDialog
 import dev.tsdroid.ui.component.UserPanelSheet
 import dev.tsdroid.ui.component.rememberGlassBackdrop
 import dev.tsdroid.ui.icon.AppIcons
@@ -184,6 +190,32 @@ fun ServerScreen(
 
     val totalUnreadPrivate = unreadPrivate.values.sum()
 
+    // ===== 屏幕共享（A3/A4） =====
+    val isPublishing by ScreenShareController.publishing.collectAsStateWithLifecycle()
+    val remoteStreams by ScreenShareController.remoteStreams.collectAsStateWithLifecycle()
+    var viewingStreamId by remember { mutableStateOf<String?>(null) }
+
+    // MediaProjection 授权结果 → 启动前台服务开始发布（Android 14+ 每次共享都需重新授权）
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) {
+            val service = TsConnectionService.instance
+            if (service == null || !service.tsClient.isConnected) {
+                Toast.makeText(context, R.string.screen_share_not_connected, Toast.LENGTH_SHORT).show()
+            } else {
+                ScreenShareService.start(
+                    context = context,
+                    resultCode = result.resultCode,
+                    data = data,
+                    streamName = context.getString(R.string.screen_share_default_name),
+                    withAudio = false,
+                )
+            }
+        }
+    }
+
     // Sync chat state to ViewModel for unread tracking
     LaunchedEffect(chatOpen, chatTab, pmTargetUid) {
         viewModel.setChatState(chatOpen, chatTab, pmTargetUid)
@@ -225,6 +257,18 @@ fun ServerScreen(
         )
     }
 
+    // 屏幕共享观看窗口（A4）
+    viewingStreamId?.let { streamId ->
+        remoteStreams[streamId]?.let { stream ->
+            ScreenShareViewerDialog(
+                streamId = stream.streamId,
+                sourceClientId = stream.clientId,
+                name = stream.name,
+                onDismiss = { viewingStreamId = null },
+            )
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AnimeBackground(enabled = animeBackground)
 
@@ -251,11 +295,73 @@ fun ServerScreen(
                         IconButton(onClick = { viewModel.toggleFileManager() }) {
                             Icon(AppIcons.File, contentDescription = stringResource(R.string.file_manager))
                         }
+                        // 屏幕共享（A3）：开始/停止共享本机屏幕
+                        IconButton(onClick = {
+                            if (isPublishing) {
+                                ScreenShareController.stopPublishing()
+                            } else {
+                                val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+                                    as? MediaProjectionManager
+                                if (mpm == null) {
+                                    Toast.makeText(
+                                        context,
+                                        R.string.screen_share_join_failed,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
+                                }
+                            }
+                        }) {
+                            Icon(
+                                AppIcons.ScreenShare,
+                                contentDescription = stringResource(
+                                    if (isPublishing) R.string.screen_share_stop
+                                    else R.string.screen_share_start,
+                                ),
+                                tint = if (isPublishing) MaterialTheme.colorScheme.primary
+                                else LocalContentColor.current,
+                            )
+                        }
                         IconButton(onClick = { viewModel.disconnect() }) {
                             Icon(AppIcons.Exit, contentDescription = stringResource(R.string.disconnect))
                         }
                     },
                 )
+                // 远端屏幕共享（A4）：有直播流时提供观看入口
+                remoteStreams.values.forEach { stream ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                AppIcons.ScreenShare,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.screen_share_watching_title) +
+                                    ": " + stream.name,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            TextButton(onClick = { viewingStreamId = stream.streamId }) {
+                                Text(stringResource(R.string.screen_share_watch))
+                            }
+                        }
+                    }
+                }
                 // Connection / microphone health, so a silent failure is never invisible again
                 if (reconnectStatus.active) {
                     StatusBanner(

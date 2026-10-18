@@ -330,6 +330,113 @@ public class Client implements AutoCloseable {
         nativeCreateDirectory(nativePtr, channelId, dirname);
     }
 
+    // ===== 屏幕共享（TS6 扩展协议，见 docs/A2-screen-share-protocol.md） =====
+
+    /**
+     * 查询某客户端当前的屏幕共享直播状态。
+     * 结果通过 {@code screen_share} 事件送达。
+     *
+     * @param clientId 目标客户端 ID
+     */
+    public void requestStreamInfo(int clientId) {
+        checkNotClosed();
+        nativeRequestStreamInfo(nativePtr, clientId);
+    }
+
+    /**
+     * 发起屏幕共享（发布端）。
+     *
+     * @param name      共享名称（显示给观看者）
+     * @param withAudio 是否包含系统声音
+     */
+    public void setupScreenShare(String name, boolean withAudio) {
+        checkNotClosed();
+        nativeSetupScreenShare(nativePtr, name, withAudio);
+    }
+
+    /**
+     * 停止自己的屏幕共享。
+     *
+     * @param streamId 流 ID（来自 {@code screen_share} 事件）
+     */
+    public void stopScreenShare(String streamId) {
+        checkNotClosed();
+        nativeStopScreenShare(nativePtr, streamId);
+    }
+
+    /**
+     * 请求观看他人的屏幕共享（观看端）。
+     *
+     * @param streamId       流 ID
+     * @param sourceClientId 发布者客户端 ID
+     */
+    public void joinScreenShare(String streamId, int sourceClientId) {
+        checkNotClosed();
+        nativeJoinScreenShare(nativePtr, streamId, sourceClientId);
+    }
+
+    /**
+     * 回复观看请求（发布端，携带为观看者创建的 WebRTC offer）。
+     *
+     * @param streamId  流 ID
+     * @param viewerId  观看者客户端 ID
+     * @param offerSdp  发布端生成的 SDP offer
+     */
+    public void respondScreenShareJoin(String streamId, int viewerId, String offerSdp) {
+        checkNotClosed();
+        nativeRespondScreenShareJoin(nativePtr, streamId, viewerId, offerSdp);
+    }
+
+    /**
+     * 转发屏幕共享信令（answer / ICE 候选，JSON 字符串）。
+     *
+     * @param streamId 流 ID
+     * @param peerId   对端客户端 ID
+     * @param json     信令 JSON
+     */
+    public void sendScreenShareSignal(String streamId, int peerId, String json) {
+        checkNotClosed();
+        nativeSendScreenShareSignal(nativePtr, streamId, peerId, json);
+    }
+
+    /**
+     * 以 answer 信令回复对端（观看端收到 offer 后调用）。
+     *
+     * @param streamId 流 ID
+     * @param peerId   对端客户端 ID
+     * @param sdp      本地 SDP answer
+     */
+    public void sendScreenShareAnswer(String streamId, int peerId, String sdp) {
+        checkNotClosed();
+        nativeSendScreenShareAnswer(nativePtr, streamId, peerId, sdp);
+    }
+
+    /**
+     * 发送 ICE 候选信令（{@code mid} / {@code mLine} 未知时分别传 null / -1）。
+     *
+     * @param streamId  流 ID
+     * @param peerId    对端客户端 ID
+     * @param candidate ICE 候选字符串
+     * @param mid       SDP mid（可空）
+     * @param mLine     SDP m-line 索引（-1 表示未知）
+     */
+    public void sendScreenShareIceCandidate(String streamId, int peerId, String candidate,
+                                            String mid, int mLine) {
+        checkNotClosed();
+        nativeSendScreenShareIceCandidate(nativePtr, streamId, peerId, candidate, mid, mLine);
+    }
+
+    /**
+     * 移出/拒绝某个观看者。
+     *
+     * @param streamId 流 ID
+     * @param viewerId 观看者客户端 ID
+     */
+    public void removeScreenShareViewer(String streamId, int viewerId) {
+        checkNotClosed();
+        nativeRemoveScreenShareViewer(nativePtr, streamId, viewerId);
+    }
+
     @Override
     public void close() {
         if (nativePtr != 0) {
@@ -377,4 +484,13 @@ public class Client implements AutoCloseable {
     private static native void nativeDeleteFile(long ptr, long channelId, String name);
     private static native void nativeRenameFile(long ptr, long channelId, String oldName, String newName);
     private static native void nativeCreateDirectory(long ptr, long channelId, String dirname);
+    private static native void nativeRequestStreamInfo(long ptr, int clientId);
+    private static native void nativeSetupScreenShare(long ptr, String name, boolean withAudio);
+    private static native void nativeStopScreenShare(long ptr, String streamId);
+    private static native void nativeJoinScreenShare(long ptr, String streamId, int sourceClientId);
+    private static native void nativeRespondScreenShareJoin(long ptr, String streamId, int viewerId, String offerSdp);
+    private static native void nativeSendScreenShareSignal(long ptr, String streamId, int peerId, String json);
+    private static native void nativeSendScreenShareAnswer(long ptr, String streamId, int peerId, String sdp);
+    private static native void nativeSendScreenShareIceCandidate(long ptr, String streamId, int peerId, String candidate, String mid, int mLine);
+    private static native void nativeRemoveScreenShareViewer(long ptr, String streamId, int viewerId);
 }

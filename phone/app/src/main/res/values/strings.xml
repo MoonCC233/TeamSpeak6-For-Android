@@ -257,5 +257,18 @@
     <string name="server_clients_format">%1$d / %2$d</string>
     <string name="server_channels">Salons</string>
     <string name="server_uptime">Disponibilité</string>
-    <string name="server_welcome">Message de bienvenue</string>
+    <string name="server_welcome">Message de bienvenue</string>    <!-- 屏幕共享（A3/A4） -->
+    <string name="screen_share_default_name">Partage d\'écran</string>
+    <string name="screen_share_channel_name">Partage d\'écran</string>
+    <string name="screen_share_notification_title">Partage d\'écran en cours</string>
+    <string name="screen_share_notification_stop">Arrêter</string>
+    <string name="screen_share_start">Partager l\'écran</string>
+    <string name="screen_share_stop">Arrêter le partage</string>
+    <string name="screen_share_watch">Regarder</string>
+    <string name="screen_share_viewers_title">Spectateurs</string>
+    <string name="screen_share_watching_title">Partage d\'écran</string>
+    <string name="screen_share_join_failed">Impossible de rejoindre le partage d\'écran</string>
+    <string name="screen_share_close">Fermer</string>
+    <string name="screen_share_not_connected">Non connecté au serveur</string>
+
 </resources>

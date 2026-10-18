@@ -257,5 +257,18 @@
     <string name="server_clients_format">%1$d / %2$d</string>
     <string name="server_channels">Channels</string>
     <string name="server_uptime">Uptime</string>
-    <string name="server_welcome">Welcome message</string>
+    <string name="server_welcome">Welcome message</string>    <!-- Screen share (A3/A4) -->
+    <string name="screen_share_default_name">Screen share</string>
+    <string name="screen_share_channel_name">Screen sharing</string>
+    <string name="screen_share_notification_title">Sharing your screen</string>
+    <string name="screen_share_notification_stop">Stop</string>
+    <string name="screen_share_start">Share screen</string>
+    <string name="screen_share_stop">Stop sharing</string>
+    <string name="screen_share_watch">Watch</string>
+    <string name="screen_share_viewers_title">Viewers</string>
+    <string name="screen_share_watching_title">Screen share</string>
+    <string name="screen_share_join_failed">Could not join the screen share</string>
+    <string name="screen_share_close">Close</string>
+    <string name="screen_share_not_connected">Not connected to the server</string>
+
 </resources>

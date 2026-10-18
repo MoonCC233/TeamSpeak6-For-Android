@@ -129,16 +129,29 @@
   `Client` 新增 7 个屏幕共享方法。验证：`cargo check -p tslib-core` 通过；
   `cargo test -p tslib-core` 全量 63 项 + screen_share 12 项全部通过；`cargo check -p tslib-jni` 通过。
 - ✅ **JNI 事件映射**：`tslib-jni` 将新事件映射为 `screen_share` 类型（结构化数据以 `json` 字段承载）；
-  Python 绑定同步映射。（命令行 JNI 函数随 A3 Kotlin 侧一起添加。）
+  Python 绑定同步映射。
+- ✅ **JNI 命令函数（2026-10-18 完成）**：9 个 `Java_dev_tslib_Client_native*`（7 命令 + `sendScreenShareAnswer`
+  + `sendScreenShareIceCandidate`，后两者在 Rust 侧组装 `answer` / `iceCandidate` 信令 JSON，避免 Kotlin 重复实现协议）；
+  Java 绑定（`tslib/java` 与 `phone` 两份 `Client.java`）与 Kotlin 包装（`TsClient.kt`）同步完成。
+  验证：`cargo check -p tslib-jni` 通过；release `.so`（arm64-v8a，strip 后 9.7 MB）已重编并替换
+  `phone/app/src/main/jniLibs/arm64-v8a/libtslib_jni.so`，`llvm-nm` 确认 9 个符号全部导出。
 - 🔄 **端到端验证**：探针 `tslib/examples/screen-share-probe` 已就绪，待在真实 TS6 服务器上执行
   （A2b 验收：`--publish` 应收到 `StreamStarted` 通知；双端 `--publish`/`--join` 应触发 `JoinRequest`）。
-- ⬜ **未开始**：§7.3 Android 媒体与 UI（A3/A4）。
+- 🔄 **§7.3 Android 媒体与 UI（A3/A4）**：实现已完成、编译通过，待真机与对端互通验证（见 §7.3 实施状态
+  与 `docs/A3-screen-share-android.md`）。
 
 预计量级：**Rust 约 300–500 行新增 + vendor 树上 20–40 行补丁**。
 
 ### 7.2 JNI 与 Java 绑定（`tslib/crates/tslib-jni` + `tslib/java`）
 - 新命令 → 新 JNI 函数（照现有 `nativeSendChannelMessage` 模式）；新事件 → `create_java_event`（`tslib-jni/src/types.rs:137`）扩展映射。
 - 手机 App 侧 `phone/.../bridge/TsClient.kt` 已有事件分发框架与 `launchNativeCommand` 模式（`TsClient.kt:457`），新增事件分支与命令包装即可。
+
+**实施状态（2026-10-18）**：
+
+- ✅ 9 个 JNI 命令函数已实现于 `tslib-jni/src/client.rs`（见 §7.1）；两份 `Client.java` 同步新增公开方法
+  与 native 声明；`TsClient.kt` 新增 `screenShareEvents` 事件流（replay=16）与 9 个命令包装。
+- ✅ 事件桥：`TsClient.kt` 的 `handleEvent` 新增 `screen_share` 分支，将 Rust 侧 Serde JSON 解析为
+  `ScreenShareEvent`（`ScreenShareEvents.kt`，宽松解析；未知负载仅记日志）。
 
 ### 7.3 Android 媒体与 UI（`phone/app`）
 | 项 | 方案 |
@@ -151,6 +164,20 @@
 | STUN/TURN | 默认 `stun:turn.teamspeak.com:3478`；预留自定义 ICE 服务器设置项（复用 `setupstream` 无关，属本地 PC 配置） |
 
 预计量级：**Kotlin/JNI 绑定约 300–600 行 + UI 约 500–800 行 + 媒体集成约 400–700 行**。
+
+**实施状态（2026-10-18）**：
+
+- ✅ **已实现**（编译通过；详细设计与验证清单见 `docs/A3-screen-share-android.md`）：
+  - WebRTC：`io.github.webrtc-sdk:android:150.7871.01`（Chromium M150；125+ 支持 16 KB 页）；
+  - 发布端 `ScreenShareController`（每观看者一条 PeerConnection，`respondjoinstreamrequest` 携带 offer）
+    + `ScreenShareService`（`mediaProjection` 前台服务；Android 14+ 顺序：授权 → startForeground → getMediaProjection）；
+  - 观看端：`joinStream`/`leaveStream` + `SurfaceViewRenderer` 渲染（`ScreenShareViewerDialog`）；
+  - UI：服务器界面顶栏共享开关（含 MediaProjection 授权流程）+ 远端流横幅"观看"入口；
+  - ICE：默认 TS 公共 STUN（与 WebSpeak 默认一致）；`sdpSemantics=UNIFIED_PLAN`；
+  - 构建：Gradle `buildRustLibs` 修正（`../tslib`、`--release`、arm64-v8a、Ninja 生成器）。
+- ⬜ **待完成/待验证**：真机验证（授权、采集、与 WebSpeak / TS6 原生客户端互通）；
+  `withAudio=false`（系统声音采集需 `AudioPlaybackCapture`，后续版本）；观看端旋转/全屏适配；
+  自定义 ICE/TURN 设置项；发布码率调优。
 
 ## 8. 风险清单（进入 A3 前先验证）
 

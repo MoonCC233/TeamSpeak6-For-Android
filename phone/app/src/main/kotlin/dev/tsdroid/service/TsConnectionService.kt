@@ -68,6 +68,7 @@ import dev.tsdroid.bridge.AvatarCache
 import dev.tsdroid.bridge.TsClient
 import dev.tsdroid.data.BookmarkStore
 import dev.tsdroid.data.SettingsStore
+import dev.tsdroid.screen.ScreenShareController
 import dev.tslib.ConnectionState
 import dev.tslib.Identity
 import dev.tslib.Channel
@@ -276,6 +277,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         avatarCache = AvatarCache(applicationContext.cacheDir)
         audioBridge = AudioBridge(applicationContext, tsClient)
         audioBridge.initialize()
+        // 屏幕共享（A3/A4）：预热 WebRTC（提前创建 PeerConnectionFactory，降低首次共享延迟）
+        ScreenShareController.warmUp(applicationContext)
 
         // Load saved floating window position
         loadSavedPosition()
@@ -835,6 +838,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
             }
             // Start event loop
             tsClient.startEventLoop()
+            // 屏幕共享（A3/A4）：绑定事件流（消费 screen_share 事件）
+            ScreenShareController.attach(tsClient)
             null
         } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -912,6 +917,8 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         }
         unregisterNetworkCallback()
         hideFloatingWindow()
+        // 屏幕共享（A3/A4）：停止发布/观看并解绑事件流（内部幂等）
+        ScreenShareController.detach()
         audioBridge.stopCapture()
         releaseWakeLock()
     }

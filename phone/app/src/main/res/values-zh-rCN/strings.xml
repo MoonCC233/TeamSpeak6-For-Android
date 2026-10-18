@@ -256,5 +256,18 @@
     <string name="server_clients_format">%1$d / %2$d</string>
     <string name="server_channels">频道数</string>
     <string name="server_uptime">运行时长</string>
-    <string name="server_welcome">欢迎语</string>
+    <string name="server_welcome">欢迎语</string>    <!-- 屏幕共享（A3/A4） -->
+    <string name="screen_share_default_name">屏幕共享</string>
+    <string name="screen_share_channel_name">屏幕共享</string>
+    <string name="screen_share_notification_title">正在共享屏幕</string>
+    <string name="screen_share_notification_stop">停止</string>
+    <string name="screen_share_start">共享屏幕</string>
+    <string name="screen_share_stop">停止共享</string>
+    <string name="screen_share_watch">观看</string>
+    <string name="screen_share_viewers_title">观看者</string>
+    <string name="screen_share_watching_title">屏幕共享</string>
+    <string name="screen_share_join_failed">无法加入屏幕共享</string>
+    <string name="screen_share_close">关闭</string>
+    <string name="screen_share_not_connected">未连接到服务器</string>
+
 </resources>

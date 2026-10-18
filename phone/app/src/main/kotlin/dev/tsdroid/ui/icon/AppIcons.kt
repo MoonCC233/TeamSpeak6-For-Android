@@ -182,6 +182,23 @@ object AppIcons {
             ),
         )
     }
+
+    /** 屏幕共享（A3/A4）：显示器 + 向上分享箭头 */
+    val ScreenShare: ImageVector by lazy {
+        icon(
+            name = "ScreenShare",
+            strokes = listOf(
+                // 显示器边框
+                "M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+                // 底座
+                "M9 21h6",
+                "M12 18v3",
+                // 向上分享箭头
+                "M12 15v-6",
+                "M9.5 11.5 12 9l2.5 2.5",
+            ),
+        )
+    }
 }
 
 /**

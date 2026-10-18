@@ -111,21 +111,34 @@ android {
 }
 
 // Task to build Rust native libraries via cargo-ndk
+// 前置：NDK 27.2.12479018、cargo-ndk、Ninja（Android SDK 的 cmake/3.22.1/bin 自带）。
+// 产物直接覆盖 src/main/jniLibs/arm64-v8a/libtslib_jni.so —— arm64-v8a 是唯一受支持 ABI
+// （见 defaultConfig.ndk.abiFilters 的说明）。
+// 注意：Windows 上必须指定 CMAKE_GENERATOR=Ninja（默认 VS 生成器不支持 Android 交叉编译）；
+// 本仓库的 tslib 无需 vendored-openssl（依赖树为纯 Rust 加密栈）。
 tasks.register<Exec>("buildRustLibs") {
-    workingDir = file("${rootDir}/../tslib_multi")
-    environment("ANDROID_NDK_HOME", System.getenv("ANDROID_NDK_HOME")
-        ?: "${System.getProperty("user.home")}/Android/Sdk/ndk/27.2.12479018")
-    environment("ANDROID_NDK", System.getenv("ANDROID_NDK_HOME")
-        ?: "${System.getProperty("user.home")}/Android/Sdk/ndk/27.2.12479018")
+    val sdkDir = Properties().apply {
+        val f = file("${rootDir}/local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }.getProperty("sdk.dir")
+        ?: System.getenv("ANDROID_SDK_ROOT")
+        ?: System.getenv("ANDROID_HOME")
+        ?: "${System.getProperty("user.home")}/Android/Sdk"
+    val ndkDir = System.getenv("ANDROID_NDK_HOME")
+        ?: "${sdkDir}/ndk/27.2.12479018".replace('\\', '/')
+
+    workingDir = file("${rootDir}/../tslib")
+    environment("ANDROID_NDK_HOME", ndkDir)
+    environment("ANDROID_NDK", ndkDir)
+    environment("CMAKE_GENERATOR", "Ninja")
+    environment("CMAKE_MAKE_PROGRAM", "${sdkDir}/cmake/3.22.1/bin/ninja.exe".replace('\\', '/'))
     environment("CMAKE_POLICY_VERSION_MINIMUM", "3.5")
     commandLine(
         "cargo", "ndk",
         "-t", "arm64-v8a",
-        "-t", "x86_64",
         "-o", "${projectDir}/src/main/jniLibs",
         "build", "--release", "-p", "tslib-jni",
-        "--features", "vendored-openssl",
-        "-j10"
+        "-j", "10"
     )
 }
 
@@ -148,6 +161,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
     implementation(libs.mikepenz.markdown.m3)
+    // 屏幕共享（A3/A4）：WebRTC 媒体层（发布端屏幕采集 / 观看端渲染）
+    implementation(libs.webrtc.android)
     debugImplementation(libs.androidx.ui.tooling)
 
     testImplementation(libs.junit)
