@@ -31,6 +31,11 @@ pub extern "system" fn Java_dev_tslib_Client_nativeCreate(
     password: JString,
     channel: JString,
 ) -> jlong {
+    // 确保 ndk-context 已初始化：DNS 解析（hickory）与音频（cpal）依赖它。
+    // JNI_OnLoad 时 Application 可能尚未注册（本库在应用类静态初始化中加载），
+    // 此处必然已就绪。
+    crate::try_init_ndk_context(&mut env);
+
     let address = match require_string(&mut env, &address) {
         Ok(s) => s,
         Err(()) => return 0,
@@ -105,6 +110,10 @@ pub extern "system" fn Java_dev_tslib_Client_nativeWaitConnected(
     _class: JClass,
     ptr: jlong,
 ) {
+    // 双保险：DNS 解析（hickory-resolver）就在本次调用内部发生，
+    // 必须先保证 ndk-context 已初始化。
+    crate::try_init_ndk_context(&mut env);
+
     log::info!("nativeWaitConnected: waiting...");
     let handle = ptr_to_handle(ptr);
     let result = handle.runtime.block_on(handle.client.wait_connected());

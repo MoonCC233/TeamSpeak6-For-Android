@@ -12,6 +12,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = "0.21"
+# Android 平台上 hickory-resolver（DNS）与 cpal（音频）依赖 ndk-context 获取
+# JVM + Application Context；须由 JNI_OnLoad 初始化（见 src/lib.rs）。
+ndk-context = "0.1"
 serde_json.workspace = true
 tslib-core = { path = "../tslib-core" }
 tslib-audio = { path = "../tslib-audio" }
