@@ -1,0 +1,199 @@
+<template>
+  <div :class="['demo-page', 'ws-skin-root', { 'skin-initializing': !skinReady }]" :lang="language" data-ws-part="app" data-ws-page="demo">
+    <SkinPluginOutlet
+      v-if="activeSkin?.pluginData"
+      :skin-id="activeSkin.id"
+      :skin-version="activeSkin.version"
+      :document="activeSkin.pluginData"
+      page="demo"
+      :data="skinPluginContext"
+      :assets="activeSkin.assets"
+      :actions="skinPluginActions"
+    />
+    <header class="demo-header" data-ws-part="demo.header">
+      <div class="demo-brand" data-ws-part="demo.brand"><span><Icon name="waveform" :size="21" /></span><div><strong>WebSpeak</strong><small>{{ copy.browserClient }}</small></div></div>
+      <div class="demo-tools" data-ws-part="demo.header-tools"><span class="demo-badge" data-ws-part="demo.badge">{{ copy.demoBadge }}</span><SkinSwitcher v-model="activeSkinId" data-ws-part="demo.skin-switcher" :menu-label="copy.skinSelector" :options="skinOptions" @change="onSkinChange" /><LanguageSwitcher v-model="language" data-ws-part="demo.language-switcher" :menu-label="copy.languageMenu" @change="persistLanguage" /><a href="/" data-ws-part="demo.home-link">{{ copy.back }}</a></div>
+    </header>
+
+    <div v-if="reconnecting" class="demo-reconnect" data-ws-part="demo.reconnect" role="status"><Icon name="refresh" :size="17" /><span>{{ copy.reconnecting }}</span><button type="button" data-ws-part="demo.reconnect.restore" @click="reconnecting = false">{{ copy.restore }}</button></div>
+    <main class="demo-shell" data-ws-part="demo.layout">
+      <aside class="demo-channel-panel" data-ws-part="demo.channels">
+        <div class="demo-panel-title" data-ws-part="demo.channels.heading"><span>{{ copy.channels }}</span><strong>{{ selectedChannel.name }}</strong></div>
+        <div v-for="channel in channels" :key="channel.id" :class="['demo-channel', { active: selectedChannelId === channel.id }]" data-ws-part="demo.channel" :data-ws-state="selectedChannelId === channel.id ? 'active' : 'idle'">
+          <button type="button" data-ws-part="demo.channel.select" @click="selectChannel(channel.id)"><Icon name="volume" :size="16" /><span>{{ channel.name }}</span><small>{{ channel.members.length }}</small></button>
+          <div class="demo-channel-members" data-ws-part="demo.channel.members"><span v-for="member in channel.members" :key="member.id" :class="{ speaking: speakingId === member.id }"><i :style="avatarStyle(member.name)">{{ member.name[0] }}</i>{{ member.name }}</span></div>
+        </div>
+      </aside>
+
+      <section class="demo-main" data-ws-part="demo.main">
+        <div class="demo-hero" data-ws-part="demo.hero"><div><span class="demo-live" data-ws-part="demo.live"><i></i>{{ copy.simulated }}</span><h1 data-ws-part="demo.hero.title"><Icon name="volume" :size="24" /> {{ selectedChannel.name }}</h1><p data-ws-part="demo.hero.description">{{ copy.heroLead }}</p><small data-ws-part="demo.hero.online"><Icon name="users" :size="14" /> {{ selectedChannel.members.length }} {{ copy.online }}</small></div><div class="demo-wave" data-ws-part="demo.wave" aria-hidden="true"><i v-for="bar in bars" :key="bar" :style="{ height: `${bar}px` }"></i></div></div>
+        <div class="demo-section-heading" data-ws-part="demo.voice-heading"><span>{{ copy.voiceActivity }}</span><strong>{{ copy.speakingNow }}</strong></div>
+        <div class="demo-voice-grid" data-ws-part="demo.voice-grid">
+          <article
+            v-for="member in selectedChannel.members"
+            :key="member.id"
+            :class="['demo-voice-card', { speaking: speakingId === member.id }]"
+            data-ws-part="demo.voice-card"
+            :data-ws-state="speakingId === member.id ? 'speaking' : 'connected'"
+            role="button"
+            tabindex="0"
+            :aria-pressed="speakingId === member.id"
+            @click="speakingId = member.id"
+            @keydown.enter.prevent="speakingId = member.id"
+            @keydown.space.prevent="speakingId = member.id"
+          >
+            <i data-ws-part="demo.avatar" :style="avatarStyle(member.name)">{{ member.name[0] }}</i>
+            <strong data-ws-part="demo.member-name">{{ member.name }}</strong>
+            <span data-ws-part="demo.member-status">{{ speakingId === member.id ? copy.speaking : copy.connected }}</span>
+          </article>
+        </div>
+
+        <div class="demo-chat-head" data-ws-part="demo.chat.heading"><div><span>{{ copy.textChannel }}</span><strong># {{ selectedChannel.name }} {{ copy.chat }}</strong></div><div class="demo-tabs" data-ws-part="demo.chat.tabs"><button v-for="tab in tabs" :key="tab.id" type="button" :class="{ active: activeTab === tab.id }" data-ws-part="demo.chat.tab" :data-ws-state="activeTab === tab.id ? 'active' : 'idle'" @click="activeTab = tab.id">{{ tab.label }}</button></div></div>
+        <div class="demo-messages" data-ws-part="demo.chat.messages"><div v-for="message in visibleMessages" :key="message.id" :class="['demo-message', { mine: message.mine }]" data-ws-part="demo.chat.message" :data-ws-state="message.mine ? 'mine' : 'other'" @dblclick="message.mine = !message.mine"><i :style="avatarStyle(message.author)">{{ message.author[0] }}</i><div><small>{{ message.author }} · {{ message.time }}</small><p>{{ messageText(message) }}</p></div></div><div v-if="!visibleMessages.length" class="demo-empty" data-ws-part="demo.chat.empty"><Icon name="message" :size="22" /><strong>{{ copy.emptyChat }}</strong></div></div>
+        <form class="demo-composer" data-ws-part="demo.chat.composer" @submit.prevent="sendMessage"><input v-model="draft" data-ws-part="demo.chat.input" :placeholder="copy.placeholder" :aria-label="copy.placeholder" /><button type="submit" data-ws-part="demo.chat.send" :disabled="!draft.trim()"><Icon name="send" :size="17" /></button></form>
+      </section>
+
+      <aside class="demo-actions-panel" data-ws-part="demo.actions"><div class="demo-panel-title" data-ws-part="demo.actions.heading"><span>{{ copy.voice }}</span><strong>{{ copy.simulationControls }}</strong></div><button type="button" data-ws-part="demo.action.speaking" @click="toggleSpeaking"><Icon name="mic" :size="17" /> {{ speakingId ? copy.stopSpeaking : copy.simulateSpeaking }}</button><button type="button" data-ws-part="demo.action.poke" @click="poke = !poke"><Icon name="bell" :size="17" /> {{ copy.poke }}</button><button type="button" data-ws-part="demo.action.reconnect" @click="reconnecting = true"><Icon name="refresh" :size="17" /> {{ copy.simulateReconnect }}</button><div class="demo-note" data-ws-part="demo.note"><Icon name="shield" :size="16" /><span>{{ copy.demoNote }}</span></div><div class="demo-user" data-ws-part="demo.user"><i :style="avatarStyle('illusia')">I</i><div><strong>illusia</strong><small>{{ copy.you }} · {{ copy.ready }}</small></div><span class="demo-green-dot"></span></div></aside>
+    </main>
+    <div v-if="poke" class="demo-poke" data-ws-part="demo.poke-notification" role="status"><Icon name="bell" :size="17" /><span><strong>msicbot</strong> {{ copy.pokedYou }}</span><button type="button" data-ws-part="demo.poke.dismiss" @click="poke = false"><Icon name="close" :size="14" /></button></div>
+  </div>
+  <SkinLoadRecoveryNotice :error="skinLoadError" :language="language" @use-built-in="switchToBuiltInAfterLoadError" />
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
+import Icon from "../components/Icon.vue";
+import "../styles/skin-plugin.css";
+import SkinPluginOutlet from "../components/SkinPluginOutlet.js";
+import LanguageSwitcher from "../components/LanguageSwitcher.vue";
+import SkinLoadRecoveryNotice from "../components/SkinLoadRecoveryNotice.vue";
+import SkinSwitcher, { type SkinOption } from "../components/SkinSwitcher.vue";
+import { saveLocalPreferences } from "../services/local-persistence.js";
+import { resolveSkinMessages } from "../services/skin-content.js";
+import { BUILTIN_ILLUSIA_SKIN_ID, isPublicSkinEnabled } from "../services/skin-catalog.js";
+import { BUILTIN_DARK_SKIN, BUILTIN_LIGHT_SKIN } from "../services/skin-runtime.js";
+import { usePublicSkin } from "../composables/usePublicSkin.js";
+
+type Language = "zh" | "en" | "de" | "ru" | "ja";
+const illusiaSkinLabels: Record<Language, string> = { zh: "ILLUSIA 风", en: "ILLUSIA style", de: "ILLUSIA-Stil", ru: "Стиль ILLUSIA", ja: "ILLUSIA スタイル" };
+interface DemoMessage { id: number; author: string; time: string; text: string; zhText?: string; enText?: string; ruText?: string; jaText?: string; mine: boolean }
+type Tab = "channel" | "server";
+const storedLanguage = localStorage.getItem("webspeak:language");
+const language = ref<Language>(storedLanguage === "en" || storedLanguage === "de" || storedLanguage === "ru" || storedLanguage === "ja" ? storedLanguage : "zh");
+const baseCopy = computed(() => language.value === "zh" ? zh : language.value === "de" ? de : language.value === "ru" ? ru : language.value === "ja" ? ja : en);
+const { activeSkin, activeSkinId, skinReady, installedSkins, catalogSkins,
+  skinLoadError, select: onSkinChange, initialize: initializeSkin,
+  switchToBuiltInAfterLoadError } = usePublicSkin();
+const skinOptions = computed<SkinOption[]>(() => [
+  ...catalogSkins.value.map((skin) => ({
+    value: skin.id,
+    label: skin.id === BUILTIN_LIGHT_SKIN ? copy.value.skinDay : skin.id === BUILTIN_DARK_SKIN ? copy.value.skinNight : skin.id === BUILTIN_ILLUSIA_SKIN_ID ? illusiaSkinLabels[language.value] : skin.name,
+    icon: skin.id === BUILTIN_LIGHT_SKIN ? "sun" : skin.id === BUILTIN_DARK_SKIN ? "moon" : "compass",
+  })),
+  ...installedSkins.value.filter((skin) => !catalogSkins.value.some((item) => item.id === skin.id) && isPublicSkinEnabled(skin.id)).map((skin) => ({ value: skin.id, label: skin.name, icon: "compass" })),
+]);
+const copy = computed(() => {
+  const result = { ...baseCopy.value };
+  const content = activeSkin.value?.contentData;
+  if (!content) return result;
+  const fullLocale = language.value === "zh" ? "zh-CN" : language.value === "en" ? "en-US" : language.value === "de" ? "de-DE" : language.value === "ru" ? "ru-RU" : "ja-JP";
+  for (const locale of [...new Set([content.defaultLocale, language.value, fullLocale])]) {
+    for (const [key, value] of Object.entries(content.locales[locale]?.messages ?? {})) {
+      if (!key.startsWith("demo.")) continue;
+      const copyKey = key.slice("demo.".length) as keyof typeof result;
+      if (Object.prototype.hasOwnProperty.call(result, copyKey) && value.trim()) result[copyKey] = value;
+    }
+  }
+  return result;
+});
+const skinMessages = computed(() => resolveSkinMessages(activeSkin.value?.contentData, language.value));
+const selectedChannelId = ref("quiet");
+const activeTab = ref<Tab>("channel");
+const speakingId = ref("illusia");
+const reconnecting = ref(false);
+const poke = ref(false);
+const draft = ref("");
+const bars = [15, 31, 21, 42, 25, 50, 32, 21, 38, 27, 45, 18, 33];
+const channels = [
+  { id: "quiet", name: "Quiet Zone", members: [{ id: "illusia", name: "illusia" }, { id: "msicbot", name: "msicbot" }] },
+  { id: "lounge", name: "Lounge", members: [{ id: "alice", name: "Alice" }] },
+  { id: "music", name: "Music room", members: [] },
+];
+const messages = ref<DemoMessage[]>([
+  { id: 1, author: "illusia", time: "10:24", text: "", zhText: "大家好，欢迎来到 WebSpeak。", enText: "Hello everyone, welcome to WebSpeak.", mine: true },
+  { id: 2, author: "msicbot", time: "10:25", text: "", zhText: "语音和文字频道都已同步。", enText: "Voice and text channels are in sync.", mine: false },
+]);
+const zh = { languageMenu: "语言", skinSelector: "皮肤", skinDay: "日间", skinNight: "夜间", browserClient: "浏览器语音工作台", demoBadge: "演示 — 模拟数据", back: "返回主页", reconnecting: "连接中断，正在恢复…", restore: "恢复连接", channels: "频道", channel: "频道", simulated: "演示状态", heroLead: "这里展示 WebSpeak 的频道、语音和聊天交互。", online: "人在线", voiceActivity: "语音活动", speakingNow: "正在语音中", speaking: "正在说话…", connected: "已连接", textChannel: "文字频道", chat: "聊天", server: "服务器", emptyChat: "暂无消息", placeholder: "发送一条消息…", voice: "语音", simulationControls: "模拟控制", stopSpeaking: "停止说话", simulateSpeaking: "模拟发言", poke: "戳一戳", simulateReconnect: "模拟重连", demoNote: "此页面不会连接真实 TeamSpeak 服务器。", you: "你", ready: "已就绪", pokedYou: "戳了你一下" };
+const en = { languageMenu: "Language", skinSelector: "Skin", skinDay: "Day", skinNight: "Night", browserClient: "Browser voice workspace", demoBadge: "Demo — simulated data", back: "Back home", reconnecting: "Connection interrupted, recovering…", restore: "Restore", channels: "Channels", channel: "Channel", simulated: "Simulation", heroLead: "A preview of WebSpeak channels, voice, and chat interactions.", online: "online", voiceActivity: "VOICE ACTIVITY", speakingNow: "Speaking now", speaking: "Speaking…", connected: "Connected", textChannel: "TEXT CHANNEL", chat: "chat", server: "Server", emptyChat: "No messages yet", placeholder: "Send a message…", voice: "Voice", simulationControls: "Simulation controls", stopSpeaking: "Stop speaking", simulateSpeaking: "Simulate speaking", poke: "Poke", simulateReconnect: "Simulate reconnect", demoNote: "This page never connects to a real TeamSpeak server.", you: "You", ready: "Ready", pokedYou: "poked you" };
+const de = { languageMenu: "Sprache", skinSelector: "Design", skinDay: "Tag", skinNight: "Nacht", browserClient: "Sprachbereich im Browser", demoBadge: "Demo — simulierte Daten", back: "Zur Startseite", reconnecting: "Verbindung unterbrochen, Wiederherstellung…", restore: "Wiederherstellen", channels: "Kanäle", channel: "Kanal", simulated: "Simulation", heroLead: "Eine Vorschau auf Kanäle, Sprache und Chat von WebSpeak.", online: "online", voiceActivity: "SPRACHAKTIVITÄT", speakingNow: "Spricht gerade", speaking: "Spricht…", connected: "Verbunden", textChannel: "TEXTKANAL", chat: "Chat", server: "Server", emptyChat: "Noch keine Nachrichten", placeholder: "Nachricht senden…", voice: "Sprache", simulationControls: "Simulation steuern", stopSpeaking: "Sprechen stoppen", simulateSpeaking: "Sprechen simulieren", poke: "Anstupsen", simulateReconnect: "Verbindung simulieren", demoNote: "Diese Seite verbindet sich nie mit einem echten TeamSpeak-Server.", you: "Du", ready: "Bereit", pokedYou: "hat dich angestupst" };
+const ru = { languageMenu: "Язык", skinSelector: "Оформление", skinDay: "День", skinNight: "Ночь", browserClient: "Голосовое пространство в браузере", demoBadge: "Демо — симуляция", back: "На главную", reconnecting: "Соединение прервано, восстановление…", restore: "Восстановить", channels: "Каналы", channel: "Канал", simulated: "Симуляция", heroLead: "Предпросмотр каналов, голоса и чата WebSpeak.", online: "онлайн", voiceActivity: "ГОЛОСОВАЯ АКТИВНОСТЬ", speakingNow: "Сейчас говорят", speaking: "Говорит…", connected: "Подключён", textChannel: "ТЕКСТОВЫЙ КАНАЛ", chat: "чат", server: "Сервер", emptyChat: "Сообщений пока нет", placeholder: "Написать сообщение…", voice: "Голос", simulationControls: "Управление симуляцией", stopSpeaking: "Остановить речь", simulateSpeaking: "Симулировать речь", poke: "Толкнуть", simulateReconnect: "Симулировать переподключение", demoNote: "Эта страница не подключается к реальному серверу TeamSpeak.", you: "Вы", ready: "Готово", pokedYou: "толкнул вас" };
+const ja = { languageMenu: "言語", skinSelector: "スキン", skinDay: "昼", skinNight: "夜", browserClient: "ブラウザ音声ワークスペース", demoBadge: "デモ — シミュレーション", back: "ホームに戻る", reconnecting: "接続が中断されました。復旧中…", restore: "復旧", channels: "チャンネル", channel: "チャンネル", simulated: "シミュレーション", heroLead: "WebSpeak のチャンネル、音声、チャットのプレビューです。", online: "人がオンライン", voiceActivity: "音声アクティビティ", speakingNow: "発話中", speaking: "発話中…", connected: "接続済み", textChannel: "テキストチャンネル", chat: "チャット", server: "サーバー", emptyChat: "メッセージはありません", placeholder: "メッセージを送信…", voice: "音声", simulationControls: "シミュレーション操作", stopSpeaking: "発話を停止", simulateSpeaking: "発話をシミュレート", poke: "つつく", simulateReconnect: "再接続をシミュレート", demoNote: "このページは実際の TeamSpeak サーバーには接続しません。", you: "あなた", ready: "準備完了", pokedYou: "あなたをつつきました" };
+const tabs = computed(() => [{ id: "channel" as const, label: copy.value.channel }, { id: "server" as const, label: copy.value.server }]);
+const selectedChannel = computed(() => channels.find((channel) => channel.id === selectedChannelId.value) ?? channels[0]);
+const visibleMessages = computed(() => activeTab.value === "channel" ? messages.value : []);
+
+function persistLanguage() { localStorage.setItem("webspeak:language", language.value); void saveLocalPreferences({ schemaVersion: 1, language: language.value }); }
+onMounted(() => { void initializeSkin(); });
+function selectChannel(id: string) { selectedChannelId.value = id; activeTab.value = "channel"; }
+function toggleSpeaking() { speakingId.value = speakingId.value ? "" : selectedChannel.value.members[0]?.id ?? ""; }
+function messageText(message: DemoMessage): string { return language.value === "zh" ? message.zhText ?? message.text : language.value === "ru" ? message.ruText ?? message.enText ?? message.text : language.value === "ja" ? message.jaText ?? message.enText ?? message.text : message.enText ?? message.text; }
+function sendMessage() { const text = draft.value.trim(); if (!text) return; messages.value.push({ id: Date.now(), author: "illusia", time: "now", text, mine: true }); draft.value = ""; }
+function avatarStyle(name: string) { let hash = 0; for (const char of name) hash = char.charCodeAt(0) + ((hash << 5) - hash); const colors = ["#168f83", "#7b9ed0", "#b99070", "#8b78b9"]; return { background: colors[Math.abs(hash) % colors.length] }; }
+
+const skinPluginContext = computed(() => ({
+  skin: { locale: language.value, messages: skinMessages.value },
+  session: {
+    status: { connected: true, connecting: false, channelId: selectedChannel.value.id, channelName: selectedChannel.value.name, userName: "illusia" },
+    channels: channels.map((channel, depth) => ({ id: channel.id, name: channel.name, parentId: "", depth, memberCount: channel.members.length, current: channel.id === selectedChannel.value.id })),
+    members: selectedChannel.value.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      channelId: selectedChannel.value.id,
+      status: member.id === speakingId.value ? "speaking" : "online",
+      speaking: member.id === speakingId.value,
+      self: member.id === "illusia",
+    })),
+  },
+  favorites: { items: [] },
+  chat: { messages: visibleMessages.value.map((message) => ({ id: String(message.id), author: message.author, text: messageText(message), time: message.time, kind: message.mine ? "self" : "message", channelId: selectedChannel.value.id })) },
+}));
+
+const skinPluginActions = {
+  "voice.joinChannel": (args: Record<string, string | number | boolean>) => {
+    if (typeof args.channelId === "string" && channels.some((channel) => channel.id === args.channelId)) selectChannel(args.channelId);
+  },
+  "favorites.switch": (_args: Record<string, string | number | boolean>) => undefined,
+  "chat.sendMessage": (args: Record<string, string | number | boolean>) => {
+    if (typeof args.text !== "string" || args.text.length > 1000) return;
+    draft.value = args.text;
+    sendMessage();
+  },
+};
+</script>
+
+<style scoped>
+.demo-page, .demo-page * { box-sizing: border-box; }
+.demo-page.skin-initializing { visibility: hidden; }
+.demo-page { min-height: 100dvh; padding: 0 28px 38px; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at 72% 12%, rgba(126, 213, 205, .18), transparent 26rem), #f7f9f8; color: #1c2b28; }
+.demo-page button, .demo-page input { font: inherit; }
+.demo-header { display: flex; align-items: center; justify-content: space-between; width: min(1380px, 100%); min-height: 82px; margin: 0 auto; }
+.demo-brand, .demo-tools, .demo-brand > div, .demo-tools { display: flex; align-items: center; }.demo-brand { gap: 10px; }.demo-brand > span { display: grid; place-items: center; width: 39px; height: 39px; color: #fff; background: #006a64; border-radius: 12px; }.demo-brand strong, .demo-brand small { display: block; }.demo-brand strong { color: #006a64; font-size: 18px; }.demo-brand small { margin-top: 2px; color: #84938e; font-size: 10px; }.demo-tools { gap: 15px; color: #68807a; font-size: 12px; }.demo-tools button, .demo-tools a { padding: 7px 10px; color: #006a64; background: #e1f2ee; border: 1px solid #cbe6e0; border-radius: 7px; font-size: 11px; font-weight: 700; text-decoration: none; cursor: pointer; }.demo-badge { color: #2d7d50; font-weight: 700; }
+.demo-reconnect { display: flex; align-items: center; gap: 9px; width: min(1380px, 100%); margin: 0 auto 14px; padding: 11px 14px; color: #8b6537; background: #fff8e9; border: 1px solid #efd9aa; border-radius: 10px; }.demo-reconnect span { flex: 1; }.demo-reconnect button { padding: 6px 10px; color: #7d5d35; background: #fff; border: 1px solid #ead0a0; border-radius: 6px; cursor: pointer; }
+.demo-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr) 235px; gap: 18px; width: min(1380px, 100%); min-height: 720px; margin: 0 auto; }.demo-channel-panel, .demo-actions-panel, .demo-main { min-width: 0; padding: 20px; border: 1px solid #e0ebe7; border-radius: 16px; background: rgba(255,255,255,.9); box-shadow: 0 12px 30px rgba(26,66,59,.05); }.demo-panel-title { display: grid; gap: 5px; margin-bottom: 20px; }.demo-panel-title span, .demo-section-heading span, .demo-chat-head span { color: #79918c; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }.demo-panel-title strong { color: #263a35; font-size: 18px; }.demo-channel { margin: 4px -8px 12px; padding: 3px 8px 9px; border-radius: 10px; }.demo-channel.active { background: #e2f3ef; }.demo-channel > button { display: flex; align-items: center; gap: 7px; width: 100%; padding: 8px 0; color: #45635b; background: transparent; border: 0; text-align: left; cursor: pointer; }.demo-channel.active > button { color: #006a64; font-weight: 800; }.demo-channel button span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.demo-channel button small { color: #84a19a; }.demo-channel-members { display: grid; gap: 7px; padding-left: 22px; color: #7b8e88; font-size: 11px; }.demo-channel-members span { display: flex; align-items: center; gap: 7px; }.demo-channel-members i, .demo-user > i, .demo-voice-card > i, .demo-message > i { display: grid; place-items: center; flex: 0 0 auto; color: #fff; border-radius: 50%; font-style: normal; font-weight: 800; }.demo-channel-members i { width: 20px; height: 20px; font-size: 9px; }.demo-channel-members span.speaking i { box-shadow: 0 0 0 2px #83e88d, 0 0 10px rgba(83,214,105,.45); }
+.demo-main { padding: 27px 32px; }.demo-hero { display: flex; align-items: center; justify-content: space-between; min-height: 190px; padding: 26px 29px; overflow: hidden; border-radius: 14px; background: linear-gradient(112deg, #dff3ef, #f6fbfa); }.demo-live { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; color: #2d7e48; background: #d4f3d9; border-radius: 999px; font-size: 10px; font-weight: 700; }.demo-live i, .demo-green-dot { width: 7px; height: 7px; background: #58d476; border-radius: 50%; }.demo-hero h1 { display: flex; align-items: center; gap: 8px; margin: 17px 0 7px; color: #18302c; font-size: 28px; letter-spacing: -.05em; }.demo-hero p { margin: 0 0 15px; color: #64817a; font-size: 12px; }.demo-hero small { display: flex; align-items: center; gap: 6px; color: #52716b; font-size: 11px; }.demo-wave { display: flex; align-items: center; gap: 5px; height: 60px; padding-right: 22px; }.demo-wave i { width: 4px; border-radius: 4px; background: #65cabe; }.demo-wave i:nth-child(3n) { background: #8fe990; }.demo-section-heading { display: grid; gap: 5px; margin: 31px 0 15px; }.demo-section-heading strong { color: #1d2c28; font-size: 21px; }.demo-voice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap: 11px; }.demo-voice-card { display: grid; justify-items: center; gap: 7px; padding: 15px 8px; border: 1px solid #edf1ef; border-radius: 12px; background: #fff; cursor: pointer; }.demo-voice-card > i { width: 56px; height: 56px; font-size: 18px; }.demo-voice-card strong { color: #2c3935; font-size: 12px; }.demo-voice-card span { color: #91a09a; font-size: 10px; }.demo-voice-card.speaking { border-color: #83e88d; box-shadow: 0 0 0 2px rgba(131,232,141,.18), 0 8px 20px rgba(68,173,79,.12); }.demo-voice-card.speaking span { color: #2e8b45; }.demo-chat-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: 33px; padding-top: 23px; border-top: 1px solid #edf2f0; }.demo-chat-head strong { display: block; margin-top: 6px; color: #1d2c28; font-size: 20px; }.demo-tabs { display: flex; gap: 5px; }.demo-tabs button { padding: 7px 9px; color: #78908a; background: #f0f6f3; border: 0; border-radius: 7px; cursor: pointer; }.demo-tabs button.active { color: #006a64; background: #dff1ed; font-weight: 700; }.demo-messages { display: grid; align-content: start; gap: 13px; min-height: 215px; max-height: 270px; margin-top: 17px; overflow-y: auto; padding: 7px 3px; }.demo-message { display: flex; align-items: flex-start; gap: 9px; max-width: 76%; }.demo-message.mine { justify-self: end; flex-direction: row-reverse; text-align: right; }.demo-message > i { width: 29px; height: 29px; font-size: 10px; }.demo-message small { color: #9ca9a4; font-size: 9px; }.demo-message p { margin: 4px 0 0; padding: 8px 11px; color: #43534e; background: #f1f5f3; border-radius: 4px 11px 11px 11px; font-size: 12px; }.demo-message.mine p { color: #fff; background: #006a64; border-radius: 11px 4px 11px 11px; }.demo-empty { display: grid; place-content: center; justify-items: center; gap: 8px; min-height: 170px; color: #91a29b; }.demo-empty strong { font-size: 12px; }.demo-composer { display: flex; gap: 8px; padding: 7px 8px 7px 12px; background: #f1f6f4; border-radius: 10px; }.demo-composer input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 12px; }.demo-composer button { display: grid; place-items: center; width: 34px; height: 34px; color: #fff; background: #006a64; border: 0; border-radius: 8px; cursor: pointer; }.demo-composer button:disabled { opacity: .35; cursor: not-allowed; }
+.demo-actions-panel { display: flex; flex-direction: column; gap: 9px; }.demo-actions-panel > button { display: flex; align-items: center; gap: 8px; padding: 10px; color: #4d6a62; background: #f0f6f3; border: 1px solid #e1ece8; border-radius: 8px; text-align: left; cursor: pointer; }.demo-actions-panel > button:hover { color: #006a64; border-color: #b9ddd6; }.demo-note { display: flex; gap: 8px; margin-top: 10px; padding: 11px; color: #68837b; background: #eef8f4; border-radius: 9px; font-size: 10px; line-height: 1.5; }.demo-user { display: flex; align-items: center; gap: 9px; margin-top: auto; padding-top: 15px; border-top: 1px solid #e9efed; }.demo-user > i { width: 35px; height: 35px; font-size: 12px; }.demo-user div { min-width: 0; flex: 1; }.demo-user strong, .demo-user small { display: block; }.demo-user strong { color: #34423d; font-size: 12px; }.demo-user small { margin-top: 4px; color: #8a9a94; font-size: 10px; }.demo-poke { position: fixed; z-index: 10; top: 82px; right: 25px; display: flex; align-items: center; gap: 9px; max-width: min(380px, calc(100% - 32px)); padding: 11px 12px; color: #52645c; background: #fffdf6; border: 1px solid #f0dfbd; border-radius: 9px; box-shadow: 0 8px 22px rgba(88,65,28,.12); font-size: 12px; }.demo-poke span { flex: 1; }.demo-poke strong { color: #8f6532; }.demo-poke button { display: grid; place-items: center; padding: 3px; color: #9b8a6e; background: transparent; border: 0; cursor: pointer; }
+@media (max-width: 1080px) { .demo-shell { grid-template-columns: 210px minmax(0, 1fr); }.demo-actions-panel { grid-column: 1 / -1; min-height: 160px; }.demo-actions-panel .demo-panel-title { margin-bottom: 3px; }.demo-actions-panel > button { display: inline-flex; width: fit-content; }.demo-note { margin-top: 4px; }.demo-user { margin-top: 0; } }
+@media (max-width: 720px) { .demo-page { padding: 0 14px 24px; }.demo-header { min-height: 68px; }.demo-tools { gap: 6px; font-size: 10px; }.demo-badge { display: none; }.demo-shell { display: block; min-height: 0; }.demo-channel-panel { margin-bottom: 12px; }.demo-channel-panel .demo-channel:not(.active) { display: none; }.demo-actions-panel { margin-top: 12px; }.demo-main { padding: 17px 14px; }.demo-hero { min-height: 170px; padding: 20px; }.demo-wave { padding-right: 0; transform: scale(.75); transform-origin: right center; }.demo-chat-head { display: grid; align-items: start; }.demo-tabs { overflow-x: auto; }.demo-message { max-width: 94%; } }
+@media (max-width: 360px) { .demo-tools a { display: none; }.demo-hero h1 { font-size: 23px; }.demo-hero p { font-size: 11px; }.demo-voice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The whole app is zoomed via #app (zoom:var(--ui-scale)) on large displays;
+   divide the fixed poke banner offsets back to CSS pixels so it stays at the
+   intended 82px/25px margin instead of drifting by the zoom factor. */
+@media (min-width: 851px) { .demo-poke { top: calc(82px / var(--ui-scale)); right: calc(25px / var(--ui-scale)); } }
+.demo-page[data-ws-skin="builtin.dark"] { color: #e8f3f0; background: #101918; }
+.demo-page[data-ws-skin="builtin.dark"] .demo-channel-panel, .demo-page[data-ws-skin="builtin.dark"] .demo-actions-panel, .demo-page[data-ws-skin="builtin.dark"] .demo-main, .demo-page[data-ws-skin="builtin.dark"] .demo-voice-card { background: #172321; border-color: #30413d; }
+.demo-page[data-ws-skin="builtin.dark"] .demo-panel-title strong, .demo-page[data-ws-skin="builtin.dark"] .demo-hero h1, .demo-page[data-ws-skin="builtin.dark"] .demo-section-heading strong, .demo-page[data-ws-skin="builtin.dark"] .demo-chat-head strong, .demo-page[data-ws-skin="builtin.dark"] .demo-voice-card strong, .demo-page[data-ws-skin="builtin.dark"] .demo-user strong { color: #e8f3f0; }
+.demo-page[data-ws-skin="builtin.dark"] .demo-hero { background: linear-gradient(112deg, #173e3a, #172321); }
+.demo-page[data-ws-skin="builtin.dark"] .demo-message p, .demo-page[data-ws-skin="builtin.dark"] .demo-composer, .demo-page[data-ws-skin="builtin.dark"] .demo-actions-panel > button { background: #202f2c; color: #d7e7e3; }
+.demo-page[data-ws-skin="builtin.dark"] .demo-chat-head, .demo-page[data-ws-skin="builtin.dark"] .demo-user { border-color: #30413d; }
+.demo-page :where(button, a, input, select, [role="button"]):focus-visible { outline: 3px solid #69d2c7; outline-offset: 2px; }
+</style>

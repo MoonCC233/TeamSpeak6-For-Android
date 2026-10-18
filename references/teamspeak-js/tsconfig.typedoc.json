@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "isolatedDeclarations": false
+  },
+  "include": ["src/core/index.ts", "src/client/index.ts", "src/query/index.ts"]
+}

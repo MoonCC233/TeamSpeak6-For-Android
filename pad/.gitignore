@@ -1,0 +1,32 @@
+node_modules/
+dist/
+web/dist/
+web/skin-wasm-interpreter/target/
+mobile/node_modules/
+web/android/.gradle/
+web/android/build/
+web/android/app/build/
+web/android/local.properties
+web/android/app/src/main/assets/public/
+web/android/app/src/main/assets/capacitor.config.json
+data/
+config.json
+*.log
+.env
+# Local deployment notes and downloaded artifacts.
+/release-artifacts/
+/webspeak-deploy*.tar.gz
+/webspeak-update*.tar.gz
+/teamspeak6-server-linux-amd64.tar.xz
+/.local-opus-hook.cjs
+/界面参考/stitch_teamspeak_web_interface.zip
+claude.pem
+
+# Private credentials and deployment notes stay local.
+.env.*
+!.env.example
+*.pem
+*.key
+/.claude/
+/LOCAL-RELEASE-RUNBOOK.md
+/DEPLOYMENT-*.md

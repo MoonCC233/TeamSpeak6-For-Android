@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">TS6 Droid</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_english">English</string>
+    <string name="language_french">Français</string>
+    <string name="language_change_title">Appliquer la modification de langue ?</string>
+    <string name="language_change_message">L’application doit redémarrer pour appliquer %1$s.</string>
+    <string name="restart">Redémarrer</string>
+    <string name="mute_user">Mute user</string>
+    <string name="unmute_user">Unmute user</string>
+    <string name="user_muted">Muted</string>
+    <string name="channel_connection">Connection</string>
+    <string name="channel_connection_desc">Notification de connexion au serveur</string>
+    <string name="accessibility_service_desc">TeamSpeak 6 Global Voice Controller</string>
+
+    <!-- ConnectionScreen -->
+    <string name="server_address">Adresse du serveur</string>
+    <string name="server_address_placeholder">localhost:9987</string>
+    <string name="nickname">Pseudo</string>
+    <string name="password_optional">Mot de passe (optionnel)</string>
+    <string name="channel_optional">Channel (optionnel)</string>
+    <string name="default_channel">Channel par défaut</string>
+    <string name="browse_channels">Parcourir les channels</string>
+    <string name="connecting">Connexion\u2026</string>
+    <string name="connect">Se connecter</string>
+    <string name="add_bookmark">Ajouter un favori</string>
+    <string name="edit_bookmark">Modifier le favori</string>
+    <string name="save">Enregistrer</string>
+    <string name="bookmarks">Favoris</string>
+    <string name="no_bookmarks">Aucun favori</string>
+    <string name="manual_connection">Connexion manuelle</string>
+    <string name="auto_reconnect">Reconnexion automatique</string>
+    <string name="remove">Supprimer</string>
+    <string name="edit">Modifier</string>
+    <string name="select_channel">Sélectionner un channel</string>
+    <string name="cancel">Annuler</string>
+
+    <!-- ServerScreen -->
+    <string name="server">Serveur</string>
+    <string name="disconnect">Déconnexion</string>
+    <string name="settings">Paramètres</string>
+    <string name="audio_gain">Gain audio</string>
+    <string name="audio_gain_value">×%1$.1f</string>
+    <string name="mic_gain">Gain micro</string>
+    <string name="gain_percent">%1$d%%</string>
+    <string name="show_link_thumbnails">Miniatures des liens vidéo</string>
+    <string name="auto_load_images">Charger les images automatiquement</string>
+    <string name="enable_floating_window">Activer la fenêtre flottante</string>
+    <string name="anime_background">Fond animé aléatoire</string>
+    <string name="noise_suppression">Réduction de bruit du micro</string>
+    <string name="chat">Chat</string>
+    <string name="push_to_talk">Appuyer pour parler</string>
+    <string name="ptt">PTT</string>
+    <string name="mute_mic">Couper le micro</string>
+    <string name="mute">Mute</string>
+    <string name="unmute_mic">Activer le micro</string>
+    <string name="tab_channel">Channel</string>
+    <string name="tab_private">MP</string>
+    <string name="tab_home">Accueil</string>
+    <string name="tab_settings">Paramètres</string>
+    <string name="no_connection">Aucune connexion</string>
+    <string name="wallpaper_cache_size">Cache fond d\'écran : %1$s Mo (%2$d images)</string>
+    <string name="wallpaper_max_cache">Cache max : %1$d Mo</string>
+    <string name="wallpaper_view_cache">Voir le cache des fonds d\'écran</string>
+    <string name="wallpaper_cache_images">fonds d\'écran</string>
+    <string name="wallpaper_clear_cache">Vider le cache des fonds d\'écran</string>
+    <string name="wallpaper_clear_cache_confirm">Êtes-vous sûr de vouloir vider tout le cache des fonds d\'écran ? Cette action est irréversible.</string>
+    <string name="wallpaper_cache_empty">Aucun fond d\'écran en cache</string>
+    <string name="wallpaper_export">Enregistrer dans la galerie</string>
+    <string name="wallpaper_export_all">Tout enregistrer</string>
+    <string name="wallpaper_export_done">%1$d image(s) enregistrée(s) dans la galerie</string>
+    <string name="wallpaper_export_failed">Échec de l\'enregistrement dans la galerie</string>
+    <string name="session_running">Session en cours</string>
+    <string name="session_running_desc">La session continue en arrière-plan</string>
+    <string name="back_to_session">Revenir à la session</string>
+    <string name="back_to_home">Retour à l\'accueil</string>
+    <string name="floating_overlay_offline">Non connecté</string>
+    <string name="floating_overlay_no_channel">Dans aucun canal</string>
+    <string name="floating_overlay_members">%1$d ici</string>
+    <string name="floating_overlay_channels">Canaux</string>
+    <string name="floating_overlay_alone">Vous êtes seul dans ce canal</string>
+    <string name="floating_overlay_no_channels">Aucun canal où aller</string>
+    <string name="floating_overlay_open_app">Ouvrir l\'application</string>
+    <string name="floating_overlay_collapse">Réduire</string>
+    <string name="floating_overlay_push_to_talk">Appuyez pour parler</string>
+    <string name="floating_overlay_muted">Micro coupé</string>
+    <string name="floating_overlay_talking">Micro ouvert : vous parlez</string>
+    <string name="floating_overlay_mic_not_working">Le microphone ne fonctionne pas</string>
+    <string name="floating_overlay_deafened">Son coupé</string>
+    <string name="overlay_permission_needed">La fenêtre flottante nécessite l\'autorisation « afficher par-dessus les autres applications »</string>
+    <string name="confirm">Confirmer</string>
+    <string name="custom_bg_title">Fond d\'écran personnalisé</string>
+    <string name="custom_bg_upload">Choisir dans la galerie</string>
+    <string name="custom_bg_delete">Supprimer le fond personnalisé</string>
+    <string name="custom_bg_delete_confirm">Supprimer le fond personnalisé ? Le fond en ligne sera utilisé à la place.</string>
+    <string name="custom_bg_active">Fond personnalisé défini</string>
+    <string name="custom_bg_inactive">Aucun fond personnalisé</string>
+    <string name="custom_bg_saved">Fond d\'écran enregistré</string>
+    <string name="custom_bg_load_error">Échec du chargement du fond</string>
+    <string name="crop_title">Recadrer le fond</string>
+    <string name="crop_hint">Glissez le cadre blanc pour sélectionner la zone</string>
+    <string name="section_appearance">Apparence</string>
+    <string name="section_audio">Audio</string>
+    <!-- 身份导出/导入 -->
+    <string name="identity_section">Identité</string>
+    <string name="identity_uid">UID de l\'identité : %1$s</string>
+    <string name="identity_uid_none">Pas encore générée (créée à la première connexion)</string>
+    <string name="identity_export">Exporter</string>
+    <string name="identity_import">Importer</string>
+    <string name="identity_export_success">Identité exportée</string>
+    <string name="identity_export_failed">Échec de l\'export : aucune identité</string>
+    <string name="identity_import_success">Importé ; effectif à la prochaine connexion</string>
+    <string name="identity_import_failed">Échec de l\'import : fichier d\'identité invalide</string>
+    <string name="identity_warning">L\'identité est votre identifiant de compte : l\'importer change votre identité sur les serveurs, et le fichier exporté doit être conservé en sécurité.</string>
+    <string name="mic_mode">Mode du micro</string>
+    <string name="mic_mode_vad">Activation vocale</string>
+    <string name="mic_mode_open">Micro ouvert</string>
+    <string name="vad_threshold">Seuil de déclenchement : %1$d dB</string>
+    <string name="vad_threshold_hint">Les niveaux au-dessus du seuil déclenchent la transmission. -45 dB convient à la plupart des environnements.</string>
+    <string name="user_uid">ID unique</string>
+    <string name="user_platform">Plateforme</string>
+    <string name="user_version">Version</string>
+    <string name="user_country">Pays</string>
+    <string name="user_talkpower">Puissance de parole</string>
+    <string name="user_volume">Volume :</string>
+    <string name="volume_default">par défaut</string>
+    <string name="volume_reset">Réinitialiser le volume</string>
+    <string name="private_message">Message privé</string>
+    <string name="section_chat">Chat</string>
+    <string name="section_more">Plus</string>
+    <string name="update_check">Vérifier les mises à jour</string>
+    <string name="update_found">Nouvelle version disponible</string>
+    <string name="update_already_latest">Déjà à jour</string>
+    <string name="update_available">Nouvelle version %1$s disponible</string>
+    <string name="update_download">Mettre à jour</string>
+    <string name="update_downloading">Téléchargement en cours</string>
+    <string name="update_later">Plus tard</string>
+    <string name="update_no_changelog">Aucun journal de modifications</string>
+    <string name="close">Fermer</string>
+    <string name="filter_all">Tous</string>
+    <string name="message_channel_placeholder">Message channel\u2026</string>
+    <string name="message_private_placeholder">Message à %1$s\u2026</string>
+    <string name="send">Envoyer</string>
+    <string name="user_fallback">User #%1$d</string>
+
+    <!-- UserItem -->
+    <string name="status_recording">Enregistrement</string>
+    <string name="status_talking">En train de parler</string>
+    <string name="status_muted">Micro coupé</string>
+    <string name="status_output_muted">Son coupé</string>
+    <string name="status_away">Absent</string>
+
+    <!-- MessageBubble -->
+    <string name="image">Image</string>
+    <string name="file_attachment_info">%1$s \u00B7 Fichier partagé</string>
+    <string name="file_attachment_server">%1$s \u00B7 Fichier du serveur</string>
+    <string name="download_not_supported">Téléchargement non pris en charge</string>
+    <string name="tap_to_download">Appuyer pour télécharger</string>
+    <string name="tap_to_view">Appuyer pour afficher</string>
+    <string name="tap_to_load_images">Appuyez pour charger les images</string>
+    <string name="retry">Réessayer</string>
+    <string name="file_too_large">Fichier supérieur à la limite de 10 Mo — envoi annulé</string>
+    <string name="tap_to_open">Appuyer pour ouvrir</string>
+    <string name="downloading">Téléchargement\u2026</string>
+    <string name="download">Télécharger</string>
+    <string name="file_saved_label">Enregistré dans Téléchargements</string>
+    <string name="file_saved">%1$s enregistré</string>
+    <string name="attach_file">Pièce jointe</string>
+    <string name="file_size_bytes">%1$d o</string>
+    <string name="file_size_kb">%1$.1f Ko</string>
+    <string name="file_size_mb">%1$.1f Mo</string>
+    <string name="file_size_gb">%1$.1f Go</string>
+
+    <!-- File Manager -->
+    <string name="file_manager">Fichiers</string>
+    <string name="no_files">Aucun fichier</string>
+    <string name="new_folder">Nouveau dossier</string>
+    <string name="rename">Renommer</string>
+    <string name="delete_file">Supprimer</string>
+    <string name="confirm_delete">Supprimer %1$s ?</string>
+    <string name="enter_folder_name">Nom du dossier</string>
+    <string name="enter_new_name">Nouveau nom</string>
+    <string name="refresh">Actualiser</string>
+    <string name="create">Créer</string>
+    <string name="folder">Dossier</string>
+    <string name="upload">Envoyer</string>
+    <string name="share_in_channel">Channel actuel</string>
+    <string name="share_file_title">Partager %1$s</string>
+
+    <!-- Notification -->
+    <string name="notif_unmute">Réactiver</string>
+    <string name="notif_mute">Mute</string>
+
+    <!-- ViewModel -->
+    <string name="unknown_sender">Inconnu</string>
+    <string name="me_sender">Moi</string>
+    <string name="error_address_nickname_required">L\'adresse et le pseudo sont requis</string>
+    <string name="error_nickname_too_short">Le pseudo doit contenir au moins 3 caractères</string>
+    <string name="connection_failed">Échec de la connexion</string>
+    <string name="browse_failed">Échec du parcours des channels</string>
+    <string name="error_overlay_permission_required">Veuillez accorder l\'autorisation « Superposition » pour la fenêtre flottante</string>
+    <string name="error_service_start_failed">Impossible de démarrer le service en arrière-plan</string>
+    <string name="error_not_connected">Non connecté au serveur</string>
+    <string name="download_failed">Échec du téléchargement</string>
+
+
+    <!-- Crash report overlay -->
+    <string name="crash_report_title">Fermeture anormale détectée</string>
+    <string name="common_copy">Copier</string>
+    <string name="common_copied">Copié</string>
+
+    <!-- AboutScreen -->
+    <string name="about_software">À propos</string>
+    <string name="about_back">← Retour</string>
+    <string name="about_credits_title">Crédits &amp; Origines</string>
+    <string name="about_credits_desc">Ce projet est basé sur l\'excellent projet open-source de Grégory D, avec une localisation approfondie et des améliorations de fonctionnalités. Un grand merci à l\'auteur original pour ses contributions exceptionnelles à la communauté vocale open-source !</string>
+    <string name="about_enhancement_title">Déclaration de Localisation &amp; Amélioration</string>
+    <string name="about_enhancement_desc">Cette version propose une localisation en texte intégral par yuaxi, ainsi qu\'une refonte complète du code de compatibilité système pour résoudre plusieurs problèmes de plantage en arrière-plan. De plus, pour le cas d\'utilisation des communications vocales tactiques sur mobile, un développement secondaire exclusif a ajouté des fonctionnalités de base telles que la [Console Flottante Translucide Minimaliste], optimisant considérablement l\'expérience d\'interaction micro/muet pendant l\'e-sport et les jeux.</string>
+    <string name="about_license_title">Licence Open Source (GPLv3)</string>
+    <string name="about_license_desc">Ce projet suit strictement la licence open-source GNU GPLv3 (GNU General Public License v3). Cela signifie que tout individu ou équipe modifiant ou dérivant des redistributions de ce projet DOIT le garder entièrement open-source, adopter inconditionnellement la licence GPLv3, et conserver l\'attribution des droits d\'auteur de l\'auteur original (Grégory D) et du développeur secondaire (yuaxi). Toute forme de redistribution en source fermée, de chiffrement secondaire ou de profit secret est strictement interdite !</string>
+    <string name="about_repo_title">Dépôt Source Officiel &amp; Mises à jour</string>
+    <string name="about_repo_desc">Le code source complet de ce projet, les itérations officielles des fonctionnalités, les optimisations de l\'expérience et les correctifs d\'urgence seront publiés en priorité et de manière indépendante sur mon dépôt GitHub officiel. N\'hésitez pas à mettre une étoile (Star), à suivre, à signaler des problèmes (Issues) ou à soumettre des PR :</string>
+    <string name="about_repo_link">🔗 Cliquez pour visiter le dépôt GitHub open-source de yuaxi</string>
+    <string name="about_warning_title">⚠️ Avertissement de Fraude</string>
+    <string name="about_warning_desc">Ce programme est un produit purement bénévole et à but non lucratif destiné à l\'échange technique open-source. Il est entièrement GRATUIT et entièrement OPEN-SOURCE ! Toute forme de vente commerciale, d\'achat groupé ou de facturation via des codes d\'activation est strictement interdite. Si vous avez obtenu ce logiciel via des canaux payants (tels que des bots de revente, des plateformes de trading, des services de téléchargement payants, etc.), vous avez été victime d\'une arnaque ! Veuillez immédiatement lancer une demande de remboursement pour infraction sur la plateforme, et rendez-vous sur le dépôt open-source officiel pour signaler les revendeurs au marché noir !</string>
+    <string name="about_contributors_title">Contributeurs</string>
+    <string name="about_contributions_count">%1$d contributions</string>
+    <string name="contributors_load_error">Échec du chargement</string>
+
+    <!-- Fiabilité en arrière-plan -->
+    <string name="reconnect_in_progress">Reconnexion… (tentative %1$d)</string>
+    <string name="reconnect_notification">Déconnecté — reconnexion (tentative %1$d)</string>
+    <string name="mic_unavailable_warning">Le micro est actuellement indisponible ; tentative de récupération automatique. Si cela persiste, vérifiez que le système autorise l\'enregistrement en arrière-plan pour cette application.</string>
+    <string name="mic_unavailable_short">Micro indisponible</string>
+    <string name="battery_optimization">Exemption d\'optimisation de batterie</string>
+    <string name="battery_optimization_desc">Exempter l\'application maintient l\'enregistrement et le réseau en arrière-plan (important en mode économie d\'énergie)</string>
+    <string name="battery_optimization_allowed">Exempté</string>
+    <string name="battery_optimization_action">Régler</string>
+    <string name="app_details_settings">Autorisations et démarrage auto</string>
+    <string name="app_details_settings_desc">Sur les ROM Xiaomi/Huawei/OPPO/vivo, autorisez ici le démarrage auto, l\'exécution illimitée en arrière-plan et les fenêtres contextuelles</string>
+
+    <!-- 应用内日志查看器 -->
+    <string name="diag_log_title">Journal de diagnostic</string>
+    <string name="diag_log_hint">Affiche uniquement le journal de ce processus (sans adb). Appuyez sur actualiser pour recharger.</string>
+    <string name="diag_log_refresh">Actualiser</string>
+    <string name="diag_log_clear">Effacer</string>
+    <string name="diag_log_empty">Aucune entrée de journal</string>
+    <string name="diag_log_loading">Chargement\u2026</string>
+    <string name="back">Retour</string>
+
+    <!-- 服务器信息卡 -->
+    <string name="server_info">Infos du serveur</string>
+    <string name="server_platform_version">Plateforme / version</string>
+    <string name="server_clients">Clients en ligne</string>
+    <string name="server_clients_format">%1$d / %2$d</string>
+    <string name="server_channels">Salons</string>
+    <string name="server_uptime">Disponibilité</string>
+    <string name="server_welcome">Message de bienvenue</string>
+</resources>

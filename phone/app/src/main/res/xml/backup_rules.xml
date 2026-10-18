@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for Android 11 and below (see android:fullBackupContent).
+
+  identity.ini holds the TeamSpeak private key, which must never leave the device:
+  a restored copy would let anyone impersonating that identity authenticate as the user.
+
+  Bookmarks carry server passwords in plaintext, and the chat history is private
+  conversation data; neither belongs in a cloud backup.
+-->
+<full-backup-content>
+    <exclude domain="file" path="identity.ini" />
+    <exclude domain="file" path="datastore/bookmarks.preferences" />
+    <exclude domain="file" path="messages" />
+</full-backup-content>

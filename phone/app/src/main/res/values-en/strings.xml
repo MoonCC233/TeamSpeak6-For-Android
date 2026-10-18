@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">TS6 Droid</string>
+    <string name="channel_connection">Connection</string>
+    <string name="channel_connection_desc">Server connection notification</string>
+    <string name="accessibility_service_desc">TeamSpeak 6 Global Voice Controller</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_english">English</string>
+    <string name="language_french">Français</string>
+    <string name="language_change_title">Apply language change?</string>
+    <string name="language_change_message">The app needs to restart to apply %1$s.</string>
+    <string name="restart">Restart</string>
+    <string name="mute_user">Mute user</string>
+    <string name="unmute_user">Unmute user</string>
+    <string name="user_muted">Muted</string>
+
+    <!-- ConnectionScreen -->
+    <string name="server_address">Server address</string>
+    <string name="server_address_placeholder">localhost:9987</string>
+    <string name="nickname">Nickname</string>
+    <string name="password_optional">Password (optional)</string>
+    <string name="channel_optional">Channel (optional)</string>
+    <string name="default_channel">Default channel</string>
+    <string name="browse_channels">Browse channels</string>
+    <string name="connecting">Connecting\u2026</string>
+    <string name="connect">Connect</string>
+    <string name="add_bookmark">Add bookmark</string>
+    <string name="edit_bookmark">Edit bookmark</string>
+    <string name="save">Save</string>
+    <string name="bookmarks">Bookmarks</string>
+    <string name="no_bookmarks">No bookmarks</string>
+    <string name="manual_connection">Manual connection</string>
+    <string name="auto_reconnect">Auto-reconnect</string>
+    <string name="remove">Remove</string>
+    <string name="edit">Edit</string>
+    <string name="select_channel">Select channel</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- ServerScreen -->
+    <string name="server">Server</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="settings">Settings</string>
+    <string name="audio_gain">Audio gain</string>
+    <string name="audio_gain_value">×%1$.1f</string>
+    <string name="mic_gain">Mic gain</string>
+    <string name="gain_percent">%1$d%%</string>
+    <string name="show_link_thumbnails">Video link thumbnails</string>
+    <string name="auto_load_images">Auto-load images</string>
+    <string name="enable_floating_window">Enable floating window</string>
+    <string name="error_overlay_permission_required">Please grant the &quot;Display over other apps&quot; permission to use the floating window.</string>
+    <string name="chat">Chat</string>
+    <string name="push_to_talk">Push to talk</string>
+    <string name="ptt">PTT</string>
+    <string name="mute_mic">Mute mic</string>
+    <string name="mute">Mute</string>
+    <string name="unmute_mic">Unmute mic</string>
+    <string name="tab_channel">Channel</string>
+    <string name="tab_private">PM</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_settings">Settings</string>
+    <string name="no_connection">No connections</string>
+    <string name="wallpaper_cache_size">Wallpaper cache: %1$s MB (%2$d images)</string>
+    <string name="wallpaper_max_cache">Max cache: %1$d MB</string>
+    <string name="wallpaper_view_cache">View wallpaper cache</string>
+    <string name="wallpaper_cache_images">images</string>
+    <string name="wallpaper_clear_cache">Clear wallpaper cache</string>
+    <string name="wallpaper_clear_cache_confirm">Are you sure you want to clear all wallpaper cache? This cannot be undone.</string>
+    <string name="wallpaper_cache_empty">No cached wallpapers</string>
+    <string name="wallpaper_export">Save to gallery</string>
+    <string name="wallpaper_export_all">Save all</string>
+    <string name="wallpaper_export_done">Saved %1$d image(s) to the gallery</string>
+    <string name="wallpaper_export_failed">Could not save to the gallery</string>
+    <string name="session_running">Session running</string>
+    <string name="session_running_desc">The session keeps running in the background</string>
+    <string name="back_to_session">Return to session</string>
+    <string name="back_to_home">Back to home</string>
+    <string name="floating_overlay_offline">Not connected</string>
+    <string name="floating_overlay_no_channel">Not in a channel</string>
+    <string name="floating_overlay_members">%1$d here</string>
+    <string name="floating_overlay_channels">Channels</string>
+    <string name="floating_overlay_alone">You are alone in this channel</string>
+    <string name="floating_overlay_no_channels">No channels to switch to</string>
+    <string name="floating_overlay_open_app">Open the app</string>
+    <string name="floating_overlay_collapse">Collapse</string>
+    <string name="floating_overlay_push_to_talk">Hold to talk</string>
+    <string name="floating_overlay_muted">Muted</string>
+    <string name="floating_overlay_talking">Microphone open: you are talking</string>
+    <string name="floating_overlay_mic_not_working">The microphone is not working</string>
+    <string name="floating_overlay_deafened">Sound off</string>
+    <string name="overlay_permission_needed">The floating window needs the "display over other apps" permission</string>
+    <string name="confirm">Confirm</string>
+    <string name="custom_bg_title">Custom Background</string>
+    <string name="custom_bg_upload">Choose from gallery</string>
+    <string name="custom_bg_delete">Delete custom background</string>
+    <string name="custom_bg_delete_confirm">Delete custom background? Online wallpaper will be used instead.</string>
+    <string name="custom_bg_active">Custom background is set</string>
+    <string name="custom_bg_inactive">No custom background</string>
+    <string name="custom_bg_saved">Background saved</string>
+    <string name="custom_bg_load_error">Failed to load background</string>
+    <string name="crop_title">Crop Background</string>
+    <string name="crop_hint">Drag the white frame to select the area</string>
+    <string name="section_appearance">Appearance</string>
+    <string name="section_audio">Audio</string>
+    <!-- 身份导出/导入 -->
+    <string name="identity_section">Identity</string>
+    <string name="identity_uid">Identity UID: %1$s</string>
+    <string name="identity_uid_none">Not created yet (generated on first connection)</string>
+    <string name="identity_export">Export</string>
+    <string name="identity_import">Import</string>
+    <string name="identity_export_success">Identity exported</string>
+    <string name="identity_export_failed">Export failed: no identity yet</string>
+    <string name="identity_import_success">Imported; takes effect on next connection</string>
+    <string name="identity_import_failed">Import failed: invalid identity file</string>
+    <string name="identity_warning">Your identity is your account credential: importing switches your server identity, and the exported file should be kept safe.</string>
+    <string name="mic_mode">Microphone mode</string>
+    <string name="mic_mode_vad">Voice activation</string>
+    <string name="mic_mode_open">Open microphone</string>
+    <string name="vad_threshold">Trigger threshold: %1$d dB</string>
+    <string name="vad_threshold_hint">Audio above the threshold is transmitted. -45 dB suits most environments.</string>
+    <string name="user_uid">Unique ID</string>
+    <string name="user_platform">Platform</string>
+    <string name="user_version">Version</string>
+    <string name="user_country">Country</string>
+    <string name="user_talkpower">Talk power</string>
+    <string name="user_volume">Volume:</string>
+    <string name="volume_default">default</string>
+    <string name="volume_reset">Reset volume</string>
+    <string name="private_message">Private message</string>
+    <string name="section_chat">Chat</string>
+    <string name="section_more">More</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_found">New version available</string>
+    <string name="update_already_latest">Already up to date</string>
+    <string name="update_available">New version %1$s available</string>
+    <string name="update_download">Update now</string>
+    <string name="update_downloading">Downloading</string>
+    <string name="update_later">Later</string>
+    <string name="update_no_changelog">No changelog available</string>
+    <string name="close">Close</string>
+    <string name="filter_all">All</string>
+    <string name="message_channel_placeholder">Channel message\u2026</string>
+    <string name="message_private_placeholder">Message to %1$s\u2026</string>
+    <string name="send">Send</string>
+    <string name="user_fallback">User #%1$d</string>
+
+    <!-- UserItem -->
+    <string name="status_recording">Recording</string>
+    <string name="status_talking">Talking</string>
+    <string name="status_muted">Muted</string>
+    <string name="status_output_muted">Output muted</string>
+    <string name="status_away">Away</string>
+
+    <!-- MessageBubble -->
+    <string name="image">Image</string>
+    <string name="file_attachment_info">%1$s \u00B7 Shared file</string>
+    <string name="file_attachment_server">%1$s \u00B7 Server file</string>
+    <string name="tap_to_download">Tap to download</string>
+    <string name="tap_to_view">Tap to view</string>
+    <string name="tap_to_load_images">Tap to load images</string>
+    <string name="retry">Retry</string>
+    <string name="file_too_large">File exceeds the 10 MB limit — upload cancelled</string>
+    <string name="tap_to_open">Tap to open</string>
+    <string name="download_not_supported">Download not supported</string>
+    <string name="downloading">Downloading\u2026</string>
+    <string name="download">Download</string>
+    <string name="file_saved_label">Saved to Downloads</string>
+    <string name="file_saved">%1$s saved</string>
+    <string name="attach_file">Attach file</string>
+    <string name="file_size_bytes">%1$d B</string>
+    <string name="file_size_kb">%1$.1f KB</string>
+    <string name="file_size_mb">%1$.1f MB</string>
+    <string name="file_size_gb">%1$.1f GB</string>
+
+    <!-- File Manager -->
+    <string name="file_manager">Files</string>
+    <string name="no_files">No files</string>
+    <string name="new_folder">New folder</string>
+    <string name="rename">Rename</string>
+    <string name="delete_file">Delete</string>
+    <string name="confirm_delete">Delete %1$s?</string>
+    <string name="enter_folder_name">Folder name</string>
+    <string name="enter_new_name">New name</string>
+    <string name="refresh">Refresh</string>
+    <string name="create">Create</string>
+    <string name="folder">Folder</string>
+    <string name="upload">Upload</string>
+    <string name="share_in_channel">Current channel</string>
+    <string name="share_file_title">Share %1$s</string>
+
+    <!-- Notification -->
+    <string name="notif_unmute">Unmute</string>
+    <string name="notif_mute">Mute</string>
+
+    <!-- ViewModel -->
+    <string name="unknown_sender">Unknown</string>
+    <string name="me_sender">Me</string>
+    <string name="error_address_nickname_required">Address and nickname are required</string>
+    <string name="error_nickname_too_short">Nickname must be at least 3 characters long</string>
+    <string name="connection_failed">Connection failed</string>
+    <string name="browse_failed">Failed to browse channels</string>
+    <string name="error_service_start_failed">Failed to start the background service</string>
+    <string name="error_not_connected">Not connected to the server</string>
+    <string name="download_failed">Download failed</string>
+
+
+    <!-- Crash report overlay -->
+    <string name="crash_report_title">Previous abnormal exit detected</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_copied">Copied</string>
+
+    <!-- AboutScreen -->
+    <string name="about_software">About</string>
+    <string name="about_back">← Back</string>
+    <string name="about_credits_title">Credits &amp; Origins</string>
+    <string name="about_credits_desc">This project is based on the excellent open-source project by Grégory D, with deep localization and feature enhancements. Sincere thanks to the original author for his outstanding contributions to the open-source voice community!</string>
+    <string name="about_enhancement_title">Localization &amp; Enhancement Statement</string>
+    <string name="about_enhancement_desc">This version features full-text deep localization by yuaxi, along with a comprehensive refactoring of system compatibility code to fix multiple underlying background crash issues. Meanwhile, targeting the scenario of always-on tactical voice comms on mobile, exclusive secondary development added core features such as the [Minimalist Translucent Always-on Floating Console], significantly optimizing the mic/mute interaction experience during esports and gaming.</string>
+    <string name="about_license_title">Open Source License (GPLv3)</string>
+    <string name="about_license_desc">This project strictly follows the GNU GPLv3 (GNU General Public License v3) open-source license. This means any individual or team modifying or deriving redistributions from this project MUST keep it completely open-source, unconditionally adopt the GPLv3 license, and fully retain the copyright attribution of the original author (Grégory D) and the secondary localization developer (yuaxi). Any form of closed-source packaging, secondary encryption, or secret profiteering is strictly prohibited!</string>
+    <string name="about_repo_title">Official Source Repository &amp; Updates</string>
+    <string name="about_repo_desc">The complete source code of this project, subsequent official feature iterations, experience optimizations, and emergency bug fix patches will be published first independently in my official GitHub repository. Welcome to Star, follow, report Issues, or submit PRs:</string>
+    <string name="about_repo_link">🔗 Click to visit yuaxi\'s open-source GitHub repository</string>
+    <string name="about_warning_title">⚠️ Anti-Fraud (Solemn Disclaimer)</string>
+    <string name="about_warning_desc">This program is a purely public-welfare, non-profit product for open-source technical exchange. It is completely FREE and completely OPEN-SOURCE! Any form of commercial peddling, packaging buyout, or bundled key-code charging is strictly prohibited. If you obtained this software through paid channels (such as second-hand bots, trading platforms, paid downloading services, etc.), you have been scammed! Please immediately initiate a refund claim for infringement on the platform, and head to the official open-source repository to report the black-market scalpers with your real name!</string>
+    <string name="anime_background">I love anime</string>
+    <string name="noise_suppression">Microphone noise suppression</string>
+    <string name="about_contributors_title">Contributors</string>
+    <string name="about_contributions_count">%1$d contributions</string>
+    <string name="contributors_load_error">Failed to load</string>
+
+    <!-- Background reliability -->
+    <string name="reconnect_in_progress">Reconnecting… (attempt %1$d)</string>
+    <string name="reconnect_notification">Disconnected — reconnecting (attempt %1$d)</string>
+    <string name="mic_unavailable_warning">The microphone is currently unavailable; trying to recover automatically. If it stays like this, check that the system allows this app to record in the background.</string>
+    <string name="mic_unavailable_short">Mic unavailable</string>
+    <string name="battery_optimization">Battery optimization exemption</string>
+    <string name="battery_optimization_desc">Exempting the app keeps recording and networking alive in the background (important in power-save modes)</string>
+    <string name="battery_optimization_allowed">Exempt</string>
+    <string name="battery_optimization_action">Set</string>
+    <string name="app_details_settings">App permissions &amp; auto-start</string>
+    <string name="app_details_settings_desc">On Xiaomi/Huawei/OPPO/vivo ROMs, allow auto-start, unrestricted background running and background pop-ups here</string>
+
+    <!-- 应用内日志查看器 -->
+    <string name="diag_log_title">Diagnostic log</string>
+    <string name="diag_log_hint">Shows this process log only (no adb needed). Tap refresh to reload.</string>
+    <string name="diag_log_refresh">Refresh</string>
+    <string name="diag_log_clear">Clear</string>
+    <string name="diag_log_empty">No log entries</string>
+    <string name="diag_log_loading">Loading\u2026</string>
+    <string name="back">Back</string>
+
+    <!-- 服务器信息卡 -->
+    <string name="server_info">Server info</string>
+    <string name="server_platform_version">Platform / version</string>
+    <string name="server_clients">Clients online</string>
+    <string name="server_clients_format">%1$d / %2$d</string>
+    <string name="server_channels">Channels</string>
+    <string name="server_uptime">Uptime</string>
+    <string name="server_welcome">Welcome message</string>
+</resources>

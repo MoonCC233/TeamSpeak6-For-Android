@@ -1,0 +1,12 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# Local environment notes
+local.properties
+
+# Tool session state (kilo agent manager)
+.kilo/

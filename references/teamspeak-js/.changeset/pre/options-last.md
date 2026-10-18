@@ -1,0 +1,5 @@
+---
+"@honeybbq/teamspeak": major
+---
+
+Required arguments are positional and everything optional is in one options object, the last argument, which extends `CommandOptions` (`signal`, `timeout`). No command takes a positional optional any more: `moveClient(c, clid, cid, { password })`, `kickClient(c, clid, reason, { reasonMessage })`, `moveChannel(c, cid, parent, { order })`, `deleteChannel(c, cid, { force })`, `deleteServerGroup`/`deleteChannelGroup(c, id, { force })`, `addClientPermission(c, dbid, perm, value, { skip })`, `listFiles(c, cid, path, { password })` (the path is now required), `getFileInfo`/`deleteFile`/`createDirectory(…, { password })`, `stopFileTransfer(c, id, { removePartialFile })`, `listComplaints(c, { targetDatabaseID })` and `listBindings(c, { subsystem })`. `listClients`, `renameFile`, `initFileUpload`, `initFileDownload`, `banClient`, `viewLog`, `listClientDatabase`, `listServerGroupClients` and `listChannelGroupClients` take their own options and the command options in one object. The executor receives only `signal` and `timeout`.

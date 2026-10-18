@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">TS6 Droid</string>
+    <string name="language_simplified_chinese">简体中文</string>
+    <string name="language_english">English</string>
+    <string name="language_french">Français</string>
+    <string name="language_change_title">应用语言更改</string>
+    <string name="language_change_message">需要重启应用以应用 %1$s。</string>
+    <string name="restart">重启</string>
+    <string name="mute_user">静音用户</string>
+    <string name="unmute_user">取消静音用户</string>
+    <string name="user_muted">已静音</string>
+    <string name="channel_connection">连接</string>
+    <string name="channel_connection_desc">服务器连接通知</string>
+
+    <!-- ConnectionScreen -->
+    <string name="server_address">服务器地址</string>
+    <string name="server_address_placeholder">localhost:9987</string>
+    <string name="nickname">昵称</string>
+    <string name="password_optional">密码（可选）</string>
+    <string name="channel_optional">频道（可选）</string>
+    <string name="default_channel">默认频道</string>
+    <string name="browse_channels">浏览频道</string>
+    <string name="connecting">正在连接…</string>
+    <string name="connect">连接</string>
+    <string name="add_bookmark">添加服务器</string>
+    <string name="edit_bookmark">编辑服务器</string>
+    <string name="save">保存</string>
+    <string name="bookmarks">服务器</string>
+    <string name="no_bookmarks">暂无服务器</string>
+    <string name="manual_connection">手动连接</string>
+    <string name="auto_reconnect">自动重连</string>
+    <string name="remove">移除</string>
+    <string name="edit">编辑</string>
+    <string name="select_channel">选择频道</string>
+    <string name="cancel">取消</string>
+
+    <!-- ServerScreen -->
+    <string name="server">服务器</string>
+    <string name="disconnect">断开连接</string>
+    <string name="settings">设置</string>
+    <string name="audio_gain">音量增益</string>
+    <string name="audio_gain_value">×%1$.1f</string>
+    <string name="mic_gain">麦克风增益</string>
+    <string name="gain_percent">%1$d%%</string>
+    <string name="show_link_thumbnails">显示视频链接缩略图</string>
+    <string name="auto_load_images">自动加载图片</string>
+    <string name="enable_floating_window">启用悬浮窗</string>
+    <string name="anime_background">我是二刺螈</string>
+    <string name="noise_suppression">麦克风降噪</string>
+    <string name="chat">聊天</string>
+    <string name="push_to_talk">按住说话</string>
+    <string name="ptt">按键说话</string>
+    <string name="mute_mic">静音麦克风</string>
+    <string name="mute">静音</string>
+    <string name="unmute_mic">取消静音</string>
+    <string name="tab_channel">频道</string>
+    <string name="tab_private">私信</string>
+    <string name="tab_home">主页</string>
+    <string name="tab_settings">设置</string>
+    <string name="no_connection">暂无连接</string>
+    <string name="wallpaper_cache_size">壁纸缓存：%1$s MB（%2$d 张）</string>
+    <string name="wallpaper_max_cache">最大缓存：%1$d MB</string>
+    <string name="wallpaper_view_cache">查看壁纸缓存</string>
+    <string name="wallpaper_cache_images">张壁纸</string>
+    <string name="wallpaper_clear_cache">清空壁纸缓存</string>
+    <string name="wallpaper_clear_cache_confirm">确定要清空所有壁纸缓存吗？此操作不可恢复。</string>
+    <string name="wallpaper_cache_empty">暂无缓存壁纸</string>
+    <string name="wallpaper_export">保存到相册</string>
+    <string name="wallpaper_export_all">全部保存</string>
+    <string name="wallpaper_export_done">已保存 %1$d 张到相册</string>
+    <string name="wallpaper_export_failed">保存到相册失败</string>
+    <string name="session_running">会话进行中</string>
+    <string name="session_running_desc">会话在后台继续运行</string>
+    <string name="back_to_session">返回会话</string>
+    <string name="back_to_home">返回首页</string>
+    <string name="floating_overlay_offline">未连接</string>
+    <string name="floating_overlay_no_channel">不在任何频道</string>
+    <string name="floating_overlay_members">%1$d 人</string>
+    <string name="floating_overlay_channels">频道</string>
+    <string name="floating_overlay_alone">频道里只有你一个人</string>
+    <string name="floating_overlay_no_channels">没有可切换的频道</string>
+    <string name="floating_overlay_open_app">返回应用</string>
+    <string name="floating_overlay_collapse">收起</string>
+    <string name="floating_overlay_push_to_talk">按住说话</string>
+    <string name="floating_overlay_muted">已静音</string>
+    <string name="floating_overlay_talking">麦克风已开启：正在说话</string>
+    <string name="floating_overlay_mic_not_working">麦克风未工作</string>
+    <string name="floating_overlay_deafened">已关闭声音</string>
+    <string name="overlay_permission_needed">需要「显示在其他应用上层」权限，悬浮窗才会出现</string>
+    <string name="confirm">确定</string>
+    <string name="custom_bg_title">自定义背景</string>
+    <string name="custom_bg_upload">从相册选择</string>
+    <string name="custom_bg_delete">删除自定义背景</string>
+    <string name="custom_bg_delete_confirm">确定要删除自定义背景吗？将恢复使用在线壁纸。</string>
+    <string name="custom_bg_active">已设置自定义背景</string>
+    <string name="custom_bg_inactive">未设置自定义背景</string>
+    <string name="custom_bg_saved">背景已保存</string>
+    <string name="custom_bg_load_error">背景加载失败</string>
+    <string name="crop_title">裁切背景</string>
+    <string name="crop_hint">拖动白色方框选择保留区域</string>
+    <string name="section_appearance">外观</string>
+    <string name="section_audio">音频</string>
+    <!-- 身份导出/导入 -->
+    <string name="identity_section">身份</string>
+    <string name="identity_uid">身份 UID：%1$s</string>
+    <string name="identity_uid_none">尚未生成（首次连接服务器后自动创建）</string>
+    <string name="identity_export">导出</string>
+    <string name="identity_import">导入</string>
+    <string name="identity_export_success">身份已导出</string>
+    <string name="identity_export_failed">导出失败：尚无身份文件</string>
+    <string name="identity_import_success">导入成功，下次连接生效</string>
+    <string name="identity_import_failed">导入失败：无效的身份文件</string>
+    <string name="identity_warning">身份等同账号凭据：导入会切换服务器身份，导出的文件请妥善保管。</string>
+    <string name="mic_mode">麦克风模式</string>
+    <string name="mic_mode_vad">语音激活</string>
+    <string name="mic_mode_open">开放麦克风</string>
+    <string name="vad_threshold">触发阈值：%1$d dB</string>
+    <string name="vad_threshold_hint">说话声高于阈值时自动发送。-45 dB 适合大多数环境。</string>
+    <string name="user_uid">唯一 ID</string>
+    <string name="user_platform">平台</string>
+    <string name="user_version">版本</string>
+    <string name="user_country">国家/地区</string>
+    <string name="user_talkpower">说话功率</string>
+    <string name="user_volume">音量：</string>
+    <string name="volume_default">默认</string>
+    <string name="volume_reset">重置音量</string>
+    <string name="private_message">私信</string>
+    <string name="section_chat">聊天</string>
+    <string name="section_more">更多</string>
+    <string name="update_check">点击检查更新</string>
+    <string name="update_found">发现新版本</string>
+    <string name="update_already_latest">已是最新版本</string>
+    <string name="update_available">发现新版本 %1$s</string>
+    <string name="update_download">立即更新</string>
+    <string name="update_downloading">正在下载</string>
+    <string name="update_later">稍后再说</string>
+    <string name="update_no_changelog">暂无更新说明</string>
+    <string name="close">关闭</string>
+    <string name="filter_all">全部</string>
+    <string name="message_channel_placeholder">频道消息…</string>
+    <string name="message_private_placeholder">发送给 %1$s…</string>
+    <string name="send">发送</string>
+    <string name="user_fallback">用户 #%1$d</string>
+
+    <!-- UserItem -->
+    <string name="status_recording">录音中</string>
+    <string name="status_talking">正在讲话</string>
+    <string name="status_muted">已静音</string>
+    <string name="status_output_muted">输出已静音</string>
+    <string name="status_away">离开</string>
+
+    <!-- MessageBubble -->
+    <string name="image">图片</string>
+    <string name="file_attachment_info">%1$s · 已分享文件</string>
+    <string name="file_attachment_server">%1$s · 服务器文件</string>
+    <string name="download_not_supported">不支持下载</string>
+    <string name="tap_to_download">点击下载</string>
+    <string name="tap_to_view">点击查看</string>
+    <string name="tap_to_load_images">点击加载图片</string>
+    <string name="retry">重试</string>
+    <string name="file_too_large">文件超过 10MB 上限，已取消上传</string>
+    <string name="tap_to_open">点击打开</string>
+    <string name="downloading">下载中…</string>
+    <string name="download">下载</string>
+    <string name="file_saved_label">已保存到下载目录</string>
+    <string name="file_saved">%1$s 已保存</string>
+    <string name="attach_file">附件</string>
+    <string name="file_size_bytes">%1$d B</string>
+    <string name="file_size_kb">%1$.1f KB</string>
+    <string name="file_size_mb">%1$.1f MB</string>
+    <string name="file_size_gb">%1$.1f GB</string>
+
+    <!-- File Manager -->
+    <string name="file_manager">文件管理</string>
+    <string name="no_files">暂无文件</string>
+    <string name="new_folder">新建文件夹</string>
+    <string name="rename">重命名</string>
+    <string name="delete_file">删除</string>
+    <string name="confirm_delete">删除 %1$s？</string>
+    <string name="enter_folder_name">输入文件夹名称</string>
+    <string name="enter_new_name">输入新名称</string>
+    <string name="refresh">刷新</string>
+    <string name="create">创建</string>
+    <string name="folder">文件夹</string>
+    <string name="upload">上传</string>
+    <string name="share_in_channel">当前频道</string>
+    <string name="share_file_title">共享 %1$s</string>
+
+    <!-- Notification -->
+    <string name="notif_unmute">取消静音</string>
+    <string name="notif_mute">静音</string>
+
+    <!-- ViewModel -->
+    <string name="unknown_sender">未知</string>
+    <string name="me_sender">我</string>
+    <string name="error_address_nickname_required">地址和昵称为必填项</string>
+    <string name="error_nickname_too_short">昵称至少需要3个字符</string>
+    <string name="connection_failed">连接失败</string>
+    <string name="browse_failed">浏览频道失败</string>
+    <string name="error_overlay_permission_required">请授予「显示在其他应用上层」权限以使用悬浮窗</string>
+    <string name="error_service_start_failed">后台服务启动失败</string>
+    <string name="error_not_connected">未连接到服务器</string>
+    <string name="download_failed">下载失败</string>
+
+
+    <!-- Crash report overlay -->
+    <string name="crash_report_title">检测到上次异常退出</string>
+    <string name="common_copy">复制</string>
+    <string name="common_copied">已复制</string>
+
+    <!-- AboutScreen -->
+    <string name="about_software">关于软件</string>
+    <string name="about_back">← 返回</string>
+    <string name="about_credits_title">致谢与开发源流</string>
+    <string name="about_credits_desc">本项目基于 Grégory D 的优秀开源项目进行深度汉化、本地化适配与功能二次开发。由衷感谢原作者对开源语音社区做出的杰出贡献！</string>
+    <string name="about_enhancement_title">汉化与二次开发声明</string>
+    <string name="about_enhancement_desc">本版本由 yuaxi 进行全文本深度汉化，全面重构了系统兼容性代码以修复多项底层挂机闪退问题。同时，针对移动端常驻战术语音挂机场景，独家二次开发新增了【全新极简半透明常驻悬浮窗控制台】等核心功能，大幅度优化了电竞与游戏过程中的开麦/静音交互体验。</string>
+    <string name="about_license_title">开源许可证协议 (License)</string>
+    <string name="about_license_desc">本项目严格遵循 GNU GPLv3 (GNU General Public License v3) 开源许可证协议。这意味着任何个人或团队基于本项目修改、衍生出的任何再分发版本，都必须强制性保持完全开源，且必须无条件沿用 GPLv3 协议，同时必须完整保留原作者 (Grégory D) 与二开汉化作者 (yuaxi) 的版权署名。严禁任何形式的闭源打包、二次加密或暗中牟利！</string>
+    <string name="about_repo_title">官方源码仓库与持续更新</string>
+    <string name="about_repo_desc">本项目的完整源代码、后续的正式版本功能迭代、体验优化以及紧急 Bug 修复补丁，均会第一时间在我的官方 GitHub 仓库中独立发布。欢迎前往点星(Star)关注、反馈 Issues 或提交 PR：</string>
+    <string name="about_repo_link">🔗 点击访问 yuaxi 的 GitHub 开源仓库地址</string>
+    <string name="about_warning_title">⚠️ 谨防受骗（郑重免责声明）</string>
+    <string name="about_warning_desc">本程序属于纯公益、非盈利性质的开源技术交流产物，完全免费，完全开源！严禁任何形式的商业兜售、打包买断或捆绑卡密收费行为。如果您是通过付费渠道（如二手机器人、各大交易平台、收费代下等）购买获得本软件，说明您已被骗！请立即向平台发起侵权退款维权，并前往官方开源仓库实名举报倒卖黑商！</string>
+    <string name="about_contributors_title">贡献者</string>
+    <string name="about_contributions_count">%1$d 次贡献</string>
+    <string name="contributors_load_error">加载失败</string>
+
+    <!-- 后台可靠性与自愈提示 / Background reliability -->
+    <string name="reconnect_in_progress">正在重连…（第 %1$d 次）</string>
+    <string name="reconnect_notification">连接已断开，正在重连（第 %1$d 次）</string>
+    <string name="mic_unavailable_warning">麦克风当前不可用，正在尝试自动恢复。若长时间无好转，请检查系统是否限制了本应用的后台录音。</string>
+    <string name="mic_unavailable_short">麦克风不可用</string>
+    <string name="battery_optimization">电池优化白名单</string>
+    <string name="battery_optimization_desc">加入白名单可避免系统在后台限制录音与网络（省电模式下尤其重要）</string>
+    <string name="battery_optimization_allowed">已允许</string>
+    <string name="battery_optimization_action">去设置</string>
+    <string name="app_details_settings">应用权限与自启动</string>
+    <string name="app_details_settings_desc">小米/华为/OPPO/vivo 等 ROM 请在此允许「自启动」「后台运行/无限制」「后台弹出界面」</string>
+
+    <!-- 应用内日志查看器 -->
+    <string name="diag_log_title">诊断日志</string>
+    <string name="diag_log_hint">仅显示本应用进程的日志（无需 adb）。点右上角刷新可重新读取。</string>
+    <string name="diag_log_refresh">刷新</string>
+    <string name="diag_log_clear">清空</string>
+    <string name="diag_log_empty">暂无日志</string>
+    <string name="diag_log_loading">读取中…</string>
+    <string name="back">返回</string>
+
+    <!-- 服务器信息卡 -->
+    <string name="server_info">服务器信息</string>
+    <string name="server_platform_version">平台 / 版本</string>
+    <string name="server_clients">在线人数</string>
+    <string name="server_clients_format">%1$d / %2$d</string>
+    <string name="server_channels">频道数</string>
+    <string name="server_uptime">运行时长</string>
+    <string name="server_welcome">欢迎语</string>
+</resources>

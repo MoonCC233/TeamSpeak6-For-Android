@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3/schema.json",
+  "changelog": [
+    "./changelog.mjs",
+    { "repo": "HoneyBBQ/teamspeak-js", "maintainers": ["HoneyBBQ"] }
+  ],
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": [],
+  "privatePackages": { "version": false, "tag": false }
+}

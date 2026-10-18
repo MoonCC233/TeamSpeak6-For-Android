@@ -1,0 +1,49 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
+  "apiReport": {
+    "enabled": true,
+    "reportFolder": "<projectFolder>/api/",
+    "reportTempFolder": "<projectFolder>/node_modules/.cache/api-extractor/",
+    // The tables (ErrorCode, PermissionName, ...) are typed as typeof an
+    // unexported object; without this their members, the wire values, would
+    // be missing from the report.
+    "includeForgottenExports": true,
+  },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "tsdocMessageReporting": {
+      // `@module @honeybbq/teamspeak` names a module by import path for
+      // typedoc, and so does {@inheritDoc @honeybbq/teamspeak!X}; TSDoc reads
+      // the first as a tag and wants a `#` in the second.
+      "tsdoc-characters-after-block-tag": { "logLevel": "none", "addToApiReportFile": false },
+      "tsdoc-reference-missing-hash": { "logLevel": "none", "addToApiReportFile": false },
+    },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning", "addToApiReportFile": true },
+
+      // The entry points do not use release tags: everything exported is public,
+      // and the report says so with @public on every item.
+      "ae-missing-release-tag": { "logLevel": "none", "addToApiReportFile": false },
+
+      // {@link ErrorCode} names a const and a type of the same name. TypeScript,
+      // which the docs are read with, resolves it; api-extractor wants a
+      // selector ({@link ErrorCode:type}) that no editor understands.
+      "ae-unresolved-link": { "logLevel": "none", "addToApiReportFile": false },
+
+      // {@inheritDoc @honeybbq/teamspeak!TeamspeakError.kind} points at a static
+      // member of a class from another entry point, which api-extractor's doc
+      // resolver cannot follow.
+      // It only matters for generated documentation, which this does not make.
+      "ae-unresolved-inheritdoc-reference": { "logLevel": "none", "addToApiReportFile": false },
+
+      // A public declaration that names a type the entry point does not
+      // export. It stays in the report, next to the declaration, where a
+      // review sees it; it does not fail the check, so that each one can be
+      // fixed on its own.
+      "ae-forgotten-export": { "logLevel": "none", "addToApiReportFile": true },
+    },
+  },
+}

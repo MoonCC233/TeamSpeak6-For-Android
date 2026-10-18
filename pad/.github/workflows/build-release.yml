@@ -1,0 +1,317 @@
+name: Build release assets
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the v prefix
+        required: true
+        default: 0.2.8
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  windows:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          architecture: x64
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Build application
+        shell: pwsh
+        env:
+          RELEASE_REF: ${{ inputs.version || github.ref_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseVersion = $env:RELEASE_REF -replace '^v', ''
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run prepare:sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm rebuild @discordjs/opus --foreground-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix web ci --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $currentVersion = node -p "require('./package.json').version"
+          if ($currentVersion -ne $releaseVersion) {
+            npm version --no-git-tag-version $releaseVersion
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          npm run web:build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm prune --omit=dev --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package and smoke-test Windows ${{ matrix.arch }}
+        shell: pwsh
+        env:
+          RELEASE_REF: ${{ inputs.version || github.ref_name }}
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $releaseVersion = $env:RELEASE_REF -replace '^v', ''
+          $packageName = "webspeak-webclient-v$releaseVersion-windows-$env:PACKAGE_ARCH"
+          $packageRoot = Join-Path $env:RUNNER_TEMP $packageName
+          $runtimeRoot = Split-Path -Parent (Get-Command node).Source
+          New-Item -ItemType Directory -Path $packageRoot | Out-Null
+          Copy-Item -Recurse -LiteralPath dist -Destination $packageRoot
+          New-Item -ItemType Directory -Path (Join-Path $packageRoot "web") | Out-Null
+          Copy-Item -Recurse -LiteralPath web/dist -Destination (Join-Path $packageRoot "web")
+          Copy-Item -Recurse -LiteralPath node_modules -Destination $packageRoot
+          Copy-Item -LiteralPath config.example.json,README.md,LICENSE,package.json,package-lock.json -Destination $packageRoot
+          New-Item -ItemType Directory -Path (Join-Path $packageRoot "runtime") | Out-Null
+          Copy-Item -LiteralPath (Join-Path $runtimeRoot "node.exe") -Destination (Join-Path $packageRoot "runtime")
+          Copy-Item -LiteralPath (Join-Path $runtimeRoot "LICENSE") -Destination (Join-Path $packageRoot "runtime/NODE-LICENSE")
+          @'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          "%~dp0runtime\node.exe" "%~dp0dist\index.js"
+          if errorlevel 1 (
+            echo.
+            echo WebSpeak stopped with an error. Check data\logs for details.
+            pause
+          )
+          '@ | Set-Content -LiteralPath (Join-Path $packageRoot "start-webspeak.cmd") -Encoding ascii
+
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ($packageName + "-smoke")
+          Copy-Item -Recurse -LiteralPath $packageRoot -Destination $smokeRoot
+          @{
+            port = 3040
+            tsHost = "127.0.0.1"
+            tsPort = 9987
+            tsServerPassword = ""
+            tsServerProtocol = "ts6"
+            maxClients = 20
+            trustProxy = $false
+          } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $smokeRoot "config.json") -Encoding utf8
+          $process = $null
+          try {
+            $process = Start-Process -FilePath (Join-Path $smokeRoot "runtime/node.exe") -ArgumentList "dist/index.js" -WorkingDirectory $smokeRoot -WindowStyle Hidden -PassThru
+            $health = $null
+            for ($attempt = 0; $attempt -lt 30 -and -not $health; $attempt++) {
+              Start-Sleep -Milliseconds 500
+              try { $health = Invoke-RestMethod -Uri "http://127.0.0.1:3040/api/health" -TimeoutSec 2 } catch {}
+            }
+            if (-not $health -or $health.status -ne "ok" -or $health.version -ne $releaseVersion) {
+              throw "Windows release health check failed"
+            }
+          } finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+          Compress-Archive -LiteralPath $packageRoot -DestinationPath (Join-Path $env:GITHUB_WORKSPACE ($packageName + ".zip")) -CompressionLevel Optimal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: webspeak-webclient-v*-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          compression-level: 0
+
+  linux:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          architecture: ${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Build application
+        env:
+          RELEASE_REF: ${{ inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_version="${RELEASE_REF#v}"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run prepare:sdk
+          npm rebuild @discordjs/opus --foreground-scripts --no-audit --no-fund
+          npm --prefix web ci --no-audit --no-fund
+          current_version="$(node -p "require('./package.json').version")"
+          if [ "$current_version" != "$release_version" ]; then
+            npm version --no-git-tag-version "$release_version"
+          fi
+          npm run web:build
+          npm run build
+          npm prune --omit=dev --no-audit --no-fund
+      - name: Package and smoke-test Linux ${{ matrix.arch }}
+        env:
+          RELEASE_REF: ${{ inputs.version || github.ref_name }}
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          release_version="${RELEASE_REF#v}"
+          package_name="webspeak-webclient-v${release_version}-linux-${PACKAGE_ARCH}"
+          package_root="$RUNNER_TEMP/$package_name"
+          runtime_root="$(dirname "$(dirname "$(command -v node)")")"
+          mkdir -p "$package_root/web" "$package_root/runtime"
+          cp -a dist "$package_root/dist"
+          cp -a web/dist "$package_root/web/dist"
+          cp -a node_modules "$package_root/node_modules"
+          cp config.example.json README.md LICENSE package.json package-lock.json "$package_root/"
+          cp "$runtime_root/bin/node" "$package_root/runtime/node"
+          cp "$runtime_root/LICENSE" "$package_root/runtime/NODE-LICENSE"
+          chmod 0755 "$package_root/runtime/node"
+          cat > "$package_root/start-webspeak.sh" <<'LAUNCHER'
+          #!/usr/bin/env sh
+          set -eu
+          cd -- "$(dirname -- "$0")"
+          exec "$PWD/runtime/node" "$PWD/dist/index.js"
+          LAUNCHER
+          chmod 0755 "$package_root/start-webspeak.sh"
+
+          smoke_root="$RUNNER_TEMP/${package_name}-smoke"
+          cp -a "$package_root" "$smoke_root"
+          cat > "$smoke_root/config.json" <<'CONFIG'
+          {
+            "port": 3040,
+            "tsHost": "127.0.0.1",
+            "tsPort": 9987,
+            "tsServerPassword": "",
+            "tsServerProtocol": "ts6",
+            "maxClients": 20,
+            "trustProxy": false
+          }
+          CONFIG
+          (
+            cd "$smoke_root"
+            "$smoke_root/runtime/node" dist/index.js >"$RUNNER_TEMP/linux-smoke.log" 2>&1 &
+            app_pid=$!
+            trap 'kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' EXIT
+            health=""
+            for _ in $(seq 1 30); do
+              health="$(curl -fsS --max-time 2 http://127.0.0.1:3040/api/health 2>/dev/null || true)"
+              if grep -q '"status":"ok"' <<<"$health" && grep -q "\"version\":\"$release_version\"" <<<"$health"; then break; fi
+              sleep 0.5
+            done
+            grep -q '"status":"ok"' <<<"$health"
+            grep -q "\"version\":\"$release_version\"" <<<"$health"
+          )
+          tar -czf "$GITHUB_WORKSPACE/${package_name}.tar.gz" -C "$RUNNER_TEMP" "$package_name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: webspeak-webclient-v*-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+
+  android:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+      - name: Build Android APKs
+        env:
+          RELEASE_REF: ${{ inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_version="${RELEASE_REF#v}"
+          version_code="$(node -e 'const [major, minor, patch] = process.argv[1].split(".").map(Number); process.stdout.write(String(major * 10000 + minor * 100 + patch))' "$release_version")"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          npm ci --ignore-scripts --no-audit --no-fund
+          current_version="$(node -p "require('./package.json').version")"
+          if [ "$current_version" != "$release_version" ]; then
+            npm version --no-git-tag-version "$release_version"
+          fi
+          npm run prepare:sdk
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix mobile ci --no-audit --no-fund
+          npm run android:sync
+          cd web/android
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug -PappVersion="$release_version" -PappVersionCode="$version_code"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p release-apks
+          for apk in web/android/app/build/outputs/apk/debug/app-*-debug.apk; do
+            abi="${apk##*/app-}"
+            abi="${abi%-debug.apk}"
+            cp "$apk" "release-apks/webspeak-android-v${release_version}-${abi}-debug.apk"
+          done
+          test "$(find release-apks -maxdepth 1 -name '*.apk' | wc -l)" -eq 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: release-apks/*.apk
+          if-no-files-found: error
+          compression-level: 0
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download deployment packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: WebSpeak ${{ github.ref_name }}
+          body: |
+            Release notes are maintained in each language's project documentation:
+            - [简体中文](https://github.com/EchoSixHIYA/WebSpeak-client-for-TeamSpeak/blob/master/docs/README.zh-CN.md#latest-release-notes)
+            - [English](https://github.com/EchoSixHIYA/WebSpeak-client-for-TeamSpeak/blob/master/docs/README.en.md#latest-release-notes)
+            - [Deutsch](https://github.com/EchoSixHIYA/WebSpeak-client-for-TeamSpeak/blob/master/docs/README.de.md#latest-release-notes)
+            - [Русский](https://github.com/EchoSixHIYA/WebSpeak-client-for-TeamSpeak/blob/master/docs/README.ru.md#latest-release-notes)
+            - [日本語](https://github.com/EchoSixHIYA/WebSpeak-client-for-TeamSpeak/blob/master/docs/README.ja.md#latest-release-notes)
+          files: release-assets/*
