@@ -135,8 +135,18 @@
   Java 绑定（`tslib/java` 与 `phone` 两份 `Client.java`）与 Kotlin 包装（`TsClient.kt`）同步完成。
   验证：`cargo check -p tslib-jni` 通过；release `.so`（arm64-v8a，strip 后 9.7 MB）已重编并替换
   `phone/app/src/main/jniLibs/arm64-v8a/libtslib_jni.so`，`llvm-nm` 确认 9 个符号全部导出。
-- 🔄 **端到端验证**：探针 `tslib/examples/screen-share-probe` 已就绪，待在真实 TS6 服务器上执行
-  （A2b 验收：`--publish` 应收到 `StreamStarted` 通知；双端 `--publish`/`--join` 应触发 `JoinRequest`）。
+- ✅ **端到端验证（2026-10-18，真实服务器 `ts.mooncc.cn:9987`）**：
+  - `--publish` → `StreamStarted`（流 id 为 **UUID 字符串**，如 `648c4c7b-…`）✅
+  - 双探针全信令闭环 ✅：B `joinstreamrequest` → A `notifyjoinstreamrequest`（**~0.6 s 中转**）→ A
+    `respondjoinstreamrequest`（内联 offer）→ B `notifyrespondjoinstreamrequest` → B `streamsignaling`
+    （answer + ICE）→ A `notifystreamsignaling`（`Answer` / `IceCandidate` 结构化解析）——**7 命令 / 7 通知
+    全部经真实服务器验证**。
+  - ⚠️ **实测修复**：`joinstreamrequest` / `respondjoinstreamrequest` 原实现漏发 `msg` 空串参数，服务器
+    直接回 `error id=1538 (ParameterMissing)` 且**不产生任何通知**（发布端永远收不到 `JoinRequest`）。
+    修复后即通过（提交 `22320ab`）。规范要点：**参数集必须与 WebSpeak 完全一致，空串参数也必须携带**。
+  - 注意：探针调试时 tsclientlib 的日志需 `RUST_LOG` + tracing 订阅器（探针已内置）；命令错误经
+    `Event::CommandError`（`id=ParameterMissing` 等）暴露——手机端此前会静默丢失此类错误，现已可见。
+  - 服务器身份限制：同一身份同时只允许 1 个克隆（`ClientTooManyClonesConnected`），多探针须各自独立身份文件。
 - 🔄 **§7.3 Android 媒体与 UI（A3/A4）**：实现已完成、编译通过，待真机与对端互通验证（见 §7.3 实施状态
   与 `docs/A3-screen-share-android.md`）。
 

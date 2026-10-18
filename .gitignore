@@ -10,3 +10,6 @@ local.properties
 
 # Tool session state (kilo agent manager)
 .kilo/
+
+# A2b 探针本地身份文件（含私钥，勿提交）
+ts6-probe-identity*.json

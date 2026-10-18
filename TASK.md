@@ -96,7 +96,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | A1 | 建立开发基线（调研）：引入上游代码，梳理模块结构、构建方式、功能清单；核对许可证 | `docs/A1-phone-baseline.md` | 结构与功能清单完整；许可证合规检查通过 | ✅ 2026-10-18 |
 | A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK（`phone/app/build/outputs/apk/debug/app-debug.apk`） | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | 🔄 `assembleDebug` 成功（2026-10-18）；真机连服待设备接入 |
 | A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
-| A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | 🔄 模块+单测+JNI（含 9 个命令函数）完成，release .so 已重编（arm64-v8a，9.7 MB）；探针就绪，待真实 TS6 服务器与真机闭环 |
+| A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | ✅ 2026-10-18：真实服务器 `ts.mooncc.cn:9987` 全信令闭环（7 命令/7 通知）验证通过；修复 `msg` 参数缺失（`22320ab`）；探针增强自动应答/时延测量 |
 | A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | 🔄 核心已实现（MediaProjection 采集 + WebRTC 发布端 + 信令；编译通过，.so 已重编）；待真机与对端互通验证 |
 | A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 核心已实现（事件发现 + WebRTC 接收 + SurfaceViewRenderer 渲染 + 观看入口）；待真机互通验证与旋转/全屏打磨 |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
@@ -200,4 +200,10 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **A3/A4 媒体层与 UI 实现**（编译通过）：`ScreenShareController`（发布端每观看者 PC + offer / 观看端 answer + ICE 编排）、`ScreenShareService`（`mediaProjection` 前台服务，Android 14+ 合规）、观看窗口 `ScreenShareViewerDialog`、顶栏共享开关与远端流入口；WebRTC 依赖 `io.github.webrtc-sdk:android:150.7871.01` → `docs/A3-screen-share-android.md`
 - ✅ **A3/A4 优化**：观看窗口 `FLAG_KEEP_SCREEN_ON`；`start_failed` / `join_rejected` 错误 Toast（三语文案）
 - ✅ **真机接入 + 安装冒烟通过**：vivo V2505A（Android 17 / SDK 37，arm64-v8a）USB 接入；APK **2.1.6-Han** 覆盖安装成功（踩坑：vivo「USB 安装」确认闸门在锁屏下自动拒绝 → 唤醒解锁后安装通过；设备上异签名旧版 2.1.4-Han 需先卸载，详见 `docs/A3-screen-share-android.md` §8）；`MainActivity` 首启无崩溃、主界面渲染正常
-- ⏳ **待办**：连接真实 TS6 服务器跑 A1b 连服 / A2b 探针闭环 / A3+A4 屏幕共享互通验证（等待服务器地址）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
+- ✅ **A2b 协议闭环验证通过（真实服务器 `ts.mooncc.cn:9987`，MPT Speak）**：
+  - 发布：`setupstream` → `StreamStarted`（流 id 为 UUID 字符串）×3 次 ✅
+  - **全信令闭环**（双探针自动应答）：`joinstreamrequest` →（发布端）`notifyjoinstreamrequest` **~0.6 s** → `respondjoinstreamrequest`（内联 offer）→（观看端）`notifyrespondjoinstreamrequest` → `streamsignaling`（answer + ICE）→（发布端）`notifystreamsignaling` 结构化解析成功——7 命令 / 7 通知全部实测打通
+  - ⚠️ **协议修正（提交 `22320ab`）**：`joinstreamrequest` / `respondjoinstreamrequest` 漏发空串参数 `msg` → 服务器回 `ParameterMissing` 且静默不通知（发布端收不到 JoinRequest）。修复 + 单测严格断言参数集
+  - 探针增强：时间戳输出、`--auto-respond` / `--auto-answer`、`RUST_LOG` tracing、`CommandError` 打印；服务器限制同身份单克隆（多探针需独立身份文件）
+  - 遗留观察：手机端 `command_error` 已可见（此前静默），后续可在屏幕共享流程给用户更精确的提示
+- ⏳ **待办**：A3 发布端真机验证（手机 → TS6 原生客户端 / WebSpeak 观看）；A4 观看端真机验证（观看探针/原生流）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
