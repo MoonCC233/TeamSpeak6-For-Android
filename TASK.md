@@ -94,10 +94,10 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | 编号 | 任务 | 产出物 | 验收标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | A1 | 建立开发基线（调研）：引入上游代码，梳理模块结构、构建方式、功能清单；核对许可证 | `docs/A1-phone-baseline.md` | 结构与功能清单完整；许可证合规检查通过 | ✅ 2026-10-18 |
-| A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK（`phone/app/build/outputs/apk/debug/app-debug.apk`） | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | 🔄 `assembleDebug` 成功（2026-10-18）；真机连服待设备接入 |
+| A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK（`phone/app/build/outputs/apk/debug/app-debug.apk`） | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | ✅ 2026-10-18：`assembleDebug` 成功；真机（vivo V2505A）连接 `ts.mooncc.cn` 成功，频道/用户列表正常（连接崩溃已修复，`5d5196d`） |
 | A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
 | A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | ✅ 2026-10-18：真实服务器 `ts.mooncc.cn:9987` 全信令闭环（7 命令/7 通知）验证通过；修复 `msg` 参数缺失（`22320ab`）；探针增强自动应答/时延测量 |
-| A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | 🔄 核心已实现（MediaProjection 采集 + WebRTC 发布端 + 信令；编译通过，.so 已重编）；待真机与对端互通验证 |
+| A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | 🔄 手机端发布已真机验证（MediaProjection 授权 → Publisher started → Our stream started；探针对端全信令闭环：requeststreaminfo/joinstreamrequest → 手机自动回真实 WebRTC offer）；待 TS6 原生客户端观看确认 |
 | A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 核心已实现（事件发现 + WebRTC 接收 + SurfaceViewRenderer 渲染 + 观看入口）；待真机互通验证与旋转/全屏打磨 |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
 
@@ -206,4 +206,21 @@ AI 代理接到本指令后的参考执行顺序：
   - ⚠️ **协议修正（提交 `22320ab`）**：`joinstreamrequest` / `respondjoinstreamrequest` 漏发空串参数 `msg` → 服务器回 `ParameterMissing` 且静默不通知（发布端收不到 JoinRequest）。修复 + 单测严格断言参数集
   - 探针增强：时间戳输出、`--auto-respond` / `--auto-answer`、`RUST_LOG` tracing、`CommandError` 打印；服务器限制同身份单克隆（多探针需独立身份文件）
   - 遗留观察：手机端 `command_error` 已可见（此前静默），后续可在屏幕共享流程给用户更精确的提示
-- ⏳ **待办**：A3 发布端真机验证（手机 → TS6 原生客户端 / WebSpeak 观看）；A4 观看端真机验证（观看探针/原生流）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
+- ✅ **连接崩溃根因修复（提交 `5d5196d`）**：`ndk-context` 从未初始化 → hickory-resolver 首次
+  DNS 解析 panic（`android context was not initialized`）→ SIGABRT（原生崩溃无日志，经新增
+  panic hook 定位）。修复：JNI_OnLoad 尽力初始化 + `nativeCreate`/`nativeWaitConnected` 惰性
+  重试（本库在 Application 注册前由 `TsDroidApp` 类静态初始化加载，`currentApplication()` 为
+  null）；同时新增 panic hook（panic 消息写 logcat）与日志级别 Trace→Debug
+- ✅ **A1b 真机连服通过（vivo V2505A → `ts.mooncc.cn`）**：连接约 3 秒（DNS + 握手）；频道树
+  （8 频道）与用户列表（V2505A-Android / MoonCC233）实时刷新；频道图标正常加载；
+  `ScreenShare: PeerConnectionFactory initialized` + `Attached to TsClient`
+- 🔄 **A3 手机端发布真机验证（进行中）**：
+  - 授权链路：Android 17 MediaProjection（范围选择「共享整个屏幕」）→ vivo「屏幕共享保护」
+    → 开始 → `Publisher started: 屏幕共享 (326x720 @30fps)` → `Our stream started: 9e1df828-…`
+  - 探针对端验证（独立身份 `ts6-probe-identity-b.json`）：`requeststreaminfo clid=127` →
+    `StreamInfo` ✅；`joinstreamrequest` → 手机自动响应 `Offer sent to viewer 128`（真实
+    WebRTC offer，含 fingerprint/msid/codec 列表）✅；探针回 answer+ICE 信令经服务器送达 ✅
+    （探针为无媒体占位实现，answer 缺 DTLS fingerprint 被手机拒绝，属预期）
+  - 协议观察：服务器向发布端推送 `notifystreamclientjoined`（tslib 暂未处理）
+  - ⏳ 待办：用户 TS6 客户端（MoonCC233）实际观看确认（真实媒体链路）
+- ⏳ **待办**：A3 对端观看确认（TS6 原生客户端 MoonCC233 / WebSpeak）；A4 观看端真机验证（手机观看 TS6 客户端/探针发布的流）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
