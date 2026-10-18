@@ -97,8 +97,8 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | A1b | 构建验证：安装 Android SDK 后构建基线 APK | 可安装的 debug APK（`phone/app/build/outputs/apk/debug/app-debug.apk`） | `assembleDebug` 成功，arm64 真机可连接 TS3/TS6 服务器 | ✅ 2026-10-18：`assembleDebug` 成功；真机（vivo V2505A）连接 `ts.mooncc.cn` 成功，频道/用户列表正常（连接崩溃已修复，`5d5196d`） |
 | A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
 | A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | ✅ 2026-10-18：真实服务器 `ts.mooncc.cn:9987` 全信令闭环（7 命令/7 通知）验证通过；修复 `msg` 参数缺失（`22320ab`）；探针增强自动应答/时延测量 |
-| A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | 🔄 手机端发布已真机验证（MediaProjection 授权 → Publisher started → Our stream started；探针对端全信令闭环：requeststreaminfo/joinstreamrequest → 手机自动回真实 WebRTC offer）；待 TS6 原生客户端观看确认 |
-| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 核心已实现（事件发现 + WebRTC 接收 + SurfaceViewRenderer 渲染 + 观看入口）；待真机互通验证与旋转/全屏打磨 |
+| A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | ✅ 2026-10-18：与 TS6 原生客户端互通**验收通过**（手机发布 → 桌面观看画面可见，`SRD-OK → ANSWER-SENT`）；根因=发布 offer 必须「视频段 `a=sendonly` + 补 `m=audio` 媒体线」，修复与 18 个变体矩阵见 `docs/A3-screen-share-android.md` §6；WebSpeak 互通待可用实例 |
+| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 真机互通通过（手机观看 TS6 原生客户端发布流：`Join requested` → `Answer sent` → `Viewer ICE connected`，画面可见）；WebSpeak 互通待实例；旋转/全屏等 UI 打磨待做 |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
 
 ### B. Pad 端适配（全新开发）
@@ -214,7 +214,7 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **A1b 真机连服通过（vivo V2505A → `ts.mooncc.cn`）**：连接约 3 秒（DNS + 握手）；频道树
   （8 频道）与用户列表（V2505A-Android / MoonCC233）实时刷新；频道图标正常加载；
   `ScreenShare: PeerConnectionFactory initialized` + `Attached to TsClient`
-- 🔄 **A3 手机端发布真机验证（进行中）**：
+- 🔄 **A3 手机端发布真机验证（阶段记录，后续已定位根因并验收，见下）**：
   - 授权链路：Android 17 MediaProjection（范围选择「共享整个屏幕」）→ vivo「屏幕共享保护」
     → 开始 → `Publisher started: 屏幕共享 (326x720 @30fps)` → `Our stream started: 9e1df828-…`
   - 探针对端验证（独立身份 `ts6-probe-identity-b.json`）：`requeststreaminfo clid=127` →
@@ -222,5 +222,26 @@ AI 代理接到本指令后的参考执行顺序：
     WebRTC offer，含 fingerprint/msid/codec 列表）✅；探针回 answer+ICE 信令经服务器送达 ✅
     （探针为无媒体占位实现，answer 缺 DTLS fingerprint 被手机拒绝，属预期）
   - 协议观察：服务器向发布端推送 `notifystreamclientjoined`（tslib 暂未处理）
-  - ⏳ 待办：用户 TS6 客户端（MoonCC233）实际观看确认（真实媒体链路）
-- ⏳ **待办**：A3 对端观看确认（TS6 原生客户端 MoonCC233 / WebSpeak）；A4 观看端真机验证（手机观看 TS6 客户端/探针发布的流）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
+- ✅ **A3 发布端互通根因定位与修复（真机验收通过，2026-10-18 晚）**：
+  - 现象：手机 offer 被 TS6 原生客户端**静默拒收**（无 SRD、无 ICE 候选，重试 `5638 AlreadyJoined`）；
+    客户端 debug 日志定位 `StreamP2P::HandleRemoteOffer → MangleSessionVersion failed`
+  - 手段：探针新增 `--offer-file`（SDP 变体回放）与尾部 CRLF 保留修复；单因素变体矩阵
+    （V1–V9、W1–W10、W6b 共 18 个变体）逐项隔离；判定以桌面客户端日志
+    `HandleRemoteOffer ENTRY → SetRemoteDescription CALL → REMOTE-DESC-SET → ANSWER-SENT`
+    序列为准（仅 `ENTRY` 后静默 = 拒收）
+  - 结论：**① 视频媒体段必须 `a=sendonly`**（`a=sendrecv` 静默拒收，单因素 W2 证明）；
+    **② 必须补一条 `m=audio` 媒体线**（`a=inactive` 即可，V5 ❌ / V6 ✅）；offer 须以 CRLF 结尾。
+    其余手机端特征（ICE 凭据含 `/`、extmap 1–11、msid、renomination、H265 编解码表、ssrc、
+    缺 rtcp-xr/rrtr、8-PT 音频段）**全部被接受**（W1/W3/W4/W5/W6/W6b/W7/W8）
+  - 实现：`addTransceiver(SEND_ONLY)` 创建即定型（`addTrack` 后补 `setDirection` 实测无效）
+    + `INACTIVE` 占位音频 transceiver + `ensureVideoSendOnly()` 兜底改写 +
+    最终 offer 留档 `files/screenshare/last-offer.sdp`（`adb pull` 字节级核对）
+  - 验收：手机发布 → 桌面 `ENTRY 3525 → SRD-CALL 3561（mangle 运行）→ SRD-OK → ANSWER-SENT`，
+    **画面可见**（21:54、22:00 两轮）；手机日志
+    `Offer for viewer 141: 3525B sendonly=true audioLine=true crlfEnd=true rewritten=false`
+- ✅ **A4 观看端真机互通通过**：桌面客户端发布 → 手机观看（`Join requested` → `Answer sent` →
+  `Viewer ICE connected`，画面可见）；顺带修复停止路径风暴（`ScreenShareService` 停止闩锁
+  `AtomicBoolean` + 补 `stopForeground/stopSelf`；控制器 `stopPublishing` 不再回调服务，
+  消除 `startService → onStartCommand` 主线程无限递归，实测曾有 ~3000 次/秒风暴）
+- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；A4 观看端 UI 打磨（旋转/全屏/断流提示）；
+  B2s WebView 兼容性 spike

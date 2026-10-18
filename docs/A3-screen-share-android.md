@@ -1,7 +1,8 @@
 # A3 交付：Android 屏幕共享媒体层与 UI（发布端 + 观看端）
 
-> 状态：**实现完成，编译通过；待真机与对端互通验证**（2026-10-18）。
+> 状态：**实现完成；真机与 TS6 原生客户端双向互通验收通过**（2026-10-18）。
 > 协议事实来源见 `docs/A2-screen-share-protocol.md`；本文只描述媒体层与 UI 设计。
+> SDP 兼容性根因与单因素变体矩阵见 §6。
 
 ## 1. 范围
 
@@ -39,8 +40,9 @@
    分辨率等比缩放至 ≤1280×720（偶数对齐）、30 fps；
 4. 发送 `setupstream(name, has_audio=false, bitrate=4608, ...)`；服务端回 `notifystreamstarted`（含
    `stream_id`）后进入直播态；
-5. 每收到 `notifystreamjoinrequest(viewer_id)`：为该观看者创建 PC → 添加视频轨 → `createOffer` →
-   `setLocalDescription` → `respondjoinstreamrequest(stream_id, viewer_id, offer)`；
+5. 每收到 `notifystreamjoinrequest(viewer_id)`：为该观看者创建 PC → `addTransceiver` 添加视频轨
+   （方向 **SEND_ONLY**）→ 追加 `INACTIVE` 占位音频 m= 线 → `createOffer` → 视频方向兜底校正 +
+   `setLocalDescription` → `respondjoinstreamrequest(stream_id, viewer_id, offer)`（兼容性要求见 §6）；
 6. 观看者回 `answer`（`streamsignaling`）→ `setRemoteDescription`；双向 ICE 候选经 `iceCandidate` 信令中继；
 7. 停止：本地 `stopstream(stream_id)` + 释放采集/PC + 关闭前台服务（通知栏"停止"同路径）。
 
@@ -81,15 +83,90 @@
   `gradlew :app:testDebugUnitTest` 全量 61 项通过（Android 单测经 `testImplementation(org.json:json)`
   提供真实 JSON 实现——android.jar 内的 org.json 是抛异常的桩）。
 
-## 6. 待验证清单（真机 / 互通）
+## 6. TS6 对端 SDP 兼容性（真机实测，2026-10-18）
 
-| 项 | 方法 |
-| --- | --- |
-| MediaProjection 授权与采集 | 真机点共享 → 系统授权 → `notifystreamstarted` 回执（logcat `ScreenShare`） |
-| 与 WebSpeak 互通（发布/观看双向） | WebSpeak 实例中观察直播条目并播放；反向用 WebSpeak 发布、手机观看 |
-| 与 TS6 原生客户端互通 | 原生客户端加入频道后应能看到直播并可观看（H.264/VP8 协商） |
-| Android 14+ 前台服务合规 | 目标机型（API 34/35）验证 startForeground 顺序与授权一次性令牌 |
-| 观看端体验 | 旋转/全屏适配、断流提示、观看窗口关闭后的资源回收 |
+> **结论先行**：TS6 原生客户端收到发布端 offer 后会运行「会话版本改写 + SDP 校验重写」管线
+> （`StreamP2P::HandleRemoteOffer` → `MangleSessionVersion`），**结构不符即静默拒收**——不产生
+> 任何错误回复与 ICE 候选，重试只会得到 `5638 AlreadyJoined`（真因在客户端 debug 级日志
+> `MangleSessionVersion failed`）。手机端发布 offer 的硬性要求：
+>
+> 1. **必须包含第二条 `m=audio` 媒体线**（内容可极简，`a=inactive` 即可——V5 ❌ / V6 ✅）；
+> 2. **视频媒体段方向必须为 `a=sendonly`**（`a=sendrecv` 被静默拒收——单因素 W2 ❌）；
+> 3. offer 必须以 `\r\n` 结尾（探针实测：尾部少一个 CRLF 即被拒，3587 ❌ / 3589 ✅）。
+>
+> 其余手机端特征全部被接受：ICE 凭据含 `/`、扩展头 1–11、`msid:screen screen0`、
+> `ice-options … renomination`、手机编解码表（含 H265 / red / ulpfec）、手机 ssrc/cname、
+> 缺少 `rtcp-xr`/`rrtr`、多编解码音频段（8 个 PT）。
+
+### 6.1 单因素变体矩阵（探针回放 → TS6 桌面客户端）
+
+判定口径：客户端日志出现 `HandleRemoteOffer ENTRY` → `SetRemoteDescription CALL` →
+`REMOTE-DESC-SET` → `ANSWER-SENT` 序列 = **接受**；仅 `ENTRY` 后静默 = **拒绝**。
+
+| 变体 | 构造（相对基线单因素差异） | 大小 | 结果 |
+| --- | --- | --- | --- |
+| V0 | 原生客户端精确样本（对照） | 3589 | ✅ |
+| V5 | 原生去音频 m= 线 | 2684 | ❌ 音频线必需 |
+| V6 | 原生视频 + 极简音频（inactive） | 3413 | ✅ |
+| V7 | 手机视频原样 + 极简音频 | 3332 | ❌ |
+| V8 | 原生视频 + 原生音频去扩展头 | 3455 | ✅ |
+| V9 | 手机视频原样 + 原生音频 | 3508 | ❌ |
+| W1 | V6 + 手机 ICE 凭据（含 `/`） | 3413 | ✅ |
+| W2 | V6 + 视频 `a=sendrecv` | 3413 | ❌ **唯一毒因素** |
+| W3 | V6 + 手机 msid `screen screen0` | 3298 | ✅ |
+| W4 | V6 + 扩展头 1–11（11 条） | 3799 | ✅ |
+| W5 | V6 + `ice-options … renomination` | 3439 | ✅ |
+| W6 | V6 + 手机编解码块（含 H265） | 3317 | ✅（mangle 运行 +36B） |
+| W6b | 同 W6，去 H265 | 3093 | ✅ |
+| W7 | V6 + 手机 ssrc/cname | 3409 | ✅（mangle 运行 +168B） |
+| W8 | V6 去视频 rtcp-xr / rrtr | 3135 | ✅ |
+| W10 | **手机视频原样 + `sendonly` + 极简音频** | 3332 | ✅ 决定性 |
+
+> 第一轮 V1–V4（手机原样 / ICE 去 `/` / native msid 等）全拒——当时为「`sendrecv` + 缺音频线」
+> 叠加效应，已由 W2 与 V5/V6 对照精确归因。W6/W7 中 mangle 管线实际运行并成功，证明手机
+> 编解码块与 ssrc 完全可通过该校验。
+
+### 6.2 手机端最终实现（`ScreenShareController.handleJoinRequest`）
+
+- **视频方向**：`addTransceiver(track, RtpTransceiverInit(SEND_ONLY, listOf("screen")))`
+  ——创建即定型 `a=sendonly`。**踩坑**：`addTrack` 后补 `setDirection(SEND_ONLY)` 实测未生效
+  （首轮真机 offer 仍为 `a=sendrecv`），故必须用 `addTransceiver`；
+- **占位音频线**：`addTransceiver(MEDIA_TYPE_AUDIO, RtpTransceiverInit(INACTIVE))`
+  ——不发也不收音频，仅满足媒体线结构要求；
+- **兜底**：`ensureVideoSendOnly()` 若发现视频段仍为 `a=sendrecv` 则原位改写；改写后交给
+  `setLocalDescription`（保证线上字节与信令一致）。实测引擎已直接输出 `a=sendonly`
+  （`rewritten=false`），兜底未触发；
+- **留档**：最终 offer 原样写入
+  `/sdcard/Android/data/com.yuaxi.ts6droid.cn/files/screenshare/last-offer.sdp`，
+  `adb pull` 可做字节级核对（logcat 环形缓冲滚动极快，核查优先用该文件）。
+
+### 6.3 实测 offer 结构（3525 字节，22:00 验收样本）
+
+```
+v=0
+o=- 5608053823736516444 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE 0 1
+a=extmap-allow-mixed
+a=msid-semantic: WMS screen
+m=video 9 UDP/TLS/RTP/SAVPF 96 97 39 40 98 99 100 101 43 44 103 104 107
+…（a=mid:0 / a=extmap:1–11 / a=sendonly / a=msid:screen screen0 / rtpmap·fmtp·rtcp-fb …）
+m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
+…（a=mid:1 / a=inactive / a=rtpmap:111 opus/48000/2 … / rtcp-fb·fmtp …）
+```
+
+要点：`sendonly ×1`、`sendrecv ×0`、`inactive ×1`、BUNDLE `0 1`、文件尾 `0D 0A`。
+
+### 6.4 验收记录
+
+- **发布方向（A3）**：手机（vivo V2505A，用户 `V2505A-Android`）→ TS6 桌面客户端
+  （MoonCC233，clid 141）：`ENTRY 3525 → SRD-CALL 3561（mangle 运行）→ SRD-OK → ANSWER-SENT`，
+  **画面可见**（21:54、22:00 两轮）；手机端日志
+  `Offer for viewer 141: 3525B sendonly=true audioLine=true crlfEnd=true rewritten=false`。
+- **观看方向（A4）**：桌面客户端发布 → 手机观看：`Join requested` → `Answer sent` →
+  `Viewer ICE connected`，**画面可见**。
+- 仍未覆盖：WebSpeak 实例互通（待可用实例）、旋转/全屏等观看端 UI 打磨。
 
 ## 7. 后续工作
 
@@ -113,6 +190,12 @@
    > - 首次安装后可确认版本：`adb shell dumpsys package com.yuaxi.ts6droid.cn | findstr versionName`。
 2. **关键日志**：`adb logcat -s ScreenShare ScreenShareService TsClient tslib-jni`
    （媒体会话 / 前台服务 / 事件桥 / Rust 侧）
+
+   > **排查提示**：手机端调试日志量大、logcat 环形缓冲滚动很快（几分钟即可能覆盖），
+   > 核对发布 offer 建议直接 `adb pull` 留档文件
+   > `/sdcard/Android/data/com.yuaxi.ts6droid.cn/files/screenshare/last-offer.sdp`；
+   > 对端是否接受以 TS6 客户端日志的 `HandleRemoteOffer ENTRY → SetRemoteDescription CALL →
+   > REMOTE-DESC-SET` 序列为准（仅 `ENTRY` 后静默即被拒收，真因见 §6）。
 3. **发布端（A3）**：连接服务器 → 顶栏共享图标 → 系统授权 → 日志应出现
    `Publisher started` → `Our stream started`；TS6 原生客户端 / WebSpeak 中应出现直播条目并可观看
 4. **观看端（A4）**：他端发布 → 顶栏下方出现"观看"横幅 → 打开观看窗口 → 日志应出现
