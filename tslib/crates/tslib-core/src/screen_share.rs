@@ -129,10 +129,14 @@ pub fn setup_stream(name: &str, with_audio: bool) -> OutCommand {
 }
 
 /// C3：请求观看某人的流（观看者视角；发布者将收到 `notifyjoinstreamrequest`）
+///
+/// 参数集严格对齐 WebSpeak（`pad/src/server/screen-share-coordinator.ts`）；
+/// `msg` 虽为空串但**必须携带**，否则服务器返回 `ParameterMissing`（真实服务器实测）。
 pub fn join_stream_request(stream_id: &str, source_client_id: u16) -> OutCommand {
     let mut cmd = new_command("joinstreamrequest");
     cmd.write_arg("id", &stream_id);
     cmd.write_arg("clid", &source_client_id);
+    cmd.write_arg("msg", &"");
     cmd.write_arg("is_remove", &0);
     cmd.write_arg("muted", &0);
     cmd.write_arg("volume", &0);
@@ -141,12 +145,15 @@ pub fn join_stream_request(stream_id: &str, source_client_id: u16) -> OutCommand
 }
 
 /// C4：接受观看请求并下发 offer（发布者视角，回应 `notifyjoinstreamrequest`）
+///
+/// 同 C3，`msg=""` 必填。
 pub fn respond_join_stream_request(
     stream_id: &str, viewer_id: u16, offer_sdp: &str,
 ) -> OutCommand {
     let mut cmd = new_command("respondjoinstreamrequest");
     cmd.write_arg("id", &stream_id);
     cmd.write_arg("clid", &viewer_id);
+    cmd.write_arg("msg", &"");
     cmd.write_arg("offer", &offer_sdp);
     cmd.write_arg("decision", &1);
     cmd
@@ -513,13 +520,13 @@ mod tests {
 
     #[test]
     fn builds_join_and_respond_commands() {
+        // 参数集严格对齐 WebSpeak（含必填的 msg；缺失会导致真实服务器报 ParameterMissing）。
+        // 注意：空串值经 write_arg 序列化为裸键（无 `=`，协议解析等价于空串）
         let join = command_content(&join_stream_request("7", 42));
-        assert!(join.contains("joinstreamrequest id=7 clid=42"));
+        assert!(join.contains("joinstreamrequest id=7 clid=42 msg is_remove=0 muted=0 volume=0 hidden=0"));
 
         let respond = command_content(&respond_join_stream_request("7", 42, "v=0 o=-"));
-        assert!(respond.contains("respondjoinstreamrequest id=7 clid=42"));
-        assert!(respond.contains(r"offer=v=0\so=-"));
-        assert!(respond.contains("decision=1"));
+        assert!(respond.contains(r"respondjoinstreamrequest id=7 clid=42 msg offer=v=0\so=- decision=1"));
     }
 
     #[test]

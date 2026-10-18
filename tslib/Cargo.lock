@@ -2661,6 +2661,7 @@ dependencies = [
  "clap 4.6.7",
  "serde_json",
  "tokio",
+ "tracing-subscriber",
  "tslib-core",
 ]
 
