@@ -198,4 +198,6 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **A3 JNI 与绑定完成**：9 个屏幕共享 JNI 命令函数（含 `answer`/`iceCandidate` 信令写回）+ 两份 `Client.java` + `TsClient.kt` 命令包装与 `screenShareEvents` 事件流；`ScreenShareEvents.kt` 事件模型/解析
 - ✅ **Android `.so` 交叉编译修复**：去除不必要的 `vendored-openssl`（依赖树为纯 Rust 加密栈）；Windows 交叉编译须 `CMAKE_GENERATOR=Ninja`（默认 VS 生成器在 `audiopus_sys` 处失败）；release + `CARGO_PROFILE_RELEASE_STRIP=symbols` → `libtslib_jni.so` **9.7 MB**（arm64-v8a，对比 debug 193 MB），9 个屏幕共享符号经 `llvm-nm` 验证导出
 - ✅ **A3/A4 媒体层与 UI 实现**（编译通过）：`ScreenShareController`（发布端每观看者 PC + offer / 观看端 answer + ICE 编排）、`ScreenShareService`（`mediaProjection` 前台服务，Android 14+ 合规）、观看窗口 `ScreenShareViewerDialog`、顶栏共享开关与远端流入口；WebRTC 依赖 `io.github.webrtc-sdk:android:150.7871.01` → `docs/A3-screen-share-android.md`
-- 🔜 **后续**：接入 arm64 真机后执行 A1b 连服 / A2b 探针闭环 / A3+A4 屏幕共享互通验证；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）
+- ✅ **A3/A4 优化**：观看窗口 `FLAG_KEEP_SCREEN_ON`；`start_failed` / `join_rejected` 错误 Toast（三语文案）
+- ✅ **真机接入 + 安装冒烟通过**：vivo V2505A（Android 17 / SDK 37，arm64-v8a）USB 接入；APK **2.1.6-Han** 覆盖安装成功（踩坑：vivo「USB 安装」确认闸门在锁屏下自动拒绝 → 唤醒解锁后安装通过；设备上异签名旧版 2.1.4-Han 需先卸载，详见 `docs/A3-screen-share-android.md` §8）；`MainActivity` 首启无崩溃、主界面渲染正常
+- ⏳ **待办**：连接真实 TS6 服务器跑 A1b 连服 / A2b 探针闭环 / A3+A4 屏幕共享互通验证（等待服务器地址）；B2s WebView 兼容性 spike（依赖一个可达的 WebSpeak 实例）

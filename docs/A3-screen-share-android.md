@@ -103,6 +103,14 @@
 
 1. **构建 + 安装**：`cd phone && ./gradlew.bat :app:assembleDebug` →
    `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+
+   > **vivo / OriginOS 踩坑记录**（2026-10-18 实测）：
+   > - 若出现 `INSTALL_FAILED_ABORTED: User rejected permissions`：这是系统「USB 安装」确认
+   >   闸门在**锁屏状态下无法弹窗**导致的自动拒绝。先 `adb shell input keyevent KEYCODE_WAKEUP`
+   >   唤醒并解锁屏幕（`adb shell wm dismiss-keyguard`），再重试安装即可。
+   > - 若出现 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`（签名不匹配）：设备上已有异签名旧版
+   >   （如上游发布的 2.1.4-Han），需先 `adb uninstall com.yuaxi.ts6droid.cn` 再安装。
+   > - 首次安装后可确认版本：`adb shell dumpsys package com.yuaxi.ts6droid.cn | findstr versionName`。
 2. **关键日志**：`adb logcat -s ScreenShare ScreenShareService TsClient tslib-jni`
    （媒体会话 / 前台服务 / 事件桥 / Rust 侧）
 3. **发布端（A3）**：连接服务器 → 顶栏共享图标 → 系统授权 → 日志应出现
