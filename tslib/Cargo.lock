@@ -2654,6 +2654,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "screen-share-probe"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.6.7",
+ "serde_json",
+ "tokio",
+ "tslib-core",
+]
+
+[[package]]
 name = "sec1"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3597,6 +3608,7 @@ dependencies = [
  "jni 0.21.1",
  "log",
  "openssl",
+ "serde_json",
  "tokio",
  "tracing-log",
  "tslib-audio",
@@ -3610,6 +3622,7 @@ name = "tslib-python"
 version = "0.1.0"
 dependencies = [
  "pyo3",
+ "serde_json",
  "tokio",
  "tslib-audio",
  "tslib-channel",

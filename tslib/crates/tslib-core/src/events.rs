@@ -139,6 +139,9 @@ pub enum Event {
         channel_id: u64,
         permission_hints: u64,
     },
+
+    /// 屏幕共享事件（TS6 扩展协议；详见 [`crate::screen_share`]）
+    ScreenShare(crate::screen_share::ScreenShareEvent),
 }
 
 /// Message target type

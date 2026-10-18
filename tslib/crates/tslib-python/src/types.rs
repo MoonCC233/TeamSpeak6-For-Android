@@ -351,6 +351,11 @@ pub fn event_to_dict<'py>(py: Python<'py>, event: &tslib_core::events::Event) ->
             let _ = dict.set_item("channel_id", channel_id);
             let _ = dict.set_item("permission_hints", permission_hints);
         }
+        Event::ScreenShare(screen_event) => {
+            // 屏幕共享事件（TS6 扩展协议）：结构化数据以 JSON 字段传递。
+            let _ = dict.set_item("type", "screen_share");
+            let _ = dict.set_item("json", serde_json::to_string(screen_event).unwrap_or_default());
+        }
     }
 
     dict

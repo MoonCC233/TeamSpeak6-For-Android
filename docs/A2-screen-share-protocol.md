@@ -119,6 +119,21 @@
 | R5 | `process_stream_item` 增加 `UnknownCommand` 分支 → 映射新事件（`ScreenShareStreamStarted/Info/Stopped`、`JoinRequest`、`Signal{json}`、`ViewerLeft`） | `tslib-core/src/client.rs:337`、`events.rs` |
 | R6 | 公开 API：`request_stream_info` / `setup_stream` / `stop_stream` / `join_stream_request` / `respond_join_stream_request` / `stream_signaling` / `remove_client_from_stream` | `tslib-core/src/client.rs` |
 
+**实施状态（2026-10-18）**：
+
+- ✅ **R1–R3 完成**：vendor 于 `tslib/vendor/tsclientlib/`（上游 `ee3bc6f4`，含 declarations 子模块 `83cb8a9`；
+  补丁内容与升级步骤见 `tslib/vendor/tsclientlib/VENDOR-INFO.md`）；`tslib/Cargo.toml` 改 path 引用并
+  `exclude` vendor 树（修复 vendor 的 dev-dependencies 引发的 `jni-sys` 解析死锁）；`tslib/Cargo.lock` 已提交。
+- ✅ **R4–R6 完成**：`tslib-core/src/screen_share.rs`（7 命令构造 + 7 通知解析 + 信令 JSON 构造 + 12 项单元测试）；
+  `Event::ScreenShare(ScreenShareEvent)` 已接入 `process_stream_item` 的 `UnknownCommand` 分支；
+  `Client` 新增 7 个屏幕共享方法。验证：`cargo check -p tslib-core` 通过；
+  `cargo test -p tslib-core` 全量 63 项 + screen_share 12 项全部通过；`cargo check -p tslib-jni` 通过。
+- ✅ **JNI 事件映射**：`tslib-jni` 将新事件映射为 `screen_share` 类型（结构化数据以 `json` 字段承载）；
+  Python 绑定同步映射。（命令行 JNI 函数随 A3 Kotlin 侧一起添加。）
+- 🔄 **端到端验证**：探针 `tslib/examples/screen-share-probe` 已就绪，待在真实 TS6 服务器上执行
+  （A2b 验收：`--publish` 应收到 `StreamStarted` 通知；双端 `--publish`/`--join` 应触发 `JoinRequest`）。
+- ⬜ **未开始**：§7.3 Android 媒体与 UI（A3/A4）。
+
 预计量级：**Rust 约 300–500 行新增 + vendor 树上 20–40 行补丁**。
 
 ### 7.2 JNI 与 Java 绑定（`tslib/crates/tslib-jni` + `tslib/java`）

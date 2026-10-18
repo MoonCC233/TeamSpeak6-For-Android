@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.28", features = ["extension-module"] }
+serde_json.workspace = true
 tslib-core = { path = "../tslib-core" }
 tslib-audio = { path = "../tslib-audio" }
 tslib-chat = { path = "../tslib-chat" }

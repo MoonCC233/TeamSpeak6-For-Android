@@ -13,6 +13,7 @@ members = [
     "examples/voice-client",
     "examples/test-suite",
     "examples/send-msg",
+    "examples/screen-share-probe",
 ]
 
 # vendor 的第三方依赖树不属于本 workspace（避免其 dev-dependencies 参与依赖解析，

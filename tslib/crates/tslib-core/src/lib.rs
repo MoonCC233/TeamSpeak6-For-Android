@@ -39,6 +39,7 @@ pub mod connection;
 pub mod error;
 pub mod events;
 pub mod identity;
+pub mod screen_share;
 pub mod state;
 
 // Re-exports
@@ -48,4 +49,5 @@ pub use connection::{Connection, ConnectionState};
 pub use error::{Error, Result};
 pub use events::{AudioCodec, Event, EventHandler};
 pub use identity::Identity;
+pub use screen_share::{ScreenShareEvent, ScreenShareSignal};
 pub use state::{Channel, ServerState, User};

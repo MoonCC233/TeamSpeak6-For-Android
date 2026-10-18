@@ -364,6 +364,17 @@ pub fn create_java_event<'a>(
             put_long(env, &map, "permission_hints", *permission_hints as i64);
             "channel_permissions_updated"
         }
+        Event::ScreenShare(screen_event) => {
+            // 屏幕共享事件（TS6 扩展协议）：结构化数据以 JSON 字段传递，
+            // 由 Kotlin 侧按需解析（见 docs/A2-screen-share-protocol.md）。
+            put_string(
+                env,
+                &map,
+                "json",
+                &serde_json::to_string(screen_event).unwrap_or_default(),
+            );
+            "screen_share"
+        }
     };
 
     // Create the Event object
