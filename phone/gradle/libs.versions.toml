@@ -10,6 +10,8 @@ datastore = "1.1.1"
 coroutines = "1.9.0"
 coil = "2.7.0"
 junit = "4.13.2"
+# 单测中提供真实 org.json 实现（android.jar 里的 org.json 在 JVM 单测中是抛异常的桩）
+orgJson = "20240303"
 # Pinned: 0.34+ calls BasicText-CL7eQgs (a compose-foundation 1.8 signature) and
 # crashes with NoSuchMethodError on our compose BOM 2024.12.01 (foundation 1.7.6)
 # the moment the update dialog renders. 0.33.0 is the newest release compatible
@@ -42,6 +44,7 @@ mikepenz-markdown-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-
 # 125+ 起支持 16 KB 页大小（Android 15+ / Play 要求）。
 webrtc-android = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtcSdk" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -77,6 +77,9 @@
   - Gradle 任务 `buildRustLibs` 已同步（`../tslib`、`--release`、arm64-v8a、Ninja 路径、SDK 路径读取 `local.properties`）。
 - **编译验证**：`cargo test -p tslib-core`（63 + 12 项）、`cargo check -p tslib-jni`、
   `gradlew :app:compileDebugKotlin`、`:app:assembleDebug` 均通过。
+- **单测**：`ScreenShareEventParserTest`（15 项：7 种事件 + 5 种信令 + null `mid`/`m_line` + 未知/畸形负载）通过；
+  `gradlew :app:testDebugUnitTest` 全量 61 项通过（Android 单测经 `testImplementation(org.json:json)`
+  提供真实 JSON 实现——android.jar 内的 org.json 是抛异常的桩）。
 
 ## 6. 待验证清单（真机 / 互通）
 
