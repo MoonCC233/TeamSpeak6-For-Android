@@ -271,5 +271,16 @@
     <string name="screen_share_close">Fermer</string>
     <string name="screen_share_start_failed">Impossible de démarrer le partage d\'écran</string>
     <string name="screen_share_not_connected">Non connecté au serveur</string>
+    <string name="screen_share_live_badge">EN DIRECT</string>
+    <string name="screen_share_watch_user">Regarder le partage d\'écran</string>
+    <string name="screen_share_fit">Ajuster</string>
+    <string name="screen_share_fill">Remplir</string>
+    <string name="screen_share_rotate">Rotation</string>
+    <string name="viewer_status_joining">Connexion en cours…</string>
+    <string name="viewer_status_connecting">Connexion à la vidéo…</string>
+    <string name="viewer_status_reconnecting">Connexion interrompue, reprise…</string>
+    <string name="viewer_status_ended">Le partage d\'écran est terminé</string>
+    <string name="viewer_status_rejected">Le diffuseur a refusé la demande</string>
+    <string name="viewer_status_failed">Impossible de se connecter au partage d\'écran</string>
 
 </resources>

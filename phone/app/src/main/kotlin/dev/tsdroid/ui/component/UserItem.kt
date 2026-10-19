@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,10 @@ fun UserItem(
     onLongClick: (() -> Unit)? = null,
     onToggleMute: (() -> Unit)? = null,
     isLocallyMuted: Boolean = false,
+    /** 该用户正在发布屏幕共享（显示可点击的「直播」角标） */
+    isStreaming: Boolean = false,
+    /** 点击「直播」角标：观看该用户的屏幕共享 */
+    onWatchStream: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier) {
         Row(
@@ -111,6 +116,12 @@ fun UserItem(
                 Spacer(Modifier.width(2.dp))
             }
             
+            // 「直播」角标：点击直接进入观看窗口
+            if (isStreaming) {
+                LiveBadge(onClick = onWatchStream)
+                Spacer(Modifier.width(4.dp))
+            }
+
             // Inline mute toggle button instead of long press menu
             if (onToggleMute != null) {
                 IconButton(
@@ -134,6 +145,25 @@ fun UserItem(
                 Spacer(Modifier.width(2.dp))
             }
         }
+    }
+}
+
+/** 「直播」小角标：点击进入观看窗口 */
+@Composable
+private fun LiveBadge(onClick: (() -> Unit)?) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFFE53935))
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.screen_share_live_badge),
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 

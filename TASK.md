@@ -98,7 +98,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
 | A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | ✅ 2026-10-18：真实服务器 `ts.mooncc.cn:9987` 全信令闭环（7 命令/7 通知）验证通过；修复 `msg` 参数缺失（`22320ab`）；探针增强自动应答/时延测量 |
 | A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | ✅ 2026-10-18：与 TS6 原生客户端互通**验收通过**（手机发布 → 桌面观看画面可见，`SRD-OK → ANSWER-SENT`）；根因=发布 offer 必须「视频段 `a=sendonly` + 补 `m=audio` 媒体线」，修复与 18 个变体矩阵见 `docs/A3-screen-share-android.md` §6；WebSpeak 互通待可用实例 |
-| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 真机互通通过（手机观看 TS6 原生客户端发布流：`Join requested` → `Answer sent` → `Viewer ICE connected`，画面可见）；WebSpeak 互通待实例；旋转/全屏等 UI 打磨待做 |
+| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 真机互通通过（桌面发布 → 手机观看画面可见）；观看端体验打磨已实现（2026-10-19：沉浸全屏/旋转/缩放、成员与频道「直播」角标、断流与异常提示、首帧检测），真机复测待做；WebSpeak 互通待实例 |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
 
 ### B. Pad 端适配（全新开发）
@@ -197,7 +197,7 @@ AI 代理接到本指令后的参考执行顺序：
 - 🔄 **A2b 核心完成**：`screen_share` 模块（7 命令构造 + 7 通知解析 + 12 项单元测试）与 `Event::ScreenShare` 已落地（`cargo test -p tslib-core` 全量 63 项通过；`cargo check -p tslib-jni` 通过）；JNI/Python 映射为 `screen_share` 事件；验证探针 `tslib/examples/screen-share-probe` 待真实 TS6 服务器执行（`--publish`/`--join`）
 - ✅ **A3 JNI 与绑定完成**：9 个屏幕共享 JNI 命令函数（含 `answer`/`iceCandidate` 信令写回）+ 两份 `Client.java` + `TsClient.kt` 命令包装与 `screenShareEvents` 事件流；`ScreenShareEvents.kt` 事件模型/解析
 - ✅ **Android `.so` 交叉编译修复**：去除不必要的 `vendored-openssl`（依赖树为纯 Rust 加密栈）；Windows 交叉编译须 `CMAKE_GENERATOR=Ninja`（默认 VS 生成器在 `audiopus_sys` 处失败）；release + `CARGO_PROFILE_RELEASE_STRIP=symbols` → `libtslib_jni.so` **9.7 MB**（arm64-v8a，对比 debug 193 MB），9 个屏幕共享符号经 `llvm-nm` 验证导出
-- ✅ **A3/A4 媒体层与 UI 实现**（编译通过）：`ScreenShareController`（发布端每观看者 PC + offer / 观看端 answer + ICE 编排）、`ScreenShareService`（`mediaProjection` 前台服务，Android 14+ 合规）、观看窗口 `ScreenShareViewerDialog`、顶栏共享开关与远端流入口；WebRTC 依赖 `io.github.webrtc-sdk:android:150.7871.01` → `docs/A3-screen-share-android.md`
+- ✅ **A3/A4 媒体层与 UI 实现**（编译通过）：`ScreenShareController`（发布端每观看者 PC + offer / 观看端 answer + ICE 编排）、`ScreenShareService`（`mediaProjection` 前台服务，Android 14+ 合规）、观看窗口 `ScreenShareViewerOverlay`、顶栏共享开关与远端流入口；WebRTC 依赖 `io.github.webrtc-sdk:android:150.7871.01` → `docs/A3-screen-share-android.md`
 - ✅ **A3/A4 优化**：观看窗口 `FLAG_KEEP_SCREEN_ON`；`start_failed` / `join_rejected` 错误 Toast（三语文案）
 - ✅ **真机接入 + 安装冒烟通过**：vivo V2505A（Android 17 / SDK 37，arm64-v8a）USB 接入；APK **2.1.6-Han** 覆盖安装成功（踩坑：vivo「USB 安装」确认闸门在锁屏下自动拒绝 → 唤醒解锁后安装通过；设备上异签名旧版 2.1.4-Han 需先卸载，详见 `docs/A3-screen-share-android.md` §8）；`MainActivity` 首启无崩溃、主界面渲染正常
 - ✅ **A2b 协议闭环验证通过（真实服务器 `ts.mooncc.cn:9987`，MPT Speak）**：
@@ -243,5 +243,15 @@ AI 代理接到本指令后的参考执行顺序：
   `Viewer ICE connected`，画面可见）；顺带修复停止路径风暴（`ScreenShareService` 停止闩锁
   `AtomicBoolean` + 补 `stopForeground/stopSelf`；控制器 `stopPublishing` 不再回调服务，
   消除 `startService → onStartCommand` 主线程无限递归，实测曾有 ~3000 次/秒风暴）
-- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；A4 观看端 UI 打磨（旋转/全屏/断流提示）；
-  B2s WebView 兼容性 spike
+- ✅ **A3 编解码回退 VP8**（2026-10-18）：TS6 桌面端（CEF+FFmpeg）仅解 VP8/VP9/AV1——H264
+  → `NullVideoDecoder` 黑屏、H265 被 answer 剔除；`applyVideoCodecPreferences` 剔除 H264/H265
+  并将 VP8 置顶（**必须连同 rtx/red/ulpfec 一起传**，否则被挤出 offer：坏形态 2586B 无重传
+  条目 → 修复后 ~3.5KB `96 97 39 40 98 99 103 104 107` 全量条目）；修复后桌面会话无
+  `unsupported format` 报错；详见 `docs/A3-screen-share-android.md` §6.5
+- ✅ **A4 观看端体验打磨**（2026-10-19）：观看阶段状态机（JOINING→CONNECTING→WATCHING/
+  RECONNECTING/ENDED/REJECTED/FAILED）+ 首帧检测（`FirstFrameSink`）+ 加入超时 20s；
+  `ScreenShareViewerOverlay` 全屏覆盖层（沉浸隐藏系统栏、常亮、单击控制条 3.5s 自动隐藏、
+  适应/填充缩放、旋转按钮，退出恢复）；观看入口增强（成员行「直播」角标可直点观看、频道行
+  直播标记、用户面板「观看屏幕共享」）；断流/被拒/失败提示与自动收起；`MainActivity` 增
+  `configChanges`（旋转不重建 Activity，观看不断流）；构建通过，真机复测待设备授权
+- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s WebView 兼容性 spike

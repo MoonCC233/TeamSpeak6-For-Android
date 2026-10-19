@@ -271,5 +271,16 @@
     <string name="screen_share_close">Close</string>
     <string name="screen_share_start_failed">Could not start the screen share</string>
     <string name="screen_share_not_connected">Not connected to the server</string>
+    <string name="screen_share_live_badge">LIVE</string>
+    <string name="screen_share_watch_user">Watch screen share</string>
+    <string name="screen_share_fit">Fit</string>
+    <string name="screen_share_fill">Fill</string>
+    <string name="screen_share_rotate">Rotate</string>
+    <string name="viewer_status_joining">Joining…</string>
+    <string name="viewer_status_connecting">Connecting to the video…</string>
+    <string name="viewer_status_reconnecting">Connection lost, reconnecting…</string>
+    <string name="viewer_status_ended">The screen share has ended</string>
+    <string name="viewer_status_rejected">The broadcaster declined the request</string>
+    <string name="viewer_status_failed">Could not connect to the screen share</string>
 
 </resources>

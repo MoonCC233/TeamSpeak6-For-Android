@@ -102,7 +102,7 @@ import dev.tsdroid.ui.component.LiquidGlassPanel
 import dev.tsdroid.ui.component.LocalGlassWallpaper
 import dev.tsdroid.ui.component.ShareTarget
 import dev.tsdroid.ui.component.ServerInfoSheet
-import dev.tsdroid.ui.component.ScreenShareViewerDialog
+import dev.tsdroid.ui.component.ScreenShareViewerOverlay
 import dev.tsdroid.ui.component.UserPanelSheet
 import dev.tsdroid.ui.component.rememberGlassBackdrop
 import dev.tsdroid.ui.icon.AppIcons
@@ -193,7 +193,13 @@ fun ServerScreen(
     // ===== 屏幕共享（A3/A4） =====
     val isPublishing by ScreenShareController.publishing.collectAsStateWithLifecycle()
     val remoteStreams by ScreenShareController.remoteStreams.collectAsStateWithLifecycle()
-    var viewingStreamId by remember { mutableStateOf<String?>(null) }
+    val viewerPhases by ScreenShareController.viewerPhases.collectAsStateWithLifecycle()
+    // 观看中的流（保留快照：发布方停止后仍要展示「已结束」提示，直到用户关闭）
+    var viewingStream by remember { mutableStateOf<ScreenShareController.RemoteStream?>(null) }
+    // 正在直播的 clientId 集合（成员行 / 频道行「直播」角标与入口）
+    val streamingClientIds = remember(remoteStreams) {
+        remoteStreams.values.map { it.clientId }.toSet()
+    }
 
     // MediaProjection 授权结果 → 启动前台服务开始发布（Android 14+ 每次共享都需重新授权）
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -269,17 +275,7 @@ fun ServerScreen(
         )
     }
 
-    // 屏幕共享观看窗口（A4）
-    viewingStreamId?.let { streamId ->
-        remoteStreams[streamId]?.let { stream ->
-            ScreenShareViewerDialog(
-                streamId = stream.streamId,
-                sourceClientId = stream.clientId,
-                name = stream.name,
-                onDismiss = { viewingStreamId = null },
-            )
-        }
-    }
+    // 屏幕共享观看窗口（A4）已迁移至文件末尾的 ScreenShareViewerOverlay 调用
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimeBackground(enabled = animeBackground)
@@ -370,7 +366,7 @@ fun ServerScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
-                            TextButton(onClick = { viewingStreamId = stream.streamId }) {
+                            TextButton(onClick = { viewingStream = stream }) {
                                 Text(stringResource(R.string.screen_share_watch))
                             }
                         }
@@ -586,6 +582,12 @@ fun ServerScreen(
                 mutedUserIds = mutedUserIds,
                 channelIcons = channelIcons,
                 userAvatars = userAvatars,
+                streamingUserIds = streamingClientIds,
+                onWatchStream = { user ->
+                    remoteStreams.values.firstOrNull { it.clientId == user.id }?.let { stream ->
+                        viewingStream = stream
+                    }
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 8.dp),
@@ -706,9 +708,30 @@ fun ServerScreen(
             }
             userPanelUserId = null
         },
+        isStreaming = panelUser?.let { it.id in streamingClientIds } == true,
+        onWatchStream = {
+            val user = panelUser
+            if (user != null) {
+                remoteStreams.values.firstOrNull { it.clientId == user.id }?.let { stream ->
+                    viewingStream = stream
+                }
+            }
+            userPanelUserId = null
+        },
         onDismiss = { userPanelUserId = null },
         wallpaper = glassWallpaper,
     )
+
+    // 屏幕共享观看窗口（A4）：全屏沉浸 + 阶段提示；置于所有内容之上
+    viewingStream?.let { stream ->
+        ScreenShareViewerOverlay(
+            streamId = stream.streamId,
+            sourceClientId = stream.clientId,
+            name = stream.name,
+            phase = viewerPhases[stream.streamId] ?: ScreenShareController.ViewerPhase.JOINING,
+            onDismiss = { viewingStream = null },
+        )
+    }
 
     // Image preview overlay (bitmap is pre-decoded off the main thread)
     if (previewImageBitmap != null) {

@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -48,6 +51,10 @@ fun UserPanelSheet(
     onToggleMute: () -> Unit,
     onPrivateMessage: () -> Unit,
     onDismiss: () -> Unit,
+    /** 该用户正在发布屏幕共享（显示「观看屏幕共享」入口） */
+    isStreaming: Boolean = false,
+    /** 点击「观看屏幕共享」 */
+    onWatchStream: (() -> Unit)? = null,
     /** Backdrop for the frosted panel, so the sheet matches the cards behind it. */
     wallpaper: ImageBitmap? = null,
 ) {
@@ -97,6 +104,19 @@ fun UserPanelSheet(
                 modifier = Modifier.weight(1f),
             )
             Switch(checked = isMuted, onCheckedChange = { onToggleMute() })
+        }
+
+        if (isStreaming && onWatchStream != null) {
+            TextButton(onClick = onWatchStream) {
+                Icon(
+                    Icons.Filled.RadioButtonChecked,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = Color(0xFFE53935),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.screen_share_watch_user))
+            }
         }
 
         TextButton(onClick = onPrivateMessage) {

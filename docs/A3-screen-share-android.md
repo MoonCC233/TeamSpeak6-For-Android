@@ -48,12 +48,30 @@
 
 ### 3.2 观看端（A4）
 
-1. `notifystreamstarted` / `notifystreaminfo` → `remoteStreams` 状态流 → UI 出现"观看"横幅；
-2. 点击观看 → `joinStream()` 创建 PC 并发送 `joinstreamrequest(stream_id, source_client_id)`；
+1. `notifystreamstarted` / `notifystreaminfo` → `remoteStreams` 状态流 → 顶栏下方"观看"横幅 +
+   成员行「直播」角标 / 频道行直播标记（`ChannelTree` 接收 `streamingUserIds`）；
+2. 点击观看（横幅 / 成员角标 / 用户面板「观看屏幕共享」）→ `joinStream()` 创建 PC 并发送
+   `joinstreamrequest(stream_id, source_client_id)`；
 3. 收到 `notifyrespondjoinstreamrequest(offer)` → `setRemoteDescription` → `createAnswer` →
    `setLocalDescription` → 经 `sendScreenShareAnswer` 回发（Rust 侧组装 JSON）；
-4. 远端视频轨到达（`onAddTrack`）→ 绑定 `SurfaceViewRenderer`；
-5. 关闭窗口 → `leaveStream()` 关闭 PC、解绑渲染器、释放 EGL。
+4. 远端视频轨到达（`onAddTrack`）→ 以**首帧检测包装**（`FirstFrameSink`）绑定
+   `SurfaceViewRenderer`：首帧真正渲染后才把会话阶段切到 `WATCHING`，避免"已连接但黑屏"
+   被当成观看成功；换绑渲染器（重组）时自动解挂旧 sink 再挂新渲染器；
+5. 观看窗口 `ScreenShareViewerOverlay`（全屏覆盖层，非 Dialog）：
+   - 沉浸全屏：隐藏系统栏（可上滑唤出）、保持屏幕常亮、退出时恢复系统栏与屏幕方向；
+   - 控制条：单击画面切换显隐，观看中 3.5 秒无操作自动隐藏；
+   - 「适应 / 填充」缩放切换（`SCALE_ASPECT_FIT` / `SCALE_ASPECT_FILL`）；
+   - 「旋转」按钮：传感器横屏 ↔ 跟随系统（`SCREEN_ORIENTATION_SENSOR_LANDSCAPE` /
+     `UNSPECIFIED`），退出时恢复进入前的方向；
+   - 阶段提示（由 `ScreenShareController.viewerPhases` 驱动）：加入中 / 连接画面中 /
+     重连中 / 直播已结束 / 被拒绝 / 连接失败；「已结束」「被拒绝」3 秒后自动收起；
+6. 关闭窗口（返回键 / 关闭按钮）→ `leaveStream()` 关闭 PC、解绑 sink、释放 EGL；
+   发布方停止（`StreamStopped`）→ 观看会话释放但保留阶段与流快照，窗口显示「直播已结束」；
+   加入请求 20 秒无应答 → 阶段置为 `FAILED`（提示「无法连接到该直播」）。
+
+> **旋转不断流的实现前提**：`MainActivity` 声明
+> `android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"`
+> —— Activity 不因旋转重建，观看会话/渲染器保持；否则旋转会触发整窗重组与重新加入。
 
 ## 4. 关键设计决策
 
@@ -166,15 +184,33 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
   `Offer for viewer 141: 3525B sendonly=true audioLine=true crlfEnd=true rewritten=false`。
 - **观看方向（A4）**：桌面客户端发布 → 手机观看：`Join requested` → `Answer sent` →
   `Viewer ICE connected`，**画面可见**。
-- 仍未覆盖：WebSpeak 实例互通（待可用实例）、旋转/全屏等观看端 UI 打磨。
+- 仍未覆盖：WebSpeak 实例互通（待可用实例）。
+
+### 6.5 对端解码能力与编解码协商（2026-10-18 补充定位）
+
+> **结论先行**：TS6 桌面客户端（CEF + FFmpeg 工具链）**只解 VP8 / VP9 / AV1**；
+> 手机端 VP8/VP9 只有软编码器，而硬件编码器仅 H264/H265。因此**两端唯一交集是 VP8 软编**。
+
+- **现象与证据**：手机默认码表 H264 置顶时，桌面端 `Trying to create decoder for unsupported
+  format. Codec name: H264 …` → 落入 `NullVideoDecoder` → 画面黑屏、帧率 0；H265 则直接在
+  answer 里被剔除（桌面 answer 恒等于 offer 减去 H265）。VP8 实测可正常建解码器并出画面。
+- **修复**：`applyVideoCodecPreferences` 剔除 H264/H265（**连同其 apt 关联的 rtx 条目**）
+  并把 VP8 置顶（保留 VP9/AV1/red/ulpfec）。
+- **踩坑**：传码表时**必须连同 rtx / red / ulpfec 一起传入**，否则这些条目会被挤出 offer——
+  曾出现 `m=video … 100 43`（仅 H264/H265、无任何重传条目）的 2586B 坏形态，
+  重传 / FEC 能力归零；修复后 offer 恢复 ~3.5KB 正常形态
+  （`m=video 9 UDP/TLS/RTP/SAVPF 96 97 39 40 98 99 103 104 107`，含全部 rtx/red/ulpfec）。
+
 
 ## 7. 后续工作
 
 1. 系统声音采集（`AudioPlaybackCapture`，`withAudio=true`）——协议与 JS 侧已支持；
-2. 观看入口增强：成员卡片"直播中"角标、频道内提示（对齐 WebSpeak UI）；
-3. 自定义 ICE/TURN 设置项（对齐 WebSpeak 的管理端配置语义）；
-4. 发布码率自适应与统计（`getStats` 指标上屏）；
-5. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）。
+2. 自定义 ICE/TURN 设置项（对齐 WebSpeak 的管理端配置语义）；
+3. 发布码率自适应与统计（`getStats` 指标上屏）；
+4. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）。
+
+> 已完成（2026-10-19）：观看入口增强（成员「直播」角标 / 频道直播标记 / 用户面板入口）
+> 与观看窗口打磨（沉浸全屏、旋转、缩放、断流与异常提示），见 §3.2。
 
 ## 8. 真机验证步骤（设备接入后执行）
 
@@ -198,8 +234,10 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
    > REMOTE-DESC-SET` 序列为准（仅 `ENTRY` 后静默即被拒收，真因见 §6）。
 3. **发布端（A3）**：连接服务器 → 顶栏共享图标 → 系统授权 → 日志应出现
    `Publisher started` → `Our stream started`；TS6 原生客户端 / WebSpeak 中应出现直播条目并可观看
-4. **观看端（A4）**：他端发布 → 顶栏下方出现"观看"横幅 → 打开观看窗口 → 日志应出现
-   `Join requested` → `Answer sent` → `Video sink attached`
+4. **观看端（A4）**：他端发布 → 顶栏下方出现"观看"横幅 / 成员行出现「直播」角标 → 打开观看
+   窗口 → 日志应出现 `Join requested` → `Answer sent` → `Video sink attached` →
+   `Viewer phase <streamId> -> WATCHING`；可顺带验证：单击切换控制条、适应/填充、旋转按钮
+   （横屏观看不断流）、发布方停止后窗口提示「直播已结束」并自动收起
 5. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
    应收到 `StreamStarted`；再用两个探针实例（`--publish` / `--join --source-clid <clid>`）交叉验证
    `JoinRequest`、offer/answer 与 ICE 中继。

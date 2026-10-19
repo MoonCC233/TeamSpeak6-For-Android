@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,11 +23,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.tsdroid.han.R
 import dev.tslib.Channel
 import dev.tslib.ChannelTree as JChannelTree
 import dev.tslib.User
@@ -47,6 +52,10 @@ fun ChannelTree(
     mutedUserIds: Set<Int> = emptySet(),
     channelIcons: Map<Long, ImageBitmap> = emptyMap(),
     userAvatars: Map<String, ImageBitmap> = emptyMap(),
+    /** 正在发布屏幕共享的 clientId 集合（用户行 / 频道行显示「直播」角标） */
+    streamingUserIds: Set<Int> = emptySet(),
+    /** 点击用户行的「直播」角标：观看该用户的屏幕共享 */
+    onWatchStream: ((User) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // Filter nulls early — JNI arrays can contain null elements
@@ -59,6 +68,10 @@ fun ChannelTree(
     }
     val userCountByChannel = remember(safeUsers) {
         safeUsers.groupingBy { it.channelId }.eachCount()
+    }
+    // 含直播成员的频道集合（频道行「直播」角标）
+    val liveChannelIds = remember(safeUsers, streamingUserIds) {
+        safeUsers.filter { it.id in streamingUserIds }.map { it.channelId }.toSet()
     }
 
     LazyColumn(modifier = modifier) {
@@ -75,6 +88,7 @@ fun ChannelTree(
                     userCount = userCountByChannel[item.channel.id] ?: 0,
                     onClick = { onChannelClick(item.channel.id) },
                     icon = channelIcons[item.channel.iconId],
+                    hasLiveStream = item.channel.id in liveChannelIds,
                 )
                 is TreeItem.UserNode -> UserItem(
                     user = item.user,
@@ -84,6 +98,8 @@ fun ChannelTree(
                     onLongClick = onUserLongPress?.let { { it(item.user) } },
                     onToggleMute = onUserLongClick?.let { { it(item.user) } },
                     isLocallyMuted = item.user.id in mutedUserIds,
+                    isStreaming = item.user.id in streamingUserIds,
+                    onWatchStream = onWatchStream?.let { callback -> { callback(item.user) } },
                 )
             }
         }
@@ -97,6 +113,7 @@ private fun ChannelRow(
     userCount: Int,
     onClick: () -> Unit,
     icon: ImageBitmap? = null,
+    hasLiveStream: Boolean = false,
 ) {
     val spacer = remember(channel.name) { parseSpacer(channel.name) }
 
@@ -174,6 +191,15 @@ private fun ChannelRow(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
+            if (hasLiveStream) {
+                Icon(
+                    Icons.Filled.RadioButtonChecked,
+                    contentDescription = stringResource(R.string.screen_share_live_badge),
+                    modifier = Modifier.size(14.dp),
+                    tint = Color(0xFFE53935),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
             if (userCount > 0) {
                 Text(
                     text = "($userCount)",

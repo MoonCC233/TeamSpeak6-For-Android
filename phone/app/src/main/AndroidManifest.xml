@@ -33,6 +33,7 @@
 
         <activity
             android:name="dev.tsdroid.MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:theme="@style/Theme.TSDroid">
             <intent-filter>

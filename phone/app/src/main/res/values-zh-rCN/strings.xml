@@ -270,5 +270,16 @@
     <string name="screen_share_close">关闭</string>
     <string name="screen_share_start_failed">无法开始屏幕共享</string>
     <string name="screen_share_not_connected">未连接到服务器</string>
+    <string name="screen_share_live_badge">直播</string>
+    <string name="screen_share_watch_user">观看屏幕共享</string>
+    <string name="screen_share_fit">适应</string>
+    <string name="screen_share_fill">填充</string>
+    <string name="screen_share_rotate">旋转</string>
+    <string name="viewer_status_joining">正在加入…</string>
+    <string name="viewer_status_connecting">正在连接画面…</string>
+    <string name="viewer_status_reconnecting">连接中断，正在重连…</string>
+    <string name="viewer_status_ended">直播已结束</string>
+    <string name="viewer_status_rejected">发布者拒绝了观看请求</string>
+    <string name="viewer_status_failed">无法连接到该直播</string>
 
 </resources>
