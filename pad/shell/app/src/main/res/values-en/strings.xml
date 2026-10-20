@@ -16,7 +16,7 @@
     <string name="clear_confirm_title">Clear WebView data?</string>
     <string name="clear_confirm_message">This clears cookies, cache and local storage, then reloads the gateway. You may need to sign in to voice again.</string>
     <string name="clear">Clear</string>
-    <string name="about_message">TS6 Pad 0.1.0-pad-spike\n\nWebSpeak WebView shell (B2s).\nThe UI and features come from the self-hosted WebSpeak instance; the native layer owns the WebView, microphone permission, fullscreen, and the upcoming screen-share publishing bridge.\n\nLicense: AGPL-3.0-only (matching the pad/ upstream).</string>
+    <string name="about_message">TS6 Pad 0.2.0-pad-b3\n\nWebSpeak WebView shell (B2s/B3).\nThe UI and features come from the self-hosted WebSpeak instance; the native layer owns the WebView, microphone permission, fullscreen, background voice foreground service, safe-area insets, and the upcoming screen-share publishing bridge.\n\nLicense: AGPL-3.0-only (matching the pad/ upstream).</string>
     <string name="error_title">Cannot load WebSpeak</string>
     <string name="error_message">Check the gateway URL, network connection and HTTPS certificate.</string>
     <string name="retry">Retry</string>
@@ -29,4 +29,10 @@
     <string name="permission_denied">Microphone permission was denied; voice cannot start.</string>
     <string name="open_external_failed">Cannot open external link</string>
     <string name="file_chooser_failed">Cannot open file chooser</string>
+    <string name="safe_area_on">Safe-area insets: on</string>
+    <string name="safe_area_off">Safe-area insets: off</string>
+    <string name="voice_channel_name">Voice session</string>
+    <string name="voice_channel_description">Keeps the voice connection alive in the background</string>
+    <string name="voice_notification_title">TS6 Pad voice session</string>
+    <string name="voice_notification_text">Keeping the background voice connection alive. Tap to return.</string>
 </resources>

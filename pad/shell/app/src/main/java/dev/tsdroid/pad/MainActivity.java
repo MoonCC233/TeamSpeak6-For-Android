@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -18,6 +19,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.util.Log;
+import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -68,9 +70,68 @@ public final class MainActivity extends Activity {
     private static final String PREFS = "ts6pad_shell";
     private static final String PREF_URL = "gateway_url";
     private static final String PREF_INSECURE = "allow_insecure_tls";
+    private static final String PREF_SAFE_AREA = "safe_area_insets";
     private static final String DEFAULT_URL = "https://shanghai.webspeak.online";
     private static final int REQ_MIC = 4101;
     private static final int REQ_FILE = 4102;
+
+    /**
+     * Injected after the page loads. It wraps getUserMedia so the shell can
+     * learn when a microphone/voice stream becomes live or ends, which drives
+     * the foreground service. The wrapper is intentionally defensive: the web
+     * app must keep working even if any of this fails.
+     */
+    private static final String INJECT_VOICE_HOOK = """
+            (function(){
+              try {
+                console.log('[TS6Pad] bridge=' + (!!window.TS6PadNative)
+                  + ' version=' + (window.TS6PadNative ? window.TS6PadNative.getVersion() : 'n/a')
+                  + ' ua=' + navigator.userAgent);
+                if (window.__ts6padVoiceHookInstalled) { return; }
+                window.__ts6padVoiceHookInstalled = true;
+                var bridge = window.TS6PadNative;
+                if (!bridge || typeof bridge.setVoiceActive !== 'function') { return; }
+                var notify = function(active) {
+                  try { bridge.setVoiceActive(!!active); } catch (e) {}
+                };
+                var isLive = function(stream) {
+                  try {
+                    var tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
+                    for (var i = 0; i < tracks.length; i++) {
+                      if (tracks[i].readyState === 'live') { return true; }
+                    }
+                  } catch (e) {}
+                  return false;
+                };
+                var activeStreams = [];
+                var watch = function(stream) {
+                  if (activeStreams.indexOf(stream) >= 0) { return; }
+                  activeStreams.push(stream);
+                  notify(true);
+                  var timer = setInterval(function() {
+                    if (!isLive(stream)) {
+                      clearInterval(timer);
+                      var index = activeStreams.indexOf(stream);
+                      if (index >= 0) { activeStreams.splice(index, 1); }
+                      if (activeStreams.length === 0) { notify(false); }
+                    }
+                  }, 1000);
+                };
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                  var original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+                  navigator.mediaDevices.getUserMedia = function(constraints) {
+                    return original(constraints).then(function(stream) {
+                      var hasAudio = false;
+                      try { hasAudio = !!(stream.getAudioTracks && stream.getAudioTracks().length); } catch (e) {}
+                      if (hasAudio) { watch(stream); }
+                      return stream;
+                    });
+                  };
+                }
+                window.addEventListener('pagehide', function() { notify(false); });
+              } catch (e) {}
+            })();
+            """;
 
     private FrameLayout root;
     private WebView webView;
@@ -88,11 +149,19 @@ public final class MainActivity extends Activity {
     private SslErrorHandler pendingSslHandler;
     private long lastBackPressedAt;
 
+    private volatile boolean voiceActive;
+    private boolean activityResumed;
+    private VoiceSessionService.FocusListener focusListener;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        voiceActive = false;
+        focusListener = (hasFocus, transientLoss) -> runOnUiThread(
+                () -> onAudioFocusChanged(hasFocus, transientLoss));
+        VoiceSessionService.setFocusListener(focusListener);
         configureWindow();
         buildUi();
         configureWebView();
@@ -154,6 +223,36 @@ public final class MainActivity extends Activity {
         buildSettingsButton();
 
         setContentView(root);
+        installSafeAreaInsets();
+    }
+
+    private void installSafeAreaInsets() {
+        root.setOnApplyWindowInsetsListener((view, insets) -> {
+            int left = 0;
+            int top = 0;
+            int right = 0;
+            int bottom = 0;
+            if (prefs.getBoolean(PREF_SAFE_AREA, true)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Insets cutout = insets.getInsets(WindowInsets.Type.displayCutout());
+                    left = cutout.left;
+                    top = cutout.top;
+                    right = cutout.right;
+                    bottom = cutout.bottom;
+                } else {
+                    DisplayCutout cutout = insets.getDisplayCutout();
+                    if (cutout != null) {
+                        left = cutout.getSafeInsetLeft();
+                        top = cutout.getSafeInsetTop();
+                        right = cutout.getSafeInsetRight();
+                        bottom = cutout.getSafeInsetBottom();
+                    }
+                }
+            }
+            view.setPadding(left, top, right, bottom);
+            return insets;
+        });
+        root.requestApplyInsets();
     }
 
     private void buildErrorView() {
@@ -274,11 +373,7 @@ public final class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 progressBar.setVisibility(View.GONE);
                 Log.i(TAG, "Page finished: " + url);
-                view.evaluateJavascript(
-                        "(function(){try{console.log('[TS6Pad] bridge=' + (!!window.TS6PadNative)"
-                                + " + ' version=' + (window.TS6PadNative ? window.TS6PadNative.getVersion() : 'n/a')"
-                                + " + ' ua=' + navigator.userAgent);}catch(e){}})()",
-                        null);
+                view.evaluateJavascript(INJECT_VOICE_HOOK, null);
             }
 
             @Override
@@ -476,7 +571,17 @@ public final class MainActivity extends Activity {
             pendingPermissionRequest.deny();
         }
         pendingPermissionRequest = request;
-        requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+        requestPermissions(microphonePermissions(), REQ_MIC);
+    }
+
+    private String[] microphonePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return new String[]{
+                    Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.POST_NOTIFICATIONS,
+            };
+        }
+        return new String[]{Manifest.permission.RECORD_AUDIO};
     }
 
     private boolean openFileChooser(ValueCallback<Uri[]> filePathCallback) {
@@ -665,9 +770,11 @@ public final class MainActivity extends Activity {
     }
 
     private void showShellMenu() {
+        boolean safeArea = prefs.getBoolean(PREF_SAFE_AREA, true);
         String[] items = {
                 getString(R.string.reload),
                 getString(R.string.change_gateway),
+                getString(safeArea ? R.string.safe_area_on : R.string.safe_area_off),
                 getString(R.string.clear_data),
                 getString(R.string.about),
         };
@@ -684,9 +791,13 @@ public final class MainActivity extends Activity {
                             showGatewayDialog(false);
                             break;
                         case 2:
-                            confirmClearData();
+                            prefs.edit().putBoolean(PREF_SAFE_AREA, !safeArea).apply();
+                            root.requestApplyInsets();
                             break;
                         case 3:
+                            confirmClearData();
+                            break;
+                        case 4:
                             showAbout();
                             break;
                         default:
@@ -789,16 +900,27 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        activityResumed = true;
         if (webView != null) {
             webView.onResume();
+        }
+        if (voiceActive) {
+            startVoiceService();
         }
         enterImmersive();
     }
 
     @Override
     protected void onPause() {
+        activityResumed = false;
         if (webView != null) {
-            webView.onPause();
+            if (voiceActive) {
+                if (!startVoiceService()) {
+                    webView.onPause();
+                }
+            } else {
+                webView.onPause();
+            }
         }
         super.onPause();
     }
@@ -857,6 +979,13 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        activityResumed = false;
+        voiceActive = false;
+        stopVoiceService();
+        if (focusListener != null) {
+            VoiceSessionService.clearFocusListener(focusListener);
+            focusListener = null;
+        }
         if (webView != null) {
             root.removeView(webView);
             webView.stopLoading();
@@ -867,6 +996,55 @@ public final class MainActivity extends Activity {
             webView = null;
         }
         super.onDestroy();
+    }
+
+    private boolean startVoiceService() {
+        try {
+            Intent intent = new Intent(this, VoiceSessionService.class);
+            intent.setAction(VoiceSessionService.ACTION_START);
+            startForegroundService(intent);
+            return true;
+        } catch (RuntimeException exception) {
+            Log.w(TAG, "Unable to start voice foreground service", exception);
+            return false;
+        }
+    }
+
+    private void stopVoiceService() {
+        stopService(new Intent(this, VoiceSessionService.class));
+    }
+
+    private void updateVoiceActive(boolean active) {
+        if (active) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "Voice hook reported active without RECORD_AUDIO");
+                return;
+            }
+            voiceActive = true;
+            startVoiceService();
+        } else {
+            if (!voiceActive) {
+                return;
+            }
+            voiceActive = false;
+            stopVoiceService();
+            if (!activityResumed && webView != null) {
+                webView.onPause();
+            }
+        }
+    }
+
+    private void onAudioFocusChanged(boolean hasFocus, boolean transientLoss) {
+        Log.i(TAG, "Audio focus mirror: hasFocus=" + hasFocus + " transient=" + transientLoss);
+        if (webView == null) {
+            return;
+        }
+        String state = hasFocus ? "gain" : (transientLoss ? "transient-loss" : "loss");
+        webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('ts6pad:audiofocus',{detail:{state:'"
+                        + state + "'}}));",
+                null);
     }
 
     private int dp(int value) {
@@ -881,7 +1059,7 @@ public final class MainActivity extends Activity {
     public final class NativeBridge {
         @JavascriptInterface
         public String getVersion() {
-            return "0.1.0-pad-spike";
+            return "0.2.0-pad-b3";
         }
 
         @JavascriptInterface
@@ -897,6 +1075,11 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public String getGatewayUrl() {
             return gatewayUrl == null ? "" : gatewayUrl;
+        }
+
+        @JavascriptInterface
+        public void setVoiceActive(boolean active) {
+            runOnUiThread(() -> updateVoiceActive(active));
         }
     }
 }

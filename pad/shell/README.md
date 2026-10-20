@@ -6,7 +6,7 @@ Pad 端的原生 WebView 外壳。按 [ADR-0001](../../docs/adr/0001-pad-approac
 当前目标（B2s）：验证 WebView 能否承载 WebSpeak 的麦克风采集、WebRTC 收听/观看、Worklet/WASM、
 横屏布局，并确定原生屏幕共享发布桥的对接方式（JS Bridge）。
 
-> 这是 B2s 的 spike 外壳，不是最终 B3 体验版。设置入口、安全区、后台音频与发布桥会在后续任务中打磨。
+> B3 已加入后台语音前台服务、音频焦点与安全区留白，待真机验收；发布桥仍属 B5。
 
 ## 目录
 
@@ -61,6 +61,17 @@ vivo 等系统安装器可能弹出风险确认；勾选“已了解风险”后
 > Pad WebView 真机待测；完整启动步骤见 `docs/B2s-pad-webview-spike.md` §4.2。
 
 对话框中的“允许自签名 HTTPS 证书”仅用于调试，正式部署请使用有效证书。
+
+## B3 后台语音与安全区
+
+- 语音活跃时（页面 `getUserMedia` 返回带音频轨的流），壳启动 `VoiceSessionService`：
+  `microphone` 类型前台服务 + 常驻通知 + `AUDIOFOCUS_GAIN`；此时退到后台不会调用
+  `WebView.onPause()`，让 WebRTC/JS 继续运行。
+- 音频焦点变化以 `window` 事件 `ts6pad:audiofocus` 暴露（`detail.state` 为
+  `gain`/`transient-loss`/`loss`），留给 Web 侧后续接入静音/暂停策略。
+- Android 13+ 首次授予麦克风权限时会同时请求通知权限；拒绝时前台服务仍运行，但通知可能不可见。
+- 设置菜单可开关“安全区留白”（按 display cutout 给根视图留白，默认开）。
+- 待真机验证：后台语音连续性、通知、音频焦点、切后台/回前台、刘海安全区。
 
 ## B2s 离线验证（无需真实网关）
 
@@ -117,14 +128,16 @@ adb reverse tcp:8080 tcp:8080
 
 ## 壳已实现
 
-- 横屏沉浸式 WebView，隐藏系统栏，屏幕常亮，刘海 `shortEdges`；
+- 横屏沉浸式 WebView，隐藏系统栏，屏幕常亮，刘海 `shortEdges` + B3 安全区留白（display cutout）；
 - 网关地址持久化、修改、清除 WebView 数据；
 - 麦克风运行时权限 → `WebChromeClient.onPermissionRequest` 桥接；
 - `getUserMedia` 仅对当前网关 origin 授权，其他 origin 拒绝；
 - HTTPS 证书错误提示 + 可选自签名调试；外部链接交给系统浏览器；
 - 文件选择器（Web 端上传/导入用）；
 - HTML5 全屏（`onShowCustomView`）与返回键处理；
-- `window.TS6PadNative` JS Bridge 占位（版本/平台/`isScreenShareAvailable=false`）。
+- 后台语音：注入 `getUserMedia` 钩子，语音活跃时启动 `microphone` 前台服务，后台不暂停 WebView；
+- 音频焦点：`VoiceSessionService` 请求/释放 `AUDIOFOCUS_GAIN`，向页面派发 `ts6pad:audiofocus` 事件；
+- `window.TS6PadNative` JS Bridge（版本/平台/网关/`setVoiceActive`/`isScreenShareAvailable=false`）。
 
 ## 已知限制 / 后续
 
@@ -132,8 +145,8 @@ adb reverse tcp:8080 tcp:8080
 | --- | --- |
 | 屏幕共享**发布**（`getDisplayMedia`） | Android WebView 不支持；B5 用原生 `MediaProjection` + 原生 WebRTC，通过 JS Bridge/网关协议对接 |
 | 屏幕共享**观看** | 桌面 Chrome 已用真实网关验证 TS6 共享观看（2560×1600）；Android WebView 待真机 |
-| 后台音频 | 当前 `onPause` 会 `webView.onPause()`；B3 需前台服务 + 音频焦点，避免后台断语音 |
-| 设置入口 | 右上角半透明齿轮；B3 改为更自然的手势/菜单并处理安全区 |
+| 后台音频 | ✅ B3 已实现 `microphone` 前台服务 + 音频焦点，语音活跃时后台不暂停 WebView；待真机连续性验证 |
+| 设置入口 | 右上角半透明齿轮；B3 安全区留白已加入，手势/菜单仍可继续打磨 |
 | Blob/文件下载（身份导出等） | 暂未实现，B4 处理 |
 | `window.open` / 多窗口（管理台、皮肤编辑器） | 当前禁用，B4 按产品决策降级或接管 |
 | 本地 HTTP 局域网 | 麦克风受安全上下文限制；正式使用请 HTTPS |
