@@ -17,8 +17,9 @@
      支持跨平台 P2P 屏幕共享）。**作为 Pad 端 UI 与功能规格的参照标准。**
 - 两端差异化适配：
   - **手机端（Phone）**：在现有开源客户端基础上，补齐缺失的核心互动功能——**屏幕共享（屏幕分享）及其观看**。
-  - **Pad 端（Tablet）**：**全新开发**，完全复刻 Web 版（WebSpeak）的 **UI 界面** 与 **全部功能**，
-    追求与 Web 端一致的完整体验。
+  - **Pad 端（Tablet）**：**原生 Android 应用**（Kotlin + Jetpack Compose，2026-10-20 起），
+    按 Web 版（WebSpeak）的 UI 与功能规格逐项复刻；与手机端共享 `:core` 的 TS6/语音/屏幕共享能力，
+    不使用 WebView 套壳或远程 WebSpeak 网关。
 
 ### 最终目标
 
@@ -51,10 +52,10 @@
   详见 `docs/B1-webspeak-spec.md` §4 与 `docs/A1-phone-baseline.md` §5。
 - ✅ 许可证与合规已核清（phone=GPL-3.0、tslib=MIT/Apache-2.0、pad=AGPL-3.0-only、
   teamspeak-js=MIT），组合规则与仓库组织见 `docs/adr/0002-licensing-and-workspace.md`。
-- ⚠️ 新增关键风险（详见 `docs/adr/0001-pad-approach.md`）：
-  1. Android 任何 Web 内核均不支持 `getDisplayMedia` → 屏幕共享**发布端必须原生实现**（MediaProjection）；
-  2. WebSpeak 安卓容器内嵌 Node 18.20.4，而其 TS SDK 要求 Node ≥22.12（官方自述连通性未验证）
-     → Pad 路线的前提是先做运行时 spike。
+- ✅ 2026-10-20 路线调整：Pad 改为**原生 Compose 应用**，直接复用手机端 A2–A4 的原生 TS6/
+  语音/屏幕共享实现；ADR-0001 的 WebView/网关方案被 `docs/adr/0003-pad-native-app.md` 取代。
+  （历史风险记录：Android Web 内核无 `getDisplayMedia`；WebSpeak 容器 Node 18.20.4 与 SDK
+  要求 Node ≥22.12 不匹配——这两点正是放弃 WebView 路线的原因之一。）
 
 ---
 
@@ -81,7 +82,7 @@ Android SDK（`D:\Android\Sdk`：platform-35 / build-tools 35.0.0 / build-tools 
 Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS BuildTools 2022（MSVC 14.44，Rust 宿主编译链接）。
 ❌ 待接入：arm64 真机（USB 调试）与可用的 TS3/TS6 测试服务器。
 
-> 注意：`phone/` 预编译 JNI 库仅 `arm64-v8a` 为最新 → 模拟器不可用，需 arm64 真机或重建 `.so`。
+> 注意：`phone/core/src/main/jniLibs` 的预编译 JNI 库仅 `arm64-v8a` 为最新 → 模拟器不可用，需 arm64 真机或重建 `.so`。
 
 ---
 
@@ -108,12 +109,14 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | 编号 | 任务 | 产出物 | 验收标准 | 状态 |
 | --- | --- | --- | --- | --- |
 | B1 | 获取并运行 Web 端 WebSpeak，拆解交互设计与完整功能清单 | `docs/B1-webspeak-spec.md`（功能清单 F1–F14 + 技术规格） | 清单覆盖 Web 端全部可感知功能，与 Web 端实际行为一致 | ✅ 2026-10-18 |
-| B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（方案 A' 已采纳） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 |
-| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | `pad/shell/` + `docs/B2s-pad-webview-spike.md` | 各项能力结论明确；发布桥技术方案确定 | ⏳ 2026-10-20：原生 WebView 壳、离线能力探测页、Web 构建与 Chromium 渲染已验证；本机自托管网关 + TS6 桌面共享在桌面 Chrome 已跑通（clientId 205，语音会话、共享观看 2560×1600）；Android WebView 麦克风/回环/横屏真机测试待设备连接；发布桥已定 **JS Bridge + 原生 WebRTC**（非 Capacitor），见 spike 报告 §7 |
-| B3 | 壳应用体验打磨：横屏/大屏全屏、刘海安全区、返回键、后台音频前台服务、常亮 | 壳应用 | 平板全屏体验流畅，后台场景语音不断 | ⏳ 2026-10-20：后台语音前台服务（microphone 类型 + 通知 + 音频焦点）、getUserMedia 语音钩子、安全区留白菜单已实现；debug APK 构建通过；后台连续性/通知/刘海效果待真机验证 |
-| B4 | 功能对齐 Web 版：壳内功能由 Web 本体提供，跟踪 F1–F14 逐项验证并记录缺口 | 验证清单 | 清单逐项与 Web 版一致（管理台/皮肤编辑器按产品决策降级） | ⬜ |
-| B5 | 屏幕共享：观看（WebView 内）+ 发布（原生 MediaProjection 桥），与 WebSpeak/TS6 原生客户端互通 | 可互通的功能 | 互通验收通过 | ⬜ |
-| B6 | 双端共享：A3/A4 原生媒体层与 Pad 发布桥统一设计 | 共享模块 | 减少重复实现，两端独立可发布 | ⬜ |
+| B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（历史方案 A'）+ `docs/adr/0003-pad-native-app.md`（现行原生方案） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 初版；2026-10-20 由 ADR-0003 调整为**原生 Compose** |
+| B2s | ~~WebView 兼容性与发布桥 spike~~ | ~~`pad/shell/` + `docs/B2s-pad-webview-spike.md`~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：Pad 改原生 Compose，WebView 壳与 spike 文档已删除 |
+| B3 | ~~壳应用体验打磨~~ | ~~壳应用~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：WebView 壳已删除；后台语音/安全区能力在原生 Pad 中由 `:core` + Compose 重新实现 |
+| B4 | 原生 UI/功能对齐 WebSpeak：按 F1–F14 逐项复刻并验证（管理台/皮肤编辑器按产品决策降级） | 验证清单 + 原生页面 | 清单逐项与 Web 版一致 | ⬜ |
+| B5 | Pad 屏幕共享（后置）：观看 + 发布，直接复用 `:core` 的 A3/A4 MediaProjection/WebRTC 实现 | 可互通的功能 | 与 TS6 原生客户端/WebSpeak 互通验收通过 | ⬜ |
+| B6 | 双端共享：抽取 `:core`（tslib/JNI、bridge、data、screen、service、viewmodel），手机端与 Pad 共用 | `phone/core/` | 减少重复实现，两端独立可发布 | ✅ 2026-10-20：`:core` 抽取完成，手机端构建/单测通过（`af30332`）；Pad 模块接入中 |
+| B7 | Pad 原生工程 + WebSpeak 风格 UI：Compose 平板布局、深色主题、频道树/成员卡片/聊天/底部语音栏 | `phone/pad/` | 大屏界面与 WebSpeak 视觉/交互一致，debug APK 可安装 | 🔄 2026-10-20 启动 |
+| B8 | Pad 连接/语音接入：真实 TS6 连接、频道/成员、文字聊天、语音收发与音频控制 | Pad 功能 | 与手机端共用 `:core`，真机连接 `ts.mooncc.cn` 验证通过 | ⬜ |
 
 ---
 
@@ -129,8 +132,8 @@ flowchart TB
   A2 --> A3[手机端适配]
   A3 --> main
   B --> B1[WebSpeak 功能/UI 规格拆解]
-  B1 --> B2[Pad 端工程与选型]
-  B2 --> B3[功能逐项复刻]
+  B1 --> B2[原生 Pad 工程 + :core 共享]
+  B2 --> B3[UI/功能逐项复刻]
   B3 --> main
 ```
 
@@ -298,5 +301,13 @@ AI 代理接到本指令后的参考执行顺序：
   - 设置菜单新增“安全区留白”（display cutout，默认开）；版本 `0.2.0-pad-b3`，
     debug APK 构建通过；
   - 待真机：后台语音连续性、通知、焦点中断、刘海安全区。
-- ⏳ **待办**：Android WebView 真机能力补测 + 真实网关麦克风/共享观看（桌面链路已完成）；
-  B3 后台语音/安全区真机验证；Pad 原生发布桥 B5；A3 发布端抖动/重传优化（暂缓）
+
+### 2026-10-20（Pad 原生路线）
+
+- ✅ **路线调整**：Pad 端由「远程 WebSpeak + WebView 壳」改为**原生 Compose 应用**，直接经 `tslib` 连接 TS6；新增 `docs/adr/0003-pad-native-app.md`，ADR-0001 标记为被取代。
+- ✅ **共享核心抽取**：`phone/core`（`:core`）承接 tslib JNI、bridge、data、screen、service、viewmodel 与所需资源；手机端 `:app` 仅保留 Compose 页面/Application/启动资源。`:core:testDebugUnitTest`、`:app:testDebugUnitTest`、`:app:assembleDebug` 全部通过（提交 `af30332`）。通知/悬浮窗的「打开应用」Intent 改为 PackageManager 解析启动 Activity，通知渠道 ID 保持 `ts_connection`。
+- ✅ **WebView 壳移除**：删除 `pad/shell/` 与 `docs/B2s-pad-webview-spike.md`；B2s/B3/B5 的 WebView 发布桥任务终止。
+- 🔄 **Pad 原生工程**：新增 `phone/pad`（`com.yuaxi.ts6pad`），首期目标 = WebSpeak 风格 UI + 连接/频道/成员/文字聊天/语音；屏幕共享后续复用 `:core` 的 A3/A4 实现。
+
+- ⏳ **待办**：Pad 原生 UI（WebSpeak 复刻）与连接/语音接入；A3 发布端抖动/重传优化（暂缓）；
+  真机回归（vivo 设备重新连接后）

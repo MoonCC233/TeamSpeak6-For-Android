@@ -3,6 +3,9 @@
 > 状态：✅ 调研完成（功能清单 + 技术规格 + Android 容器现状）
 > 来源：`pad/`（上游 `EchoSixHIYA/WebSpeak-client-for-TeamSpeak` `master@32d84435`，2026-10-18，v0.2.8，AGPL-3.0-only）
 
+> **2026-10-20 路线说明**：Pad 实施已改为原生 Compose 应用（见 `docs/adr/0003-pad-native-app.md`）；
+> 本文档继续作为 UI 与功能复刻的参照规格。
+
 ## 1. 项目定位
 
 自托管 TeamSpeak 3 / TS6 网页客户端与语音网关：浏览器打开网页即可加入频道；网关负责 TeamSpeak 协议连接，浏览器负责交互与音频。**本项目的 Pad 端目标 = 让 Android 平板获得与它完全一致的 UI 与功能。**
