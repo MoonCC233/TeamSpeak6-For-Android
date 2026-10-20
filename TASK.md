@@ -317,4 +317,5 @@ AI 代理接到本指令后的参考执行顺序：
   - 全部 Pad UI 文案入 `res/values/strings.xml`；
   - `:pad:assembleDebug`、`:pad:assembleRelease`、`:pad:lintDebug` 通过；APK 含 `lib/arm64-v8a/libtslib_jni.so`；
   - `.github/workflows/release.yml` 显式限定 `:app`/`:core`，不会误构建 Pad。
-- ⏳ **待真机**：vivo 设备重新连接后验收加入、频道切换、成员操作、频道/私聊、PTT/VAD、静音、断线重连、后台/通知；A3 发布端抖动/重传优化（暂缓）。
+- ✅ **Pad release 真机连接修复**：release 经 R8 混淆后，`libjingle_peerconnection_so.so` 的 `JNI_OnLoad` 找不到被重命名的 `org.webrtc` / `org.jni_zero` 类，连接即 SIGABRT。`:core` 的 `consumer-rules.pro` 现显式保留二者；修复后 release APK 在 iQOO Pad5c（Android 15）实机完成连接、退出与重连，`PeerConnectionFactory` 正常初始化。
+- 🔄 **Pad 真机验收（iQOO Pad5c / Android 15）**：连接/退出/重连已通过；频道切换、成员操作、频道/私聊、PTT/VAD、静音、后台/通知仍待逐项验收。A3 发布端抖动/重传优化暂缓。
