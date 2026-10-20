@@ -51,7 +51,7 @@ import dev.tsdroid.bridge.IdentityFileStore
 import dev.tsdroid.bridge.MicMode
 import dev.tsdroid.bridge.VadGate
 import dev.tsdroid.data.SettingsStore
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.ui.component.AnimeWallpaperState
 import dev.tsdroid.ui.component.GlassCard
 import dev.tsdroid.ui.component.GlassDialog

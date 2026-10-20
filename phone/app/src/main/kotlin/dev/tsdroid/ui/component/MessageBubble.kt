@@ -56,7 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import android.webkit.MimeTypeMap
 import androidx.compose.ui.unit.dp
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import coil.compose.AsyncImage
 import dev.tslib.BBCode
 import dev.tsdroid.viewmodel.ChatMessage
@@ -174,8 +174,9 @@ fun MessageBubble(
                     )
                 }
 
-                if (message.fileAttachment != null) {
-                    FileAttachmentCard(message.fileAttachment, onDownload, autoLoadImages)
+                val fileAttachment = message.fileAttachment
+                if (fileAttachment != null) {
+                    FileAttachmentCard(fileAttachment, onDownload, autoLoadImages)
                 } else {
                     // Text content
                     if (parsed.text.isNotBlank()) {
@@ -267,6 +268,10 @@ private fun FileAttachmentCard(
     val context = LocalContext.current
     var downloadStateFlow by remember { mutableStateOf<StateFlow<DownloadState>?>(null) }
     val downloadState = downloadStateFlow?.collectAsStateWithLifecycle()?.value ?: DownloadState.Idle
+    // Properties of a data class from another module (:core) cannot be smart-cast, so the two
+    // nullable fields are read into local vals once and checked from there.
+    val downloadedUri = (downloadState as? DownloadState.Done)?.fileUri
+    val downloadedImage = (downloadState as? DownloadState.Done)?.image
     // Only the bubble that started the download may auto-open the file;
     // other bubbles showing the same attachment share the state flow
     var initiatedHere by remember { mutableStateOf(false) }
@@ -280,23 +285,22 @@ private fun FileAttachmentCard(
 
     // Auto-open non-image files after download completes
     LaunchedEffect(downloadState) {
-        if (initiatedHere && downloadState is DownloadState.Done && !attachment.isImage && downloadState.fileUri != null) {
-            openFile(context, downloadState.fileUri, attachment.fileName)
+        if (initiatedHere && downloadedUri != null && !attachment.isImage) {
+            openFile(context, downloadedUri, attachment.fileName)
         }
     }
 
     // If download completed with an image, show it inline
-    if (downloadState is DownloadState.Done && downloadState.image != null) {
-        val uri = downloadState.fileUri
+    if (downloadedImage != null) {
         androidx.compose.foundation.Image(
-            bitmap = downloadState.image,
+            bitmap = downloadedImage,
             contentDescription = attachment.fileName,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .then(
-                    if (uri != null) Modifier.clickable { openFile(context, uri, attachment.fileName) }
+                    if (downloadedUri != null) Modifier.clickable { openFile(context, downloadedUri, attachment.fileName) }
                     else Modifier
                 ),
             contentScale = ContentScale.FillWidth,
@@ -315,9 +319,8 @@ private fun FileAttachmentCard(
                             initiatedHere = true
                             downloadStateFlow = onDownload(attachment)
                         }
-                    downloadState is DownloadState.Done && downloadState.fileUri != null -> {
-                        val uri = downloadState.fileUri
-                        Modifier.clickable { openFile(context, uri, attachment.fileName) }
+                    downloadedUri != null -> {
+                        Modifier.clickable { openFile(context, downloadedUri, attachment.fileName) }
                     }
                     else -> Modifier
                 }

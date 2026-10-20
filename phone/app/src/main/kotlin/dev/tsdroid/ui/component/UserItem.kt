@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.absoluteValue
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tslib.User
 import dev.tsdroid.ui.icon.AppIcons
 

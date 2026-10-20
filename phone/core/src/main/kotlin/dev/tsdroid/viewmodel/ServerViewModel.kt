@@ -22,7 +22,7 @@ import dev.tsdroid.bridge.MicMode
 import dev.tsdroid.bridge.TsClient
 import dev.tsdroid.bridge.TsFileEntry
 import dev.tsdroid.bridge.VadGate
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.data.BookmarkStore
 import dev.tsdroid.data.MessageStore
 import dev.tsdroid.data.SettingsStore

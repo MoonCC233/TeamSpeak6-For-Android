@@ -73,7 +73,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.ui.icon.AppIcons
 import kotlinx.coroutines.withTimeoutOrNull
 

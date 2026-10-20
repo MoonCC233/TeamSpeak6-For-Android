@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.screen.ScreenShareController
 import dev.tsdroid.ui.icon.AppIcons
 import org.webrtc.EglBase

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shared TS6/voice core. It declares no permissions or components of its own: the consuming
+  application module owns the manifest entries (services, foreground-service types, provider), so
+  each app keeps the exact declarations its platform behaviour needs.
+-->
+<manifest />

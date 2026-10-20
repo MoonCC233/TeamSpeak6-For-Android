@@ -36,7 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tslib.User
 import kotlin.math.roundToInt
 

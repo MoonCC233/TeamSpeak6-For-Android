@@ -36,4 +36,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "TS6_Droid"
+// :core — 手机端与 Pad 端共用的 TS6/语音/屏幕共享核心（无 UI 页面依赖）
+include(":core")
 include(":app")

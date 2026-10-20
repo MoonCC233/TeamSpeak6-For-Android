@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.ui.theme.generateColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

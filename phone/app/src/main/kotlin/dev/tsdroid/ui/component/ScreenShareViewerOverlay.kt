@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.screen.ScreenShareController
 import dev.tsdroid.ui.icon.AppIcons
 import kotlinx.coroutines.delay

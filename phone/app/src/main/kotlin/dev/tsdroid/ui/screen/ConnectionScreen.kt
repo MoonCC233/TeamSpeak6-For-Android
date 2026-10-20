@@ -90,7 +90,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tslib.ConnectionState
 import dev.tsdroid.service.TsConnectionService
 import dev.tsdroid.ui.component.AnimeBackground

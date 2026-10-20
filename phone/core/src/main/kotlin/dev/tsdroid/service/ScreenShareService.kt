@@ -14,8 +14,8 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import dev.tsdroid.MainActivity
-import dev.tsdroid.han.R
+import dev.tsdroid.core.AppLaunch
+import dev.tsdroid.core.R
 import dev.tsdroid.screen.ScreenShareController
 
 /**
@@ -138,7 +138,7 @@ class ScreenShareService : Service() {
         val contentIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            AppLaunch.activityIntent(this),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val stopIntent = PendingIntent.getService(

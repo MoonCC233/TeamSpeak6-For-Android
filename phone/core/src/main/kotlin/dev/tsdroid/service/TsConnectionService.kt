@@ -60,9 +60,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import dev.tsdroid.MainActivity
-import dev.tsdroid.han.R
-import dev.tsdroid.TsDroidApp
+import dev.tsdroid.core.AppLaunch
+import dev.tsdroid.core.R
 import dev.tsdroid.bridge.AudioBridge
 import dev.tsdroid.bridge.AvatarCache
 import dev.tsdroid.bridge.TsClient
@@ -115,6 +114,13 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     companion object {
         private const val TAG = "TsConnService"
         private const val NOTIFICATION_ID = 1
+
+        /**
+         * The foreground notification channel. It was `TsDroidApp.CHANNEL_ID_CONNECTION` before
+         * the shared-core split; the value must stay "ts_connection" so existing installs keep the
+         * channel (and any per-channel user settings) instead of posting to a brand-new one.
+         */
+        private const val CHANNEL_ID = "ts_connection"
         private const val ACTION_DISCONNECT = "com.flammedemon.ts6droid.DISCONNECT"
         private const val ACTION_TOGGLE_MUTE = "com.flammedemon.ts6droid.TOGGLE_MUTE"
         private const val SPEAKER_DELAY_MS = 500L
@@ -742,7 +748,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     private fun buildNotification(): Notification {
         val contentIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java),
+            AppLaunch.activityIntent(this),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
@@ -769,7 +775,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
         }
         val muteLabel = getString(if (audioBridge.isMuted.value) R.string.notif_unmute else R.string.notif_mute)
 
-        return NotificationCompat.Builder(this, TsDroidApp.CHANNEL_ID_CONNECTION)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(statusText)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
@@ -787,7 +793,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
      */
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
-            TsDroidApp.CHANNEL_ID_CONNECTION,
+            CHANNEL_ID,
             getString(R.string.channel_connection),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
@@ -1284,7 +1290,7 @@ class TsConnectionService : LifecycleService(), ViewModelStoreOwner, SavedStateR
     private fun openAppFromOverlay() {
         try {
             startActivity(
-                Intent(this, MainActivity::class.java).apply {
+                AppLaunch.activityIntent(this).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 },
             )

@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.tsdroid.data.AppLog
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import kotlinx.coroutines.launch
 
 /**

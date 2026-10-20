@@ -86,7 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.tsdroid.data.PrivateConversations
-import dev.tsdroid.han.R
+import dev.tsdroid.core.R
 import dev.tsdroid.screen.ScreenShareController
 import dev.tsdroid.service.ScreenShareService
 import dev.tsdroid.service.TsConnectionService
