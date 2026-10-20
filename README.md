@@ -51,6 +51,36 @@
 2. 安装 Android SDK（见 `TASK.md` 进度记录中的待办）；
 3. 按里程碑 M1 → M2 → M3 → M4 推进，逐任务验收。
 
+## 构建与发布（GitHub Actions）
+
+发布流水线：`.github/workflows/release.yml`（当前只发布手机端 `phone/`，Pad 端成熟后再接入）。
+
+| 触发方式 | 行为 |
+| --- | --- |
+| 推送 tag `v<版本>`（如 `v2.1.7-Han`） | 校验 tag 与 `phone/app/build.gradle.kts` 的 `versionName` 一致 → 构建 → 发布 Release |
+| Actions 页面手动触发（`workflow_dispatch`） | 版本号留空则按 `patch/minor/major` 自动递增并同步 `versionCode`；构建通过后自动提交版本号、打 tag、发布 Release；取消勾选 `publish` 则只构建到 Artifacts |
+
+Release 资产：`TS6_Droid_Han-<版本>.apk`（arm64-v8a）、同名 `.sha256` 校验文件、`mapping-<版本>.txt`（R8 混淆映射表）。
+签名使用以下 4 个仓库 Secrets；缺失时回退 CI 临时 debug 密钥（**每次运行的证书都不同，无法覆盖安装**），并自动把 Release 标记为 Pre-release（仅供测试）：
+
+```powershell
+# 生成密钥（只需一次，务必离线备份；丢失后无法覆盖安装旧版本）
+keytool -genkeypair -v -keystore release.keystore -alias ts6droid -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12
+# 取 base64，填入 SIGNING_KEYSTORE_BASE64
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("release.keystore"))
+```
+
+| Secret | 内容 |
+| --- | --- |
+| `SIGNING_KEYSTORE_BASE64` | `release.keystore` 的 base64 |
+| `SIGNING_STORE_PASSWORD` | keystore 密码 |
+| `SIGNING_KEY_ALIAS` | 密钥别名（示例 `ts6droid`） |
+| `SIGNING_KEY_PASSWORD` | 密钥密码 |
+
+> 注意：`phone/gradle.properties`（`android.useAndroidX` 等）未纳入版本控制，工作流会在 CI 中自动生成；
+> `phone/app/src/main/jniLibs/arm64-v8a/libtslib_jni.so` 是预编译产物，改动 `tslib/` 后需先在本机执行
+> `gradlew buildRustLibs` 重建并提交，CI 不会重新编译 Rust。
+
 ## 许可证说明
 
 本仓库是多个独立上游项目的**聚合开发仓**，各子目录遵循其原始许可证（见上表），版权归各上游作者所有；新增的跨端文档与工具以 GPL-3.0-or-later 授权。组合分发与共享模块的合规要求见 [`docs/adr/0002-licensing-and-workspace.md`](./docs/adr/0002-licensing-and-workspace.md)。

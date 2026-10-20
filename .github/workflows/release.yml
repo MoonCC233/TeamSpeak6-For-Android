@@ -1,0 +1,398 @@
+name: Release
+
+# =============================================================================
+# 手机端（phone/）release APK 全自动打包发布流水线
+#
+# 触发方式
+#   A. 推送 tag：`v<版本>`（如 `v2.1.7-Han`，也接受省略后缀的 `v2.1.7`）。
+#      tag 必须与 phone/app/build.gradle.kts 的 versionName 一致，否则「解析版本号」
+#      步骤会直接失败（防止打出与应用内版本号不符的包）。
+#   B. Actions 页面手动触发（workflow_dispatch）——一键发布：
+#      · version 留空 → 按 bump（patch/minor/major）自动递增版本号，versionCode 同步 +1；
+#      · 构建与校验全部通过后，自动提交版本号改动、打 tag、推送并创建 Release；
+#      · 取消勾选 publish → 只构建，产物保留在本次运行的 Artifacts 中（不动仓库）。
+#
+# 产物（Release 资产）
+#   · TS6_Droid_Han-<版本>.apk   arm64-v8a，release + R8 精简
+#   · TS6_Droid_Han-<版本>.apk.sha256
+#   · mapping-<版本>.txt         R8 混淆映射表（还原崩溃堆栈用）
+#
+# 签名
+#   配置以下 4 个 Secrets 时使用正式密钥签名；缺失任何一个则回退 debug 签名，并自动把
+#   Release 标记为 Pre-release（仅供测试，切勿分发）：
+#     SIGNING_KEYSTORE_BASE64 / SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS / SIGNING_KEY_PASSWORD
+#
+# 前置说明
+#   phone/app/src/main/jniLibs/arm64-v8a/libtslib_jni.so 是提交进仓库的预编译产物，
+#   本流水线不做 Rust 交叉编译（`-x buildRustLibs`）。改动 tslib/ 之后务必先在本机执行
+#   `gradlew buildRustLibs` 重建 .so 并提交，否则发布包内仍是旧的协议库。
+# =============================================================================
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '目标版本号（如 2.1.7；留空则按下面的 bump 自动递增，后缀 -Han 会自动继承）'
+        required: false
+        default: ''
+        type: string
+      bump:
+        description: 'version 留空时自动递增的位数'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      publish:
+        description: '构建成功后提交版本号、打 tag 并发布 Release（不勾选＝只构建到 Artifacts）'
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: '把 Release 标记为 Pre-release（不参与 latest；未配置签名密钥时会强制标记）'
+        required: true
+        default: false
+        type: boolean
+
+# 创建 Release、推送版本号提交与 tag 都需要写权限
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PHONE_DIR: phone
+  GRADLE_FILE: phone/app/build.gradle.kts
+
+jobs:
+  release:
+    name: 构建并发布 phone APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v7
+        with:
+          # 手动发布要提交版本号并打 tag，保留完整历史与推送凭据
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: 解析版本号
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+
+          CURRENT_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE_FILE")"
+          CURRENT_CODE="$(grep -oP 'versionCode\s*=\s*\K[0-9]+' "$GRADLE_FILE")"
+          if [ -z "$CURRENT_NAME" ] || [ -z "$CURRENT_CODE" ]; then
+            echo "::error::未能从 $GRADLE_FILE 解析 versionName/versionCode"
+            exit 1
+          fi
+          CURRENT_BARE="${CURRENT_NAME%%-*}"
+          # 版本后缀（如 "-Han"）；输入省略后缀时自动继承，保持与本仓库既有版本号一致
+          CURRENT_SUFFIX="${CURRENT_NAME#"$CURRENT_BARE"}"
+
+          MODE="manual"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then MODE="tag"; fi
+
+          NEED_PATCH=false
+          PUBLISH=false
+
+          if [ "$MODE" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+            REQ="${TAG#v}"
+            # 允许两种 tag 形式：v<versionName>（推荐，如 v2.1.7-Han）或 v<主.次.修订>
+            if [ "$REQ" != "$CURRENT_NAME" ] && [ "$REQ" != "$CURRENT_BARE" ]; then
+              echo "::error::tag $TAG 与 phone/app/build.gradle.kts 的 versionName ($CURRENT_NAME) 不一致：期望 v$CURRENT_NAME 或 v$CURRENT_BARE。请先把 versionName 改为 $REQ 并提交，再对该提交打 tag。"
+              exit 1
+            fi
+            VERSION_NAME="$CURRENT_NAME"
+            VERSION_CODE="$CURRENT_CODE"
+            PUBLISH=true
+          else
+            if [ -n "${INPUT_VERSION:-}" ]; then
+              REQ="${INPUT_VERSION#v}"
+            else
+              REQ="$(awk -v bump="${INPUT_BUMP:-patch}" -F. '
+                { major=$1+0; minor=$2+0; patch=$3+0 }
+                bump == "major" { major=major+1; minor=0; patch=0 }
+                bump == "minor" { minor=minor+1; patch=0 }
+                bump == "patch" { patch=patch+1 }
+                END { print major "." minor "." patch }' <<< "$CURRENT_BARE")"
+            fi
+            REQ_BARE="${REQ%%-*}"
+            REQ_SUFFIX="${REQ#"$REQ_BARE"}"
+            if [ -n "$REQ_SUFFIX" ]; then VERSION_NAME="$REQ"; else VERSION_NAME="${REQ_BARE}${CURRENT_SUFFIX}"; fi
+            VERSION_CODE=$((CURRENT_CODE + 1))
+            TAG="v${VERSION_NAME}"
+            PUBLISH="${INPUT_PUBLISH:-false}"
+            NEED_PATCH=true
+          fi
+
+          # 严格校验版本号格式，同时杜绝外部输入被拼进 shell 命令/文件名
+          if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::版本号格式不合法：$VERSION_NAME（期望 主.次.修订 或 主.次.修订-后缀）"
+            exit 1
+          fi
+          VERSION_BARE="${VERSION_NAME%%-*}"
+
+          # 手动发布时 tag 不能已存在，否则打 tag/发布必然失败
+          if [ "$PUBLISH" = "true" ] && [ "$MODE" = "manual" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "::error::tag ${TAG} 已存在于远端，不能重复发布：请换一个版本号，或确认该版本是否已经发布过。"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "mode=$MODE"
+            echo "version_name=$VERSION_NAME"
+            echo "version_bare=$VERSION_BARE"
+            echo "version_code=$VERSION_CODE"
+            echo "tag=$TAG"
+            echo "publish=$PUBLISH"
+            echo "need_patch=$NEED_PATCH"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 发布计划"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 触发方式 | $MODE |"
+            echo "| 仓库当前版本 | \`$CURRENT_NAME\`（versionCode $CURRENT_CODE） |"
+            echo "| 本次发布版本 | \`$VERSION_NAME\`（versionCode $VERSION_CODE） |"
+            echo "| tag | \`$TAG\` |"
+            echo "| 发布 Release | $PUBLISH |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 改写 build.gradle.kts 版本号
+        if: steps.version.outputs.need_patch == 'true'
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s/^([[:space:]]*)versionCode = [0-9]+/\1versionCode = ${VERSION_CODE}/" "$GRADLE_FILE"
+          sed -i -E "s/^([[:space:]]*)versionName = \"[^\"]+\"/\1versionName = \"${VERSION_NAME}\"/" "$GRADLE_FILE"
+          git --no-pager diff -- "$GRADLE_FILE"
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK（platform-35 / build-tools 35.0.0）
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+      - name: 配置 Gradle 缓存
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: 准备构建配置
+        working-directory: ${{ env.PHONE_DIR }}
+        run: |
+          set -euo pipefail
+          # phone/gradle.properties 被 .gitignore 排除（只存在于本机），CI 必须自行生成，
+          # 否则 android.useAndroidX 缺失会让 AndroidX 依赖直接构建失败。
+          if [ ! -f gradle.properties ]; then
+            printf '%s\n' \
+              'android.useAndroidX=true' \
+              'android.enableJetifier=false' \
+              'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m' \
+              > gradle.properties
+            echo "已生成 phone/gradle.properties"
+          fi
+          cat gradle.properties
+          # git 索引里 gradlew 不是可执行位（Windows 检出），CI 上手动补
+          chmod +x ./gradlew
+
+      - name: 准备签名密钥（缺失时回退 debug 签名）
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${STORE_PASSWORD:-}" ] && [ -n "${KEY_ALIAS:-}" ] && [ -n "${KEY_PASSWORD:-}" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            {
+              echo "SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore"
+              echo "SIGNING_STORE_PASSWORD=$STORE_PASSWORD"
+              echo "SIGNING_KEY_ALIAS=$KEY_ALIAS"
+              echo "SIGNING_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "✅ 使用仓库 Secrets 中的正式签名密钥构建。" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=未配置签名密钥::SIGNING_* Secrets 缺失，本次 APK 将使用 debug 密钥签名（每次运行的 debug 证书都不同，无法覆盖安装旧版），Release 会被标记为 Pre-release，仅供测试，请勿分发。"
+            echo "⚠️ 未配置 SIGNING_* Secrets：本次构建回退 **debug 签名**（每次运行的证书都不同，无法覆盖安装），Release 将自动标记为 Pre-release。" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 计算 Release 标记
+        id: flags
+        env:
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          PRERELEASE="${INPUT_PRERELEASE:-false}"
+          if [ "${{ steps.signing.outputs.signed }}" != "true" ]; then
+            PRERELEASE="true"
+          fi
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      - name: 单元测试
+        working-directory: ${{ env.PHONE_DIR }}
+        run: ./gradlew testDebugUnitTest -x buildRustLibs
+
+      - name: 构建 release APK
+        working-directory: ${{ env.PHONE_DIR }}
+        run: ./gradlew assembleRelease -x buildRustLibs
+
+      - name: 校验 APK（签名 / ABI / 版本号）
+        working-directory: ${{ env.PHONE_DIR }}
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK 环境变量缺失}}"
+          BT="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -1)"
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+
+          echo "== 签名信息 =="
+          "$BT/apksigner" verify --print-certs "$APK" | tee "$RUNNER_TEMP/signer.txt"
+          if [ "$SIGNED" = "true" ] && grep -q "CN=Android Debug" "$RUNNER_TEMP/signer.txt"; then
+            echo "::error::已配置 SIGNING_* Secrets，但 APK 仍是 debug 签名——请检查密钥文件、别名与密码。"
+            exit 1
+          fi
+
+          echo "== 版本信息 =="
+          BADGING="$("$BT/aapt2" dump badging "$APK" | head -1)"
+          echo "$BADGING"
+          if ! grep -qF "versionName='${VERSION_NAME}'" <<< "$BADGING"; then
+            echo "::error::APK 内的 versionName 不是 $VERSION_NAME"
+            exit 1
+          fi
+
+          echo "== 原生库 =="
+          unzip -l "$APK" | grep "lib/" || true
+          if ! unzip -l "$APK" | grep -q "lib/arm64-v8a/libtslib_jni.so"; then
+            echo "::error::APK 内缺少 lib/arm64-v8a/libtslib_jni.so（jniLibs 未被正确打包）"
+            exit 1
+          fi
+
+      - name: 整理发布产物
+        working-directory: ${{ env.PHONE_DIR }}
+        env:
+          VERSION_BARE: ${{ steps.version.outputs.version_bare }}
+        run: |
+          set -euo pipefail
+          ASSET="TS6_Droid_Han-${VERSION_BARE}.apk"
+          OUT="$GITHUB_WORKSPACE/release-assets"
+          mkdir -p "$OUT"
+          cp app/build/outputs/apk/release/app-release.apk "$OUT/$ASSET"
+          ( cd "$OUT" && sha256sum "$ASSET" > "$ASSET.sha256" )
+          # R8 混淆映射表：发布后用于还原崩溃堆栈
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
+            cp app/build/outputs/mapping/release/mapping.txt "$OUT/mapping-${VERSION_BARE}.txt"
+          else
+            echo "::warning::未找到 mapping.txt，本次不附带混淆映射表"
+          fi
+          ls -lh "$OUT"
+
+      - name: 上传工作流产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: TS6_Droid_Han-${{ steps.version.outputs.version_bare }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 提交版本号并打 tag
+        if: steps.version.outputs.publish == 'true' && steps.version.outputs.need_patch == 'true'
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$GRADLE_FILE"
+
+          if git diff --cached --quiet; then
+            # 输入版本与仓库当前版本相同：无需提交，直接对当前提交打 tag
+            echo "版本号未变化，跳过版本号提交"
+          else
+            git commit -m "chore(release): 手机端 ${VERSION_NAME} [skip ci]"
+
+            # 版本号提交推回触发分支；若期间有他人推送则 rebase 后重试一次
+            if ! git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              echo "::warning::直接推送失败，拉取远端最新提交后 rebase 重试"
+              git fetch origin "${GITHUB_REF_NAME}"
+              git rebase FETCH_HEAD
+              git push origin "HEAD:${GITHUB_REF_NAME}"
+            fi
+          fi
+
+          # tag 打在版本号提交之上，保证 Release 源码与包内版本号一致
+          git tag -a "$TAG" -m "TS6 Droid 简中版（手机端）${VERSION_NAME}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: 发布 GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: TS6 Droid 简中版（手机端）v${{ steps.version.outputs.version_name }}
+          prerelease: ${{ steps.flags.outputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release-assets/*
+          body: |
+            TS6 Droid 简中版（手机端）v${{ steps.version.outputs.version_name }}
+
+            - 安装包：`TS6_Droid_Han-${{ steps.version.outputs.version_bare }}.apk`（arm64-v8a，可直接覆盖安装）
+            - SHA-256 校验值见同名 `.sha256` 文件
+            - 混淆映射表 `mapping-${{ steps.version.outputs.version_bare }}.txt`，用于还原崩溃堆栈
+            - 本 tag 对应完整源码（GPL-3.0）
+            ${{ steps.signing.outputs.signed != 'true' && '⚠️ 本次构建未配置签名密钥，使用 **debug 密钥** 签名（每次运行的 debug 证书都不同，无法覆盖安装），仅供测试，请勿分发。' || '' }}
+
+      - name: 清理临时密钥
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.keystore"
+
+      - name: 结果汇总
+        if: always()
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_BARE: ${{ steps.version.outputs.version_bare }}
+          TAG: ${{ steps.version.outputs.tag }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo ""
+            echo "### 结果"
+            echo ""
+            echo "- 版本：\`${VERSION_NAME:-未知}\`（tag \`${TAG:-未知}\`）"
+            echo "- 签名：${{ steps.signing.outputs.signed == 'true' && '正式密钥' || 'debug 回退' }}"
+            echo "- 发布：${{ steps.version.outputs.publish == 'true' && '已创建 Release' || '仅构建（见 Artifacts）' }}"
+            echo "- 任务状态：$JOB_STATUS"
+          } >> "$GITHUB_STEP_SUMMARY"
