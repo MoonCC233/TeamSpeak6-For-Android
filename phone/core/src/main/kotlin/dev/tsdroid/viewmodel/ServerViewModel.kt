@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -293,10 +294,14 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
     private val _isOutputMuted = MutableStateFlow(false)
     val isOutputMuted: StateFlow<Boolean> = _isOutputMuted.asStateFlow()
 
-    // Stable placeholder so collectors before bindToService() don't get a
-    // brand-new flow instance on every access
-    private val _voiceInactiveFlow = MutableStateFlow(false)
-    val isLocalVoiceActive: StateFlow<Boolean> get() = audioBridge?.isLocalVoiceActive ?: _voiceInactiveFlow
+    private val _isMicMuted = MutableStateFlow(true)
+    /** Mirrors [AudioBridge.isMuted] so composables can observe the transmit state. */
+    val isMicMuted: StateFlow<Boolean> = _isMicMuted.asStateFlow()
+
+    // Mirrored from AudioBridge in bindToService() so a collector created
+    // before the service is bound does not stay on a placeholder flow forever.
+    private val _isLocalVoiceActive = MutableStateFlow(false)
+    val isLocalVoiceActive: StateFlow<Boolean> = _isLocalVoiceActive.asStateFlow()
 
     /** Automatic reconnection progress, so the UI can stay put instead of bouncing out. */
     private val _reconnectStatus = MutableStateFlow(ReconnectStatus())
@@ -412,7 +417,13 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun bindToService() {
+    /**
+     * @param applySavedMicMode when true, a freshly bound session starts in
+     * the saved microphone mode: PTT starts muted, VAD/open start transmitting.
+     * The phone leaves this off to keep its existing bind path unchanged; the
+     * Pad enables it because it exposes all three modes in its audio dock.
+     */
+    fun bindToService(applySavedMicMode: Boolean = false) {
         if (bound) return
         // Claim the bind up front: during the service-instance wait window a
         // second call would otherwise pass the guard and spawn duplicate
@@ -435,6 +446,21 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
 
             tsClient = service.tsClient
             audioBridge = service.audioBridge
+            _isMicMuted.value = audioBridge?.isMuted?.value ?: true
+            viewModelScope.launch {
+                audioBridge?.isMuted?.collect { _isMicMuted.value = it }
+            }
+            viewModelScope.launch {
+                audioBridge?.isLocalVoiceActive?.collect { _isLocalVoiceActive.value = it }
+            }
+            if (applySavedMicMode) {
+                val bridge = audioBridge
+                viewModelScope.launch {
+                    val mode = settingsStore.micMode.first()
+                    bridge?.setMicMode(mode)
+                    bridge?.setMuted(mode == MicMode.PTT)
+                }
+            }
             audioBridge?.setMutedUserIds(_mutedUserIds.value)
             audioBridge?.setMicMode(micMode.value)
             audioBridge?.setVadThresholdDb(vadThresholdDb.value)
@@ -877,6 +903,22 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsStore.setNoiseSuppression(enabled) }
     }
 
+    /** Select one of the three microphone modes (PTT / VAD / open). */
+    fun setMicMode(mode: MicMode) {
+        viewModelScope.launch { settingsStore.setMicMode(mode) }
+        // PTT starts muted until the talk key is held; the other modes transmit
+        // as soon as capture is running.
+        audioBridge?.setMuted(mode == MicMode.PTT)
+    }
+
+    fun setMicGain(gain: Float) {
+        viewModelScope.launch { settingsStore.setMicGain(gain) }
+    }
+
+    fun setVadThresholdDb(db: Float) {
+        viewModelScope.launch { settingsStore.setVadThresholdDb(db) }
+    }
+
     fun toggleVoiceMode() {
         // Quick toggle between hold-to-talk and an open microphone; the full
         // three-way choice (including voice activation) lives in Settings.
@@ -888,6 +930,11 @@ class ServerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleOutputMute() {
         audioBridge?.toggleOutputMute()
+    }
+
+    /** Mute/unmute the microphone in voice-activity and open-mic modes. */
+    fun toggleMicMute() {
+        audioBridge?.toggleMute()
     }
 
     /** Local user id, or null before the connection is established. */

@@ -122,6 +122,16 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     private var connectJob: kotlinx.coroutines.Job? = null
     private var cloneBypassIdentity: Identity? = null
 
+    /**
+     * Whether a connection requires the "draw over other apps" permission.
+     *
+     * The phone app relies on the floating-window overlay for background voice
+     * control, so there the permission is mandatory. The Pad has no overlay and
+     * opts out by setting this to false before calling [connect]; the default
+     * keeps the phone flow byte-for-byte identical.
+     */
+    var requireOverlayPermission: Boolean = true
+
     private data class ConnectionInput(
         val address: String,
         val nickname: String
@@ -176,7 +186,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         val context = getApplication<Application>()
 
         // Check for overlay permission before starting the service
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+        if (requireOverlayPermission && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
             _connectionState.value = ConnectionState.DISCONNECTED
             _error.value = context.getString(R.string.error_overlay_permission_required)
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
@@ -255,6 +265,15 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     /**
+     * Synchronous check for hosts that recreate their composition while the
+     * service keeps running (for example a locale/font-scale configuration
+     * change). Unlike [resumeExistingConnectionOnce] this can be probed before
+     * the first frame, so the reconnect screen is never flashed unnecessarily.
+     */
+    fun hasActiveConnectionNow(): Boolean =
+        TsConnectionService.instance?.hasActiveConnection() == true
+
+    /**
      * [resumeExistingConnection], but only the first time this process asks.
      *
      * Jumping straight into a session that the service is still running is what the app wants on
@@ -318,7 +337,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch { bookmarkStore.setAutoReconnect(enabled) }
     }
 
-    fun saveBookmark() {
+    fun saveBookmark(resetForm: Boolean = true) {
         val addr = address.value.trim()
         val nick = nickname.value.trim()
         if (addr.isEmpty()) return
@@ -336,7 +355,7 @@ class ConnectionViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 bookmarkStore.add(bookmark)
             }
-            clearFields()
+            if (resetForm) clearFields()
         }
     }
 
