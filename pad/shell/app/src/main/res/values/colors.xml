@@ -1,0 +1,9 @@
+<resources>
+    <color name="ic_launcher_background">#0F172A</color>
+    <color name="pad_accent">#2DD4BF</color>
+    <color name="pad_surface">#111827</color>
+    <color name="pad_surface_high">#1F2937</color>
+    <color name="pad_text">#F8FAFC</color>
+    <color name="pad_text_muted">#94A3B8</color>
+    <color name="pad_danger">#F87171</color>
+</resources>

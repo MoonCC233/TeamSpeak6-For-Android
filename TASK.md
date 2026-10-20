@@ -109,7 +109,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | --- | --- | --- | --- | --- |
 | B1 | 获取并运行 Web 端 WebSpeak，拆解交互设计与完整功能清单 | `docs/B1-webspeak-spec.md`（功能清单 F1–F14 + 技术规格） | 清单覆盖 Web 端全部可感知功能，与 Web 端实际行为一致 | ✅ 2026-10-18 |
 | B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（方案 A' 已采纳） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 |
-| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | spike 结论报告 | 各项能力结论明确；发布桥技术方案确定 | ⬜ 优先 |
+| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | `pad/shell/` + `docs/B2s-pad-webview-spike.md` | 各项能力结论明确；发布桥技术方案确定 | ⏳ 2026-10-20：原生 WebView 壳、离线能力探测页、Web 构建与 Chromium 渲染已验证；麦克风/WebRTC/横屏真机测试待设备连接；发布桥已定 **JS Bridge + 原生 WebRTC**（非 Capacitor），见 spike 报告 §7 |
 | B3 | 壳应用体验打磨：横屏/大屏全屏、刘海安全区、返回键、后台音频前台服务、常亮 | 壳应用 | 平板全屏体验流畅，后台场景语音不断 | ⬜ |
 | B4 | 功能对齐 Web 版：壳内功能由 Web 本体提供，跟踪 F1–F14 逐项验证并记录缺口 | 验证清单 | 清单逐项与 Web 版一致（管理台/皮肤编辑器按产品决策降级） | ⬜ |
 | B5 | 屏幕共享：观看（WebView 内）+ 发布（原生 MediaProjection 桥），与 WebSpeak/TS6 原生客户端互通 | 可互通的功能 | 互通验收通过 | ⬜ |
@@ -266,5 +266,19 @@ AI 代理接到本指令后的参考执行顺序：
     无 `SDP set failure: The order of m-lines ...`；根因与修复见 `docs/A3-screen-share-android.md` §6.6；
   - 主动退订 `joinstreamrequest is_remove=1`（Rust/JNI/Java/Kotlin 全链路）让发布端清理旧
     viewer PC；前后台 `ON_PAUSE/ON_RESUME` 退订/重入通过；全屏 fit/fill/旋转/Back 通过。
-- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s WebView 兼容性 spike；
+- ✅ **B2s Pad WebView 壳 + 离线验证工具**（2026-10-20）：
+  - `pad/shell/` 新增原生 WebView 壳：横屏沉浸、常亮、刘海 shortEdges、麦克风双层权限
+    （WebView `onPermissionRequest` + Android `RECORD_AUDIO`）、HTTPS/自签名开关、
+    文件选择、HTML5 全屏、返回键、网关地址设置、`window.TS6PadNative` JS Bridge 占位；
+    debug APK 构建通过（包名 `com.yuaxi.ts6pad`，可与手机端共存）；
+  - `pad/web` 成功 `vue-tsc + vite build`；`pad/shell/tools/demo-server.mjs` 提供
+    WebSpeak UI 静态托管 + mock `/api/public-config` + WebSocket 回声，
+    `capability.html` 覆盖麦克风、WebRTC 音视频回环、AudioWorklet、WASM、WebSocket、
+    `getDisplayMedia` 缺失探测；
+  - 桌面 Chrome headless 已验证 WebSpeak 加入页正常渲染；Android WebView 真机
+    麦克风/回环/横屏能力待设备连接后补测；
+  - 发布桥结论：Android WebView 无 `getDisplayMedia`，且无法把原生 `MediaProjection`
+    轨道注入页面 `RTCPeerConnection`；采用 **JS Bridge 控制面 + 原生 WebRTC 媒体面**，
+    B5 接入网关 native publisher；详见 `docs/B2s-pad-webview-spike.md`。
+- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s 真机能力补测；
   A3 发布端抖动/重传优化（暂缓）
