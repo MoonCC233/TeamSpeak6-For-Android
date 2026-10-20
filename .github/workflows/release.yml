@@ -23,9 +23,13 @@ name: Release
 #     SIGNING_KEYSTORE_BASE64 / SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS / SIGNING_KEY_PASSWORD
 #
 # 前置说明
-#   phone/app/src/main/jniLibs/arm64-v8a/libtslib_jni.so 是提交进仓库的预编译产物，
+#   phone/core/src/main/jniLibs/arm64-v8a/libtslib_jni.so 是提交进仓库的预编译产物，
 #   本流水线不做 Rust 交叉编译（`-x buildRustLibs`）。改动 tslib/ 之后务必先在本机执行
 #   `gradlew buildRustLibs` 重建 .so 并提交，否则发布包内仍是旧的协议库。
+#
+# 注意：phone/gradle 现在同时包含 :app（手机）与 :pad（平板）。本流水线只发布手机端，
+#   因此所有 Gradle 调用都显式限定 :app（测试额外带上 :core），避免 :pad 的 release
+#   构建拖慢发布或引入无关失败。
 # =============================================================================
 
 on:
@@ -259,11 +263,11 @@ jobs:
 
       - name: 单元测试
         working-directory: ${{ env.PHONE_DIR }}
-        run: ./gradlew testDebugUnitTest -x buildRustLibs
+        run: ./gradlew :app:testDebugUnitTest :core:testDebugUnitTest -x buildRustLibs
 
       - name: 构建 release APK
         working-directory: ${{ env.PHONE_DIR }}
-        run: ./gradlew assembleRelease -x buildRustLibs
+        run: ./gradlew :app:assembleRelease -x buildRustLibs
 
       - name: 校验 APK（签名 / ABI / 版本号）
         working-directory: ${{ env.PHONE_DIR }}

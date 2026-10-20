@@ -112,11 +112,11 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（历史方案 A'）+ `docs/adr/0003-pad-native-app.md`（现行原生方案） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 初版；2026-10-20 由 ADR-0003 调整为**原生 Compose** |
 | B2s | ~~WebView 兼容性与发布桥 spike~~ | ~~`pad/shell/` + `docs/B2s-pad-webview-spike.md`~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：Pad 改原生 Compose，WebView 壳与 spike 文档已删除 |
 | B3 | ~~壳应用体验打磨~~ | ~~壳应用~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：WebView 壳已删除；后台语音/安全区能力在原生 Pad 中由 `:core` + Compose 重新实现 |
-| B4 | 原生 UI/功能对齐 WebSpeak：按 F1–F14 逐项复刻并验证（管理台/皮肤编辑器按产品决策降级） | 验证清单 + 原生页面 | 清单逐项与 Web 版一致 | ⬜ |
+| B4 | 原生 UI/功能对齐 WebSpeak：按 F1–F14 逐项复刻并验证（管理台/皮肤编辑器按产品决策降级） | 验证清单 + 原生页面 | 清单逐项与 Web 版一致 | 🔄 2026-10-20 首版 UI 完成，待真机逐项验收 |
 | B5 | Pad 屏幕共享（后置）：观看 + 发布，直接复用 `:core` 的 A3/A4 MediaProjection/WebRTC 实现 | 可互通的功能 | 与 TS6 原生客户端/WebSpeak 互通验收通过 | ⬜ |
-| B6 | 双端共享：抽取 `:core`（tslib/JNI、bridge、data、screen、service、viewmodel），手机端与 Pad 共用 | `phone/core/` | 减少重复实现，两端独立可发布 | ✅ 2026-10-20：`:core` 抽取完成，手机端构建/单测通过（`af30332`）；Pad 模块接入中 |
-| B7 | Pad 原生工程 + WebSpeak 风格 UI：Compose 平板布局、深色主题、频道树/成员卡片/聊天/底部语音栏 | `phone/pad/` | 大屏界面与 WebSpeak 视觉/交互一致，debug APK 可安装 | 🔄 2026-10-20 启动 |
-| B8 | Pad 连接/语音接入：真实 TS6 连接、频道/成员、文字聊天、语音收发与音频控制 | Pad 功能 | 与手机端共用 `:core`，真机连接 `ts.mooncc.cn` 验证通过 | ⬜ |
+| B6 | 双端共享：抽取 `:core`（tslib/JNI、bridge、data、screen、service、viewmodel），手机端与 Pad 共用 | `phone/core/` | 减少重复实现，两端独立可发布 | ✅ 2026-10-20：`:core` 抽取完成，手机端构建/单测通过（`af30332`）；Pad 已接入 |
+| B7 | Pad 原生工程 + WebSpeak 风格 UI：Compose 平板布局、深色主题、频道树/成员卡片/聊天/底部语音栏 | `phone/pad/` | 大屏界面与 WebSpeak 视觉/交互一致，debug APK 可安装 | 🔄 2026-10-20 首版完成：debug/release 构建与 lint 通过，待真机视觉/交互验收 |
+| B8 | Pad 连接/语音接入：真实 TS6 连接、频道/成员、文字聊天、语音收发与音频控制 | Pad 功能 | 与手机端共用 `:core`，真机连接 `ts.mooncc.cn` 验证通过 | 🔄 2026-10-20 代码接入完成（连接/频道/成员/聊天/语音/音频设置），待真机联调 |
 
 ---
 
@@ -307,7 +307,14 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **路线调整**：Pad 端由「远程 WebSpeak + WebView 壳」改为**原生 Compose 应用**，直接经 `tslib` 连接 TS6；新增 `docs/adr/0003-pad-native-app.md`，ADR-0001 标记为被取代。
 - ✅ **共享核心抽取**：`phone/core`（`:core`）承接 tslib JNI、bridge、data、screen、service、viewmodel 与所需资源；手机端 `:app` 仅保留 Compose 页面/Application/启动资源。`:core:testDebugUnitTest`、`:app:testDebugUnitTest`、`:app:assembleDebug` 全部通过（提交 `af30332`）。通知/悬浮窗的「打开应用」Intent 改为 PackageManager 解析启动 Activity，通知渠道 ID 保持 `ts_connection`。
 - ✅ **WebView 壳移除**：删除 `pad/shell/` 与 `docs/B2s-pad-webview-spike.md`；B2s/B3/B5 的 WebView 发布桥任务终止。
-- 🔄 **Pad 原生工程**：新增 `phone/pad`（`com.yuaxi.ts6pad`），首期目标 = WebSpeak 风格 UI + 连接/频道/成员/文字聊天/语音；屏幕共享后续复用 `:core` 的 A3/A4 实现。
-
-- ⏳ **待办**：Pad 原生 UI（WebSpeak 复刻）与连接/语音接入；A3 发布端抖动/重传优化（暂缓）；
-  真机回归（vivo 设备重新连接后）
+- 🔄 **Pad 原生工程首版**：新增 `phone/pad`（`com.yuaxi.ts6pad`，`namespace=dev.tsdroid.pad`），已完成：
+  - WebSpeak 风格加入页（宽屏 Hero + 书签 / 竖屏堆叠、服务器地址/昵称/密码/频道、麦克风权限引导）；
+  - 已连接工作区（70dp 服务器栏 + 322dp 成员/频道面板 + 语音舞台 + 频道/私聊面板 + 底部语音栏）；
+  - 真实 TS6 连接、频道切换、成员卡片/详情（本地静音、音量）、频道/私聊收发、未读与历史；
+  - PTT / VAD / 常开麦克风、麦克风/扬声器静音、输入增益、VAD 阈值、全局音量、噪声抑制（下次连接生效）；
+  - `:core` 增补 `requireOverlayPermission`、`saveBookmark(resetForm)`、`isMicMuted/toggleMicMute`、`setMicMode/setMicGain/setVadThresholdDb`、`hasActiveConnectionNow` 与 `bindToService(applySavedMicMode)`；`isLocalVoiceActive` 改为可跨绑定观察的镜像流；手机端默认行为不变；
+  - Pad 每个连接使用独立 `ViewModelStore`，避免 `ServerViewModel` 二次绑定复用旧收集器；
+  - 全部 Pad UI 文案入 `res/values/strings.xml`；
+  - `:pad:assembleDebug`、`:pad:assembleRelease`、`:pad:lintDebug` 通过；APK 含 `lib/arm64-v8a/libtslib_jni.so`；
+  - `.github/workflows/release.yml` 显式限定 `:app`/`:core`，不会误构建 Pad。
+- ⏳ **待真机**：vivo 设备重新连接后验收加入、频道切换、成员操作、频道/私聊、PTT/VAD、静音、断线重连、后台/通知；A3 发布端抖动/重传优化（暂缓）。
