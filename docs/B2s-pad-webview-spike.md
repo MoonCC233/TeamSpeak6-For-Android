@@ -1,6 +1,6 @@
 # B2s：Pad WebView 兼容性与发布桥 spike
 
-> 状态：**⏳ 进行中**（2026-10-20）
+> 状态：**⏳ 进行中**（2026-10-20）——桌面真实网关链路 ✅，Android WebView 真机 ⏳
 > 产出：`pad/shell/`（原生 WebView 壳）、`pad/shell/tools/`（离线探测服务器 + 能力页）
 > 关联：`docs/adr/0001-pad-approach.md`（方案 A'）、`docs/B1-webspeak-spec.md`
 
@@ -52,9 +52,12 @@ TS3 / TS6 服务器
 
 APK 包名 `com.yuaxi.ts6pad`，可与手机端 `com.yuaxi.ts6droid.cn` 共存。
 
-## 4. 离线验证工具
+## 4. 验证工具
 
-因为当前 PC 出网受限（GitHub / 在线 Demo 超时），先提供不依赖真实网关的验证路径：
+### 4.1 离线工具（无需真实网关）
+
+离线工具不依赖真实网关，适合先验证 WebView 能力。当前 PC 访问 GitHub/在线 Demo 仍不稳定，
+但本机自托管真实网关已于 2026-10-20 跑通（§4.2）。
 
 ```powershell
 cd pad
@@ -89,6 +92,41 @@ adb reverse tcp:8080 tcp:8080
 - WebSocket 回声；
 - `getDisplayMedia` 失败探测。
 
+### 4.2 真实网关（本机自托管，2026-10-20）
+
+本机已跑通 `pad/` 网关 + 真实 TS6 服务器，用于桌面 Chrome 对照。关键点：
+
+- **必须用仓库锁定的 fork SDK**：`pad/package.json` 指向
+  `@echosixhiya/teamspeak-client` 的 `758a0d7d9120b0f5777d9451fb6b134f0b606f65`。
+  npm 上的 `@honeybbq/teamspeak@1.0.0-beta.14` 不能替代：握手会报
+  `HandshakeError ... malformed packet`，且缺少 `clientID()`/`execCommand`、
+  `identityFromString`、`clientMove`/`poke`/`sendTextMessage`、`./discovery` 等网关依赖的 API。
+- 本机 npm 配置 `allow-git=none` 会阻止该 git 依赖；需要 `--allow-git=all` 或可访问
+  GitHub 的网络。本次 PC 访问 GitHub/npm git 超时，改用镜像
+  `https://ghproxy.net/https://github.com/EchoSixHIYA/teamspeak-js/archive/758a0d7d9120b0f5777d9451fb6b134f0b606f65.tar.gz`
+  取到 fork 源码，在临时网关副本中以 `tsx` 从 `src/` 运行（不内嵌到 Pad 壳）。
+- 从源码运行 fork 时，临时副本还需安装其运行时依赖（至少 `@noble/curves@^2.0.1`）；
+  正常 `npm ci` 会按锁文件安装。
+- Windows 无原生 `@discordjs/opus`：安装依赖用 `--ignore-scripts`，设置
+  `WEBSPEAK_MOBILE=1`，并安装纯 JS `opusscript`。
+- 首次启动用 `config.json` 导入目标：
+  ```json
+  { "tsHost": "ts.mooncc.cn", "tsPort": 9987, "tsServerPassword": "<server-password>" }
+  ```
+  网关写入 `data/` 后，后续在 `/admin` 管理；默认管理员 `admin`/`admin`，首次登录必须改
+  ≥12 位密码。
+- 本机网络的 TSDNS/SRV 查询会被黑洞，fork 的默认 resolver 会等到超时。临时网关把
+  `/discovery` 的 `Resolver` 换成“原样返回 `host:port`、`source=Direct`”的直连实现；
+  `ts.mooncc.cn` 无 SRV 记录，直连 `9987` 即可。这是测试环境 workaround，未改仓库网关代码；
+  正式部署若也遇到 TSDNS 黑洞，应在网关侧给 resolver 加超时/直连回退。
+- 启动（在临时网关副本中）：
+  ```powershell
+  $env:WEBSPEAK_MOBILE="1"; $env:PORT="3040"
+  .\node_modules\.bin\tsx.cmd src/index.ts
+  ```
+- Pad 真机通过 `adb reverse tcp:3040 tcp:3040` 访问 `http://localhost:3040`；
+  媒体面走网关 UDP `40000–40099`，确保手机与 PC 同网且 Windows 防火墙放行。
+
 ## 5. 验证矩阵
 
 | # | 验证项 | 方法 | 结果 |
@@ -101,8 +139,10 @@ adb reverse tcp:8080 tcp:8080
 | 5 | AudioWorklet / WASM | 能力页 + WebSpeak 语音链路 | ⏳ 待真机 |
 | 6 | WebSocket | 能力页回声 | ⏳ 待真机 |
 | 7 | 横屏/大屏布局 | Pad 壳加载 WebSpeak 加入页 | ⏳ 待真机 |
-| 8 | 真实网关麦克风/收听/观看 | 可达的自托管 WebSpeak 实例 | ⏳ 阻塞：当前网络无法访问上游 Demo / GitHub；需要可用的自建实例或恢复网络 |
-| 9 | 屏幕共享观看（WebView） | 真实网关 + TS6 桌面共享 | ⏳ 待网关 |
+| 8a | 真实网关 + TS6 服务器（桌面 Chrome 对照） | 本机自托管网关 + `ts.mooncc.cn:9987` | ✅ 2026-10-20：连接成功（clientId 205），2 在线；频道/聊天/成员/语音会话建立 |
+| 8b | 真实网关麦克风/收听（Android WebView 真机） | Pad 壳 + `adb reverse` + 真实网关 | ⏳ 待真机 |
+| 9a | TS6 屏幕共享观看（桌面 Chrome 对照） | 真实网关 + MoonCC233 桌面共享 | ✅ 2026-10-20：`<video>` 2560×1600、`readyState=4`、播放中；UI `观看中/退出观看/全屏` |
+| 9b | 屏幕共享观看（Android WebView 真机） | Pad 壳 + 真实网关 | ⏳ 待真机 |
 | 10 | 屏幕共享发布（原生） | B5 实现 | ⏳ B5 |
 
 ## 6. 阶段性结论
@@ -132,6 +172,24 @@ adb reverse tcp:8080 tcp:8080
 6. **文件上传/下载不是默认可用**：上传已用 `ACTION_GET_CONTENT` 接管；Blob 下载（身份导出、
    皮肤导出）仍需 B4 的桥接或 JS 注入。
 
+### 6.3 真实网关（桌面 Chrome 对照，2026-10-20）
+
+在本机自托管网关 + `ts.mooncc.cn:9987`（服务器名 `MPT Speak`）上，用桌面 Chrome
+（headless，fake mic）完成加入：
+
+- 网关侧 `connected to server` → `Connected to TeamSpeak`（clientId 205）；
+  UI 显示 2 在线、频道树、文字频道、成员与语音状态，语音会话建立；
+- 桌面 TS6 客户端 `MoonCC233` 正在共享屏幕；点击 `观看屏幕共享` 后，页面出现
+  `screen-share-player-video`：`srcObject=true`、`readyState=4`、`2560×1600`、
+  `currentTime≈6.4s`、`paused=false`、`muted=false`，UI 显示 `观看中`/`退出观看`/`全屏`。
+  这验证了 **真实网关 + TS6 屏幕共享观看** 链路；
+- 服务器权限提示 `insufficient client permissions (id=2568)` 影响目录快照/成员状态刷新，
+  但实时事件仍让 UI 渲染出在线成员；这不是 WebView/网关阻塞项。另有一条
+  `notifystreaminfo` 因缺少 stream/source 标识被忽略，但共享观看仍成功；
+- **边界**：这是桌面 Chrome 对照，不是 Android WebView；fake mic 只证明语音会话建立，
+  未独立确认对端可听；屏幕共享**发布**未测（Pad 发布由 B5 原生桥负责）。因此
+  §5 的 WebView 真机项仍为 ⏳。
+
 ## 7. 发布桥选型：JS Bridge（非 Capacitor）
 
 ### 7.1 决策
@@ -146,6 +204,8 @@ adb reverse tcp:8080 tcp:8080
 - 真正的难点不是调用形式，而是**媒体路径**：WebView 无法把原生 `MediaProjection` 的
   `VideoTrack` 变成页面的 `MediaStream`，所以不能简单 polyfill `getDisplayMedia`。
   必须由原生侧建立独立的 WebRTC PeerConnection，并把屏幕共享信令接入 WebSpeak 网关。
+- 桌面 Chrome 已通过真实网关验证 **观看** 路径（§6.3）：观看端只需页面内
+  `RTCPeerConnection` 接收；只有 **发布** 需要原生媒体面。Android WebView 观看待真机确认。
 
 ### 7.2 B5 对接草案
 
@@ -180,9 +240,9 @@ Pad Shell
 
 ## 8. 下一步
 
-1. 真机执行第 5 节 #2–#7，把结果补进本文件；确认 WebView 版本、编解码、麦克风/回环统计。
-2. 准备一个可达的自托管 WebSpeak 实例（或恢复网络访问上游 Demo），完成 #8–#9：
-   真实网关加入语音、收听、观看 TS6 桌面共享。
+1. 真机执行第 5 节 #2–#7、#8b、#9b（Pad 壳 + `adb reverse` + 本机真实网关），把结果补进
+   本文件；确认 WebView 版本、编解码、麦克风/回环统计、TS6 共享观看。
+2. 真实网关桌面链路已完成（§6.3）；Pad 原生发布桥见 B5。
 3. B3：后台音频前台服务、音频焦点、刘海安全区、设置入口与全屏体验打磨。
 4. B5：实现原生发布桥与网关侧 native publisher 端点，完成 Pad → TS6/WebSpeak 互通。
 5. B4：按 F1–F14 清单逐项验证 Web 功能，记录 Blob 下载、多窗口、管理台/皮肤编辑器等缺口。

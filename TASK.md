@@ -109,7 +109,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | --- | --- | --- | --- | --- |
 | B1 | 获取并运行 Web 端 WebSpeak，拆解交互设计与完整功能清单 | `docs/B1-webspeak-spec.md`（功能清单 F1–F14 + 技术规格） | 清单覆盖 Web 端全部可感知功能，与 Web 端实际行为一致 | ✅ 2026-10-18 |
 | B2 | 技术选型：确定 Pad 端技术栈与架构，输出 ADR | `docs/adr/0001-pad-approach.md`（方案 A' 已采纳） | 决策记录完整，工程形态明确 | ✅ 2026-10-18 |
-| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | `pad/shell/` + `docs/B2s-pad-webview-spike.md` | 各项能力结论明确；发布桥技术方案确定 | ⏳ 2026-10-20：原生 WebView 壳、离线能力探测页、Web 构建与 Chromium 渲染已验证；麦克风/WebRTC/横屏真机测试待设备连接；发布桥已定 **JS Bridge + 原生 WebRTC**（非 Capacitor），见 spike 报告 §7 |
+| B2s | **WebView 兼容性与发布桥 spike**：壳应用加载 WebSpeak 实例，验证麦克风采集、WebRTC 收听/观看、Worklet/WASM、横屏布局；确定原生发布桥对接方式（Capacitor 插件 vs JS Bridge） | `pad/shell/` + `docs/B2s-pad-webview-spike.md` | 各项能力结论明确；发布桥技术方案确定 | ⏳ 2026-10-20：原生 WebView 壳、离线能力探测页、Web 构建与 Chromium 渲染已验证；本机自托管网关 + TS6 桌面共享在桌面 Chrome 已跑通（clientId 205，语音会话、共享观看 2560×1600）；Android WebView 麦克风/回环/横屏真机测试待设备连接；发布桥已定 **JS Bridge + 原生 WebRTC**（非 Capacitor），见 spike 报告 §7 |
 | B3 | 壳应用体验打磨：横屏/大屏全屏、刘海安全区、返回键、后台音频前台服务、常亮 | 壳应用 | 平板全屏体验流畅，后台场景语音不断 | ⬜ |
 | B4 | 功能对齐 Web 版：壳内功能由 Web 本体提供，跟踪 F1–F14 逐项验证并记录缺口 | 验证清单 | 清单逐项与 Web 版一致（管理台/皮肤编辑器按产品决策降级） | ⬜ |
 | B5 | 屏幕共享：观看（WebView 内）+ 发布（原生 MediaProjection 桥），与 WebSpeak/TS6 原生客户端互通 | 可互通的功能 | 互通验收通过 | ⬜ |
@@ -280,5 +280,14 @@ AI 代理接到本指令后的参考执行顺序：
   - 发布桥结论：Android WebView 无 `getDisplayMedia`，且无法把原生 `MediaProjection`
     轨道注入页面 `RTCPeerConnection`；采用 **JS Bridge 控制面 + 原生 WebRTC 媒体面**，
     B5 接入网关 native publisher；详见 `docs/B2s-pad-webview-spike.md`。
-- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s 真机能力补测；
-  A3 发布端抖动/重传优化（暂缓）
+- ✅ **B2s 真实网关桌面链路验证**（2026-10-20）：
+  - 本机自托管网关连接 `ts.mooncc.cn:9987`（服务器 `MPT Speak`，clientId 205），
+    WebSpeak UI 显示 2 在线、频道/聊天/成员，语音会话建立；
+  - 桌面 Chrome 观看 `MoonCC233` 的 TS6 屏幕共享成功：`<video>` 2560×1600、
+    `readyState=4`、播放中，UI `观看中/退出观看/全屏`；
+  - **必须使用仓库锁定的 EchoSixHIYA fork**（`758a0d7d...`）；npm 上游
+    `@honeybbq/teamspeak@1.0.0-beta.14` 握手失败（malformed packet）且缺少网关 API；
+  - 服务器权限 2568 使目录快照/成员状态刷新受限，但实时事件仍能渲染在线成员；
+    Android WebView 真机与 Pad 原生发布仍待。
+- ⏳ **待办**：Android WebView 真机能力补测 + 真实网关麦克风/共享观看（桌面链路已完成）；
+  Pad 原生发布桥 B5；A3 发布端抖动/重传优化（暂缓）

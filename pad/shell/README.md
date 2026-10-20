@@ -56,6 +56,9 @@ vivo 等系统安装器可能弹出风险确认；勾选“已了解风险”后
 > `getUserMedia` 要求安全上下文：HTTPS 或 `localhost`。
 > 直接填局域网 `http://10.x.x.x:3040` 通常无法使用麦克风；请给网关配 HTTPS，
 > 或在开发阶段用 `adb reverse` + `localhost`。
+> 本机网关必须使用仓库锁定的 EchoSixHIYA fork SDK；Windows 调试用
+> `WEBSPEAK_MOBILE=1` + `opusscript`。真实 TS6 语音会话/共享观看已在桌面 Chrome 验证，
+> Pad WebView 真机待测；完整启动步骤见 `docs/B2s-pad-webview-spike.md` §4.2。
 
 对话框中的“允许自签名 HTTPS 证书”仅用于调试，正式部署请使用有效证书。
 
@@ -70,9 +73,11 @@ npm --prefix web run build
 ```
 
 > `pad/web` 的 `src/shared/skin-css.ts` 会引用根 `pad` 的 `postcss`、`postcss-selector-parser`、
-> `postcss-value-parser`。如果根 `npm ci` 被上游 git SDK 的网络阻塞，可先执行
+> `postcss-value-parser`。如果根 `npm ci` 被 git SDK 的网络阻塞，可先执行
 > `npm install --no-save postcss postcss-selector-parser postcss-value-parser` 再构建；
 > 当前工作区已经生成 `pad/web/dist`，也可以直接使用。
+> 注意：这个 git SDK 是网关**必需的 EchoSixHIYA fork**，不要替换成 npm 上的
+> `@honeybbq/teamspeak`（握手会失败）；网络受限时的 fork 源码获取方式见 spike §4.2。
 > `demo-server.mjs` 本身只用 Node 内置模块，不依赖 `ws` 等 npm 包。
 
 启动本地演示服务器：
@@ -126,7 +131,7 @@ adb reverse tcp:8080 tcp:8080
 | 项 | 状态 |
 | --- | --- |
 | 屏幕共享**发布**（`getDisplayMedia`） | Android WebView 不支持；B5 用原生 `MediaProjection` + 原生 WebRTC，通过 JS Bridge/网关协议对接 |
-| 屏幕共享**观看** | WebView 内 `RTCPeerConnection` 理论可用，待真机 + 真实网关验证 |
+| 屏幕共享**观看** | 桌面 Chrome 已用真实网关验证 TS6 共享观看（2560×1600）；Android WebView 待真机 |
 | 后台音频 | 当前 `onPause` 会 `webView.onPause()`；B3 需前台服务 + 音频焦点，避免后台断语音 |
 | 设置入口 | 右上角半透明齿轮；B3 改为更自然的手势/菜单并处理安全区 |
 | Blob/文件下载（身份导出等） | 暂未实现，B4 处理 |
