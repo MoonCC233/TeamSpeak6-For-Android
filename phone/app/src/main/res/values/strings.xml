@@ -282,5 +282,26 @@
     <string name="viewer_status_ended">Le partage d\'écran est terminé</string>
     <string name="viewer_status_rejected">Le diffuseur a refusé la demande</string>
     <string name="viewer_status_failed">Impossible de se connecter au partage d\'écran</string>
+    <string name="screen_share_connection_info">Informations de connexion</string>
+    <string name="screen_share_watch_fullscreen">Plein écran</string>
+    <string name="screen_share_stop_watching">Arrêter de regarder</string>
+    <string name="screen_share_exit_fullscreen">Quitter le plein écran</string>
+    <string name="screen_share_info_video">Vidéo</string>
+    <string name="screen_share_info_audio">Audio</string>
+    <string name="screen_share_info_downstream">Descendant</string>
+    <string name="screen_share_info_jitter">Gigue</string>
+    <string name="screen_share_info_decode_time">Temps de décodage</string>
+    <string name="screen_share_info_loss">Perte de paquets (entrée)</string>
+    <string name="screen_share_info_retransmit_rate">Taux de retransmission</string>
+    <string name="screen_share_info_packets_received">Paquets reçus</string>
+    <string name="screen_share_info_total_received">Total reçu</string>
+    <string name="screen_share_info_packets_lost">Paquets perdus</string>
+    <string name="screen_share_info_quality">Qualité (actuelle)</string>
+    <string name="screen_share_info_decoder">Décodeur</string>
+    <string name="screen_share_info_retransmitted_packets">Paquets retransmis</string>
+    <string name="screen_share_info_retransmitted_total">Total retransmis</string>
+    <string name="screen_share_info_rtt">Aller-retour</string>
+    <string name="screen_share_info_no_audio">Ce partage ne contient pas d\'audio</string>
+    <string name="screen_share_info_waiting">Collecte des informations de connexion…</string>
 
 </resources>

@@ -730,6 +730,28 @@ pub extern "system" fn Java_dev_tslib_Client_nativeJoinScreenShare(
     );
 }
 
+/// `Client.leaveScreenShare(streamId, sourceClientId)` — 主动停止观看他人的流。
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_tslib_Client_nativeLeaveScreenShare(
+    mut env: JNIEnv,
+    _class: JClass,
+    ptr: jlong,
+    stream_id: JString,
+    source_client_id: jint,
+) {
+    let stream_id = match require_string(&mut env, &stream_id) {
+        Ok(s) => s,
+        Err(()) => return,
+    };
+    let handle = ptr_to_handle(ptr);
+    to_jni_result(
+        &mut env,
+        handle
+            .client
+            .leave_screen_share(&stream_id, source_client_id as u16),
+    );
+}
+
 /// `Client.respondScreenShareJoin(streamId, viewerId, offerSdp)` — 回复观看请求
 /// （携带发布端为该观看者创建的 offer）。
 #[unsafe(no_mangle)]

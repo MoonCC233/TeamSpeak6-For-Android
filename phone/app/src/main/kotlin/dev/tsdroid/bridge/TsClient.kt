@@ -110,6 +110,9 @@ class TsClient {
     private val uploadKeys = ConcurrentHashMap<String, Long>()
     private val fileListCallbacks = ConcurrentHashMap<String, CompletableDeferred<List<TsFileEntry>>>()
 
+    /** 已主动补查过屏幕共享状态的用户（连接期间去重，断开后重置） */
+    private val streamInfoQueriedUsers = mutableSetOf<Int>()
+
     private var eventLoopJob: Job? = null
     private val clientCoroutineScope = CoroutineScope(nativeDispatcher + SupervisorJob())
     private val connectMutex = Mutex()
@@ -372,6 +375,13 @@ class TsClient {
                 }
             }
             _users.value = filteredUsers
+            // 主动补查各用户的屏幕共享状态：流事件可能早于 UI 订阅到达，
+            // 也让「连接/重连后」能立刻发现正在进行中的直播
+            for (u in filteredUsers) {
+                if (streamInfoQueriedUsers.add(u.id)) {
+                    requestStreamInfo(u.id)
+                }
+            }
             _serverInfo.value = c.serverInfo
             cachedClientId = c.clientId
             val st = c.state
@@ -410,6 +420,7 @@ class TsClient {
         _users.value = emptyList()
         _serverInfo.value = null
         cachedClientId = null
+        streamInfoQueriedUsers.clear()
         _screenShareEvents.resetReplayCache()
     }
 
@@ -549,6 +560,13 @@ class TsClient {
     fun joinScreenShare(streamId: String, sourceClientId: Int) {
         launchNativeCommand("joinScreenShare") {
             this.joinScreenShare(streamId, sourceClientId)
+        }
+    }
+
+    /** 主动停止观看他人的屏幕共享（观看端；通知发布端关闭对应 PC） */
+    fun leaveScreenShare(streamId: String, sourceClientId: Int) {
+        launchNativeCommand("leaveScreenShare") {
+            this.leaveScreenShare(streamId, sourceClientId)
         }
     }
 

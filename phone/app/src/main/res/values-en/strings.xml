@@ -282,5 +282,26 @@
     <string name="viewer_status_ended">The screen share has ended</string>
     <string name="viewer_status_rejected">The broadcaster declined the request</string>
     <string name="viewer_status_failed">Could not connect to the screen share</string>
+    <string name="screen_share_connection_info">Connection info</string>
+    <string name="screen_share_watch_fullscreen">Full screen</string>
+    <string name="screen_share_stop_watching">Stop watching</string>
+    <string name="screen_share_exit_fullscreen">Exit full screen</string>
+    <string name="screen_share_info_video">Video</string>
+    <string name="screen_share_info_audio">Audio</string>
+    <string name="screen_share_info_downstream">Downstream</string>
+    <string name="screen_share_info_jitter">Jitter</string>
+    <string name="screen_share_info_decode_time">Decode time</string>
+    <string name="screen_share_info_loss">Packet loss (input)</string>
+    <string name="screen_share_info_retransmit_rate">Retransmission rate</string>
+    <string name="screen_share_info_packets_received">Packets received</string>
+    <string name="screen_share_info_total_received">Total received</string>
+    <string name="screen_share_info_packets_lost">Packets lost</string>
+    <string name="screen_share_info_quality">Quality (current)</string>
+    <string name="screen_share_info_decoder">Decoder</string>
+    <string name="screen_share_info_retransmitted_packets">Retransmitted packets</string>
+    <string name="screen_share_info_retransmitted_total">Total retransmitted</string>
+    <string name="screen_share_info_rtt">Round trip</string>
+    <string name="screen_share_info_no_audio">This share has no audio</string>
+    <string name="screen_share_info_waiting">Collecting connection info…</string>
 
 </resources>

@@ -98,7 +98,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | A2 | 需求验证与协议规格：提取 TS6 屏幕共享完整信令流程；评估 `tslib/` 改动量 | `docs/A2-screen-share-protocol.md`（7 命令 + 7 通知 + 信令 JSON + 双流程 + 改动清单） | 明确发布/观看两端实现路径与依赖协议；Rust 改动范围可估算 | ✅ 2026-10-18 |
 | A2b | 原型验证：vendor `tsclientlib` 并打"未知通知透传"补丁；tslib 命令/通知最小闭环（真实 TS6 服务器） | 可运行的 spike | 未知通知可达 tslib；命令发送被服务器接受 | ✅ 2026-10-18：真实服务器 `ts.mooncc.cn:9987` 全信令闭环（7 命令/7 通知）验证通过；修复 `msg` 参数缺失（`22320ab`）；探针增强自动应答/时延测量 |
 | A3 | **屏幕共享（发布端）**：MediaProjection 采集 → WebRTC 编码 → 信令 → 对端可见 | 可用的共享功能 | 手机可发起屏幕共享，TS6 原生客户端与 WebSpeak 均能发现并观看 | ✅ 2026-10-18：与 TS6 原生客户端互通**验收通过**（手机发布 → 桌面观看画面可见，`SRD-OK → ANSWER-SENT`）；根因=发布 offer 必须「视频段 `a=sendonly` + 补 `m=audio` 媒体线」，修复与 18 个变体矩阵见 `docs/A3-screen-share-android.md` §6；WebSpeak 互通待可用实例 |
-| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | 🔄 真机互通通过（桌面发布 → 手机观看画面可见）；观看端体验打磨已实现（2026-10-19：沉浸全屏/旋转/缩放、成员与频道「直播」角标、断流与异常提示、首帧检测），真机复测待做；WebSpeak 互通待实例 |
+| A4 | **屏幕共享（观看端）**：发现共享源、订阅并渲染画面（含旋转/全屏适配） | 可用的观看功能 | 手机可观看来自 TS6 原生客户端与 WebSpeak 的屏幕共享 | ✅ 2026-10-20 真机验收通过：桌面 2560×1600 → 手机 VP8/libvpx@30fps；首页实时预览卡片（自动入会、直播角标、昵称/分辨率/帧率、信息/全屏/退出、退出后紧凑「观看」入口）；黑屏修复=观看端 offer 裁到 VP8+RTX+RED/ULPFEC；主动退订 `is_remove=1` 后重看连续两轮通过（无 `SDP set failure`）；全屏 fit/fill/旋转/Back、前后台恢复、首帧超时/SDP 失败快速失败均通过；WebSpeak 互通待实例 |
 | A5 | **手机端 UI/交互适配**：竖屏与小屏优化，与控制面板、频道树等现有界面整合 | 适配后的界面 | 单手可用、不遮挡语音控制核心操作 | ⬜ |
 
 ### B. Pad 端适配（全新开发）
@@ -253,5 +253,18 @@ AI 代理接到本指令后的参考执行顺序：
   `ScreenShareViewerOverlay` 全屏覆盖层（沉浸隐藏系统栏、常亮、单击控制条 3.5s 自动隐藏、
   适应/填充缩放、旋转按钮，退出恢复）；观看入口增强（成员行「直播」角标可直点观看、频道行
   直播标记、用户面板「观看屏幕共享」）；断流/被拒/失败提示与自动收起；`MainActivity` 增
-  `configChanges`（旋转不重建 Activity，观看不断流）；构建通过，真机复测待设备授权
-- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s WebView 兼容性 spike
+  `configChanges`（旋转不重建 Activity，观看不断流）；构建通过；2026-10-20 真机复测通过（见下条）
+- ✅ **A4 首页实时预览 + 重看稳定性真机验收**（2026-10-20）：
+  - 设备 vivo V2505A（`V2505A-Android`）观看 TS6 桌面端 `MoonCC233` 的 2560×1600 共享；
+  - 首页预览自动入会并实时出画面（「直播」角标、`MoonCC233`、`2560 × 1600 @30fps`），
+    预览/全屏共用会话、各自独立 `SurfaceViewRenderer`；
+  - 黑屏修复：观看端在 `setRemoteDescription` 前把 offer 视频 PT 从
+    `39 102 104 98 96 97 103 107 40 99 116 117 118` 裁到 `96 97 116 118`（仅 VP8+RTX+RED/ULPFEC），
+    answer 为 VP8，统计 `codec=VP8 dec=libvpx ... rx≈7–9Mbps decTime≈15–25ms`；
+  - 退出观看 → 紧凑入口 → 重看连续两轮均 1–2 秒进入 `WATCHING`；关键日志
+    `Left stream → Join requested → Viewer ICE connected → Viewer phase ... -> WATCHING`，
+    无 `SDP set failure: The order of m-lines ...`；根因与修复见 `docs/A3-screen-share-android.md` §6.6；
+  - 主动退订 `joinstreamrequest is_remove=1`（Rust/JNI/Java/Kotlin 全链路）让发布端清理旧
+    viewer PC；前后台 `ON_PAUSE/ON_RESUME` 退订/重入通过；全屏 fit/fill/旋转/Back 通过。
+- ⏳ **待办**：WebSpeak 互通补测（需可用实例）；B2s WebView 兼容性 spike；
+  A3 发布端抖动/重传优化（暂缓）

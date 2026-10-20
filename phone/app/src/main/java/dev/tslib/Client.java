@@ -376,6 +376,17 @@ public class Client implements AutoCloseable {
     }
 
     /**
+     * 主动停止观看某人的屏幕共享（观看者视角）。
+     *
+     * @param streamId       流 ID
+     * @param sourceClientId 发布者客户端 ID
+     */
+    public void leaveScreenShare(String streamId, int sourceClientId) {
+        checkNotClosed();
+        nativeLeaveScreenShare(nativePtr, streamId, sourceClientId);
+    }
+
+    /**
      * 回复观看请求（发布端，携带为观看者创建的 WebRTC offer）。
      *
      * @param streamId  流 ID
@@ -488,6 +499,7 @@ public class Client implements AutoCloseable {
     private static native void nativeSetupScreenShare(long ptr, String name, boolean withAudio);
     private static native void nativeStopScreenShare(long ptr, String streamId);
     private static native void nativeJoinScreenShare(long ptr, String streamId, int sourceClientId);
+    private static native void nativeLeaveScreenShare(long ptr, String streamId, int sourceClientId);
     private static native void nativeRespondScreenShareJoin(long ptr, String streamId, int viewerId, String offerSdp);
     private static native void nativeSendScreenShareSignal(long ptr, String streamId, int peerId, String json);
     private static native void nativeSendScreenShareAnswer(long ptr, String streamId, int peerId, String sdp);

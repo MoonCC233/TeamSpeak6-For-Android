@@ -1,6 +1,7 @@
 # A3 交付：Android 屏幕共享媒体层与 UI（发布端 + 观看端）
 
-> 状态：**实现完成；真机与 TS6 原生客户端双向互通验收通过**（2026-10-18）。
+> 状态：**实现完成；真机与 TS6 原生客户端双向互通验收通过**（2026-10-18）；
+> A4 首页实时预览 / 主动退订重看 / 前后台恢复真机验收通过（2026-10-20）。
 > 协议事实来源见 `docs/A2-screen-share-protocol.md`；本文只描述媒体层与 UI 设计。
 > SDP 兼容性根因与单因素变体矩阵见 §6。
 
@@ -10,22 +11,24 @@
   `respondjoinstreamrequest` / `streamsignaling` 中转；对端（TS6 原生客户端 / WebSpeak）可见可看。
 - **A4（观看端）**：发现直播流（`notifystreamstarted` 等）→ `joinstreamrequest` → 收到 offer 回 answer →
   `SurfaceViewRenderer` 渲染；含观看窗口入口。
-- **不在本次范围**：系统声音采集（`withAudio=false`）、发布码率精细调优、自定义 TURN 设置项、
-  `joinstreamrequest is_remove=1` 主动退订（依赖协议侧扩展）。
+- **不在本次范围**：系统声音采集（`withAudio=false`）、发布码率精细调优、自定义 TURN 设置项。
+- **已补齐（2026-10-20）**：观看端主动退订 `joinstreamrequest is_remove=1`，用于退出观看/重看时
+  让发布端立即关闭旧观看者 PC（见 §3.2 第 7 步、§6.6）。
 
 ## 2. 组件与文件清单
 
 | 层 | 文件 | 职责 |
 | --- | --- | --- |
-| Rust（协议） | `tslib/crates/tslib-core/src/screen_share.rs` | 7 命令构造 / 7 通知解析 / 信令 JSON 构造（A2b 已交付） |
-| Rust（JNI） | `tslib/crates/tslib-jni/src/client.rs` | 9 个 `native*` 命令函数（含 `SendScreenShareAnswer` / `SendScreenShareIceCandidate`） |
+| Rust（协议） | `tslib/crates/tslib-core/src/screen_share.rs` | 7 命令构造（含 `joinstreamrequest is_remove=0/1`）/ 7 通知解析 / 信令 JSON 构造（A2b 已交付） |
+| Rust（JNI） | `tslib/crates/tslib-jni/src/client.rs` | `native*` 屏幕共享命令函数（含 `LeaveScreenShare`、`SendScreenShareAnswer`、`SendScreenShareIceCandidate`） |
 | Java 绑定 | `tslib/java/.../dev/tslib/Client.java`、`phone/app/src/main/java/dev/tslib/Client.java`（两份同步） | 公开方法 + native 声明 |
 | Kotlin（桥） | `phone/.../bridge/ScreenShareEvents.kt` | `ScreenShareEvent` / `ScreenShareSignal` 模型 + 宽松 JSON 解析 |
-| Kotlin（桥） | `phone/.../bridge/TsClient.kt` | `screenShareEvents` 事件流（replay=16）+ 9 个命令包装 |
-| Kotlin（媒体） | `phone/.../screen/ScreenShareController.kt` | WebRTC 会话编排（发布端每观看者 PC / 观看端 PC）、信令分发、状态流 |
+| Kotlin（桥） | `phone/.../bridge/TsClient.kt` | `screenShareEvents` 事件流（replay=16）+ 屏幕共享命令包装（含 `leaveScreenShare`） |
+| Kotlin（媒体） | `phone/.../screen/ScreenShareController.kt` | WebRTC 会话编排（发布端每观看者 PC / 观看端 PC）、信令分发、观看阶段状态机、VP8 SDP 裁剪、退订/首帧看门狗 |
 | Kotlin（服务） | `phone/.../service/ScreenShareService.kt` | `mediaProjection` 前台服务（授权会话承载 + 通知栏停止按钮） |
 | Kotlin（UI） | `phone/.../ui/screen/ServerScreen.kt` | 顶栏共享开关（授权流程）+ 远端流横幅"观看"入口 |
-| Kotlin（UI） | `phone/.../ui/component/ScreenShareViewerDialog.kt` | 全屏观看窗口（`SurfaceViewRenderer`，进出组合即订阅/退订） |
+| Kotlin（UI） | `phone/.../ui/component/ScreenSharePreview.kt` | 首页实时预览卡片、`VideoSurface`（按视频宽高比布局）、连接信息对话框 |
+| Kotlin（UI） | `phone/.../ui/component/ScreenShareViewerOverlay.kt` | 全屏观看覆盖层（与预览共用会话、各自独立渲染器、控制条/缩放/旋转/返回键） |
 | 资源 | `res/values{,-en,-zh-rCN}/strings.xml`、`ui/icon/AppIcons.kt` | 三语文案 + `ScreenShare` 图标 |
 | 清单 | `AndroidManifest.xml` | `FOREGROUND_SERVICE_MEDIA_PROJECTION` 权限；`ScreenShareService`（`foregroundServiceType="mediaProjection"`） |
 
@@ -48,26 +51,43 @@
 
 ### 3.2 观看端（A4）
 
-1. `notifystreamstarted` / `notifystreaminfo` → `remoteStreams` 状态流 → 顶栏下方"观看"横幅 +
-   成员行「直播」角标 / 频道行直播标记（`ChannelTree` 接收 `streamingUserIds`）；
-2. 点击观看（横幅 / 成员角标 / 用户面板「观看屏幕共享」）→ `joinStream()` 创建 PC 并发送
-   `joinstreamrequest(stream_id, source_client_id)`；
-3. 收到 `notifyrespondjoinstreamrequest(offer)` → `setRemoteDescription` → `createAnswer` →
-   `setLocalDescription` → 经 `sendScreenShareAnswer` 回发（Rust 侧组装 JSON）；
+1. `notifystreamstarted` / `notifystreaminfo` / `requeststreaminfo` → `remoteStreams` 状态流 →
+   顶栏下方**实时预览卡片**（`ScreenSharePreview`）+ 成员行「直播」角标 / 频道行直播标记
+   （`ChannelTree` 接收 `streamingUserIds`）；预览卡片检测到远端流后**自动入会**，显示直播角标、
+   发布者昵称、分辨率/帧率、信息/全屏/退出按钮。
+2. 点击全屏（预览卡片 / 横幅 / 成员角标 / 用户面板「观看屏幕共享」）→ 若预览已有会话则复用；
+   否则 `joinStream()` 创建 PC 并发送 `joinstreamrequest(stream_id, source_client_id)`。
+3. 收到 `notifyrespondjoinstreamrequest(offer)` → **观看端 VP8 裁剪**（见 §6.6）：把 offer 视频
+   m= 行裁到只剩 VP8 + RTX + RED/ULPFEC，并删除被删 PT 的 `a=rtpmap` / `a=fmtp` / `a=rtcp-fb`，
+   再 `setRemoteDescription` → `createAnswer` → `setLocalDescription` → 经
+   `sendScreenShareAnswer` 回发（Rust 侧组装 JSON）。裁剪保证 libwebrtc 生成只含 VP8 的合法
+   answer，避免手机端落到不支持的 H264 解码器而黑屏。
 4. 远端视频轨到达（`onAddTrack`）→ 以**首帧检测包装**（`FirstFrameSink`）绑定
    `SurfaceViewRenderer`：首帧真正渲染后才把会话阶段切到 `WATCHING`，避免"已连接但黑屏"
-   被当成观看成功；换绑渲染器（重组）时自动解挂旧 sink 再挂新渲染器；
-5. 观看窗口 `ScreenShareViewerOverlay`（全屏覆盖层，非 Dialog）：
+   被当成观看成功；换绑渲染器（重组）时自动解挂旧 sink 再挂新渲染器。
+5. 首页预览与全屏各自持有独立 `SurfaceViewRenderer`，但**共用同一个 WebRTC 会话**；布局统一走
+   `VideoSurface`：按视频宽高比显式计算尺寸，`fit` 留黑边、`fill` 放大后由窗口裁切，
+   不把 `SurfaceViewRenderer` 强行拉成非视频比例（否则桌面 2560×1600 画面会纵向拉伸）。
+6. 全屏覆盖层 `ScreenShareViewerOverlay`（非 Dialog）：
    - 沉浸全屏：隐藏系统栏（可上滑唤出）、保持屏幕常亮、退出时恢复系统栏与屏幕方向；
    - 控制条：单击画面切换显隐，观看中 3.5 秒无操作自动隐藏；
    - 「适应 / 填充」缩放切换（`SCALE_ASPECT_FIT` / `SCALE_ASPECT_FILL`）；
    - 「旋转」按钮：传感器横屏 ↔ 跟随系统（`SCREEN_ORIENTATION_SENSOR_LANDSCAPE` /
      `UNSPECIFIED`），退出时恢复进入前的方向；
+   - 返回键：overlay 根节点 `focusable` + `onKeyEvent` 拦截 `Key.Back`，不依赖 `BackHandler`；
    - 阶段提示（由 `ScreenShareController.viewerPhases` 驱动）：加入中 / 连接画面中 /
-     重连中 / 直播已结束 / 被拒绝 / 连接失败；「已结束」「被拒绝」3 秒后自动收起；
-6. 关闭窗口（返回键 / 关闭按钮）→ `leaveStream()` 关闭 PC、解绑 sink、释放 EGL；
-   发布方停止（`StreamStopped`）→ 观看会话释放但保留阶段与流快照，窗口显示「直播已结束」；
-   加入请求 20 秒无应答 → 阶段置为 `FAILED`（提示「无法连接到该直播」）。
+     重连中 / 直播已结束 / 被拒绝 / 连接失败；「已结束」「被拒绝」3 秒后自动收起。
+7. 退出观看（预览退出按钮 / 全屏停止按钮）→ `leaveStream()`：
+   - 先发 `joinstreamrequest(..., is_remove=1)` 主动退订，发布端收到 `notifystreamclientleft`
+     后立即关闭该观看者的旧 PC；本地再关闭 PC、解绑 sink、释放 EGL；
+   - 首页保留一行紧凑入口「发布者 · 屏幕共享 → 观看」，可随时重看；重看会创建全新 PC，
+     不复用旧会话；
+   - 全屏返回键 / 关闭按钮只收起全屏覆盖层，回到首页实时预览；预览会话继续，不重新协商；
+   - 应用退到后台（`ON_PAUSE`）同样 `leaveStream()`，回前台（`ON_RESUME`）自动重新 join；
+   - 发布方停止（`StreamStopped`）→ 观看会话释放但保留阶段与流快照，窗口显示「直播已结束」；
+   - 加入后 **20 秒无首帧**（`JOINING / CONNECTING / RECONNECTING`）→ 阶段置为 `FAILED` 并释放
+     PC；首次 SDP `setRemoteDescription` 失败时快速失败；已 `WATCHING` 的会话收到失败的重协商
+     offer 则忽略，避免打断正在播放的画面。
 
 > **旋转不断流的实现前提**：`MainActivity` 声明
 > `android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"`
@@ -88,12 +108,12 @@
 
 ## 5. 构建与验证现状
 
-- **JNI 符号**：`llvm-nm -D` 验证 release `.so`（arm64-v8a，strip 后 **9.7 MB**）导出全部 9 个屏幕共享函数。
+- **JNI 符号**：`llvm-nm -D` 验证 release `.so`（arm64-v8a，strip 后 **9.8 MB**）导出全部 10 个屏幕共享/流函数（含新增 `nativeLeaveScreenShare`）。
 - **构建修复**（相对上游脚本的差异）：
   - 去除 `--features vendored-openssl`：依赖树为纯 Rust 加密栈（rustls/aws-lc-rs），`openssl` 仅是
     tslib-jni 的未引用可选依赖；
   - Windows 交叉编译必须 `CMAKE_GENERATOR=Ninja`（默认 VS 生成器会在 `audiopus_sys` 处失败）；
-  - `CARGO_PROFILE_RELEASE_STRIP=symbols`（debug 版 .so 高达 193 MB，strip 后 9.7 MB）；
+  - `CARGO_PROFILE_RELEASE_STRIP=symbols`（debug 版 .so 高达 193 MB，strip 后 9.8 MB）；
   - Gradle 任务 `buildRustLibs` 已同步（`../tslib`、`--release`、arm64-v8a、Ninja 路径、SDK 路径读取 `local.properties`）。
 - **编译验证**：`cargo test -p tslib-core`（63 + 12 项）、`cargo check -p tslib-jni`、
   `gradlew :app:compileDebugKotlin`、`:app:assembleDebug` 均通过。
@@ -182,8 +202,24 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
   （MoonCC233，clid 141）：`ENTRY 3525 → SRD-CALL 3561（mangle 运行）→ SRD-OK → ANSWER-SENT`，
   **画面可见**（21:54、22:00 两轮）；手机端日志
   `Offer for viewer 141: 3525B sendonly=true audioLine=true crlfEnd=true rewritten=false`。
-- **观看方向（A4）**：桌面客户端发布 → 手机观看：`Join requested` → `Answer sent` →
+- **观看方向（A4，2026-10-18 首通）**：桌面客户端发布 → 手机观看：`Join requested` → `Answer sent` →
   `Viewer ICE connected`，**画面可见**。
+- **观看端实时预览 / 黑屏修复（2026-10-20）**：vivo V2505A（`V2505A-Android`）观看 TS6 桌面端
+  `MoonCC233` 的 2560×1600 桌面共享（流 `df0aaa96-97f0-4d16-a4d0-ae8380665560`）：
+  - 首页自动入会并实时出画面，预览显示「直播」角标、`MoonCC233`、`2560 x 1600 @30fps`；
+  - 观看端把 offer 视频 PT 从 `39 102 104 98 96 97 103 107 40 99 116 117 118` 裁为
+    `96 97 116 118`，answer 为 VP8；统计 `codec=VP8 dec=libvpx 2560x1600@30 rx≈7–9 Mbps
+    decTime≈15–25ms`；
+  - 全屏 fit/fill、竖屏/横屏旋转、Back 退出全屏均通过；`VideoSurface` 保证桌面比例不被拉伸。
+- **主动退订 / 重看 / 前后台（2026-10-20）**：
+  - 退出观看 → 紧凑入口「MoonCC233 · 屏幕共享 → 观看」→ 点「观看」→ 新 PC 在 1–2 秒内
+    `WATCHING`，连续两轮重看均出画面；
+  - 日志顺序：`Left stream` → 新 `Join requested` → `Viewer offer video line (pruned)` →
+    `Viewer ICE connected` → `Viewer phase ... -> WATCHING`；不再出现
+    `SDP set failure: The order of m-lines ...`；
+  - 后台（`ON_PAUSE`）→ `Left stream`；回前台（`ON_RESUME`）→ 自动重新 join 并恢复画面；
+  - 修复前重看卡在「正在连接画面…」的根因是发布端保留旧 viewer PC 并继续下发重连 offer；
+    `joinstreamrequest is_remove=1` 让发布端收到 `notifystreamclientleft` 并清理旧 PC。
 - 仍未覆盖：WebSpeak 实例互通（待可用实例）。
 
 ### 6.5 对端解码能力与编解码协商（2026-10-18 补充定位）
@@ -202,15 +238,39 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
   （`m=video 9 UDP/TLS/RTP/SAVPF 96 97 39 40 98 99 103 104 107`，含全部 rtx/red/ulpfec）。
 
 
+### 6.6 观看端 VP8 裁剪与重看稳定性（2026-10-20）
+
+- **观看端黑屏根因**：TS6 桌面端 offer 同时携带 VP8/VP9/AV1/H264 等多个视频 PT，libwebrtc
+  生成的 answer 可能选中手机不支持的 H264，或 answer 的 PT 与桌面端解码器不匹配，落入
+  `NullVideoDecoder`（现象：ICE 已连接、`codec=null`、无首帧）。
+- **修复**：在 `setRemoteDescription` **之前**修改远端 offer：视频 m= 行只保留
+  `VP8 + RTX + RED/ULPFEC` 的 PT（实机 `39 102 104 98 96 97 103 107 40 99 116 117 118`
+  → `96 97 116 118`），并同步删除被删 PT 的 `a=rtpmap` / `a=fmtp` / `a=rtcp-fb` 行。
+  这样 libwebrtc 只能生成 VP8 组的合法 answer，手机端走 `libvpx` 软解。
+- **重看卡死根因**：观看端退出时只关闭本地 PC，未通知发布端；发布端保留旧 viewer PC，
+  下一次 join 时仍按旧会话下发后续 offer，m-line 顺序与新会话不一致 →
+  `Failed to set remote offer sdp: The order of m-lines in subsequent offer doesn't match
+  order from previous offer/answer`，且旧看门狗只检查 `JOINING`，进入 `CONNECTING` 后永久转圈。
+- **修复**：退出观看/后台时发送 `joinstreamrequest is_remove=1`（`LeaveScreenShare`，Rust →
+  JNI → Java → Kotlin），发布端收到 `notifystreamclientleft` 关闭旧 PC；重看使用全新 PC。
+  同时把 20s 首帧看门狗扩展到 `JOINING / CONNECTING / RECONNECTING`，首次 SDP 失败时快速
+  `FAILED` 并释放 PC；已 `WATCHING` 的失败重协商仅记日志，不打断画面。
+- **实测**：连续两轮退出 → 紧凑入口 → 重看均 `WATCHING`，无 `SDP set failure`；前后台切换
+  同样通过。发布端抖动/重传优化暂缓（A3 侧独立事项）。
+
 ## 7. 后续工作
 
 1. 系统声音采集（`AudioPlaybackCapture`，`withAudio=true`）——协议与 JS 侧已支持；
 2. 自定义 ICE/TURN 设置项（对齐 WebSpeak 的管理端配置语义）；
 3. 发布码率自适应与统计（`getStats` 指标上屏）；
-4. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）。
+4. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）；
+5. 发布端抖动/重传优化（A3；暂缓，待观看侧验收稳定后单独排期）。
 
 > 已完成（2026-10-19）：观看入口增强（成员「直播」角标 / 频道直播标记 / 用户面板入口）
 > 与观看窗口打磨（沉浸全屏、旋转、缩放、断流与异常提示），见 §3.2。
+>
+> 已完成（2026-10-20）：首页实时预览卡片、观看端 VP8 offer 裁剪（黑屏修复）、
+> `joinstreamrequest is_remove=1` 主动退订与重看/前后台稳定性，见 §3.2、§6.4、§6.6。
 
 ## 8. 真机验证步骤（设备接入后执行）
 
@@ -234,11 +294,17 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
    > REMOTE-DESC-SET` 序列为准（仅 `ENTRY` 后静默即被拒收，真因见 §6）。
 3. **发布端（A3）**：连接服务器 → 顶栏共享图标 → 系统授权 → 日志应出现
    `Publisher started` → `Our stream started`；TS6 原生客户端 / WebSpeak 中应出现直播条目并可观看
-4. **观看端（A4）**：他端发布 → 顶栏下方出现"观看"横幅 / 成员行出现「直播」角标 → 打开观看
-   窗口 → 日志应出现 `Join requested` → `Answer sent` → `Video sink attached` →
-   `Viewer phase <streamId> -> WATCHING`；可顺带验证：单击切换控制条、适应/填充、旋转按钮
-   （横屏观看不断流）、发布方停止后窗口提示「直播已结束」并自动收起
-5. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
+4. **观看端（A4）**：他端发布 → 首页自动出现实时预览卡片（成员行出现「直播」角标）→ 日志应出现
+   `Join requested` → `Answer sent` → `Video sink attached` → `Viewer phase <streamId> -> WATCHING`；
+   预览卡片应显示直播角标、发布者昵称、分辨率/帧率；点全屏进入覆盖层；可验证单击切换控制条、
+   适应/填充、旋转按钮（横屏观看不断流）、返回键退出全屏、发布方停止后窗口提示「直播已结束」并自动收起
+5. **观看端重看 / 前后台（A4，2026-10-20 增补）**：
+   - 点预览退出按钮 → 紧凑入口「昵称 · 屏幕共享 → 观看」；再点「观看」→ 2 秒内再次
+     `Viewer phase <streamId> -> WATCHING`；日志应有 `Left stream` → 新 `Join requested`，
+     且无 `SDP set failure`；
+   - 按 Home 退后台 → 日志 `Left stream`；回前台 → 自动重新 join 并出画面；
+   - 全屏下 `adb shell input keyevent KEYCODE_BACK` 退出全屏，应回到预览且会话继续。
+6. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
    应收到 `StreamStarted`；再用两个探针实例（`--publish` / `--join --source-clid <clid>`）交叉验证
    `JoinRequest`、offer/answer 与 ICE 中继。
-6. **验收记录**：结果追加到 TASK.md 第 8 节进度记录（含机型 / 系统版本 / 对端类型）。
+7. **验收记录**：结果追加到 TASK.md 第 8 节进度记录（含机型 / 系统版本 / 对端类型）。

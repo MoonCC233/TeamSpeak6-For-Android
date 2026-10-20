@@ -64,6 +64,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -102,8 +105,11 @@ import dev.tsdroid.ui.component.LiquidGlassPanel
 import dev.tsdroid.ui.component.LocalGlassWallpaper
 import dev.tsdroid.ui.component.ShareTarget
 import dev.tsdroid.ui.component.ServerInfoSheet
+import dev.tsdroid.ui.component.ScreenShareConnectionInfoDialog
+import dev.tsdroid.ui.component.ScreenSharePreviewSection
 import dev.tsdroid.ui.component.ScreenShareViewerOverlay
 import dev.tsdroid.ui.component.UserPanelSheet
+import dev.tsdroid.ui.component.isTerminalPhase
 import dev.tsdroid.ui.component.rememberGlassBackdrop
 import dev.tsdroid.ui.icon.AppIcons
 import dev.tsdroid.viewmodel.ChatMessage
@@ -194,12 +200,40 @@ fun ServerScreen(
     val isPublishing by ScreenShareController.publishing.collectAsStateWithLifecycle()
     val remoteStreams by ScreenShareController.remoteStreams.collectAsStateWithLifecycle()
     val viewerPhases by ScreenShareController.viewerPhases.collectAsStateWithLifecycle()
-    // 观看中的流（保留快照：发布方停止后仍要展示「已结束」提示，直到用户关闭）
-    var viewingStream by remember { mutableStateOf<ScreenShareController.RemoteStream?>(null) }
+    val viewerStats by ScreenShareController.viewerStats.collectAsStateWithLifecycle()
+    // 全屏观看中的流（保留快照：发布方停止后仍要展示「已结束」提示）
+    var fullscreenStream by remember { mutableStateOf<ScreenShareController.RemoteStream?>(null) }
+    // 连接信息面板对应的流
+    var infoStream by remember { mutableStateOf<ScreenShareController.RemoteStream?>(null) }
+    // 用户主动「退出观看」的流：预览收回到一行入口，重新点击观看后恢复
+    var dismissedStreamIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // 应用是否在前台：退到后台时释放观看会话，回前台自动重新加入
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var resumed by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> resumed = true
+                Lifecycle.Event.ON_PAUSE -> resumed = false
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     // 正在直播的 clientId 集合（成员行 / 频道行「直播」角标与入口）
     val streamingClientIds = remember(remoteStreams) {
         remoteStreams.values.map { it.clientId }.toSet()
     }
+    // 流结束后清理退出标记，避免同一个 streamId 再次出现时被误判
+    LaunchedEffect(remoteStreams.keys) {
+        dismissedStreamIds = dismissedStreamIds.intersect(remoteStreams.keys)
+    }
+    // 观看入口统一显示发布者昵称（流名称可能是「屏幕 0」这类无意义的默认值）
+    fun streamDisplayName(stream: ScreenShareController.RemoteStream): String =
+        users.find { it.id == stream.clientId }?.nickname ?: stream.name
 
     // MediaProjection 授权结果 → 启动前台服务开始发布（Android 14+ 每次共享都需重新授权）
     val screenCaptureLauncher = rememberLauncherForActivityResult(
@@ -338,40 +372,69 @@ fun ServerScreen(
                         }
                     },
                 )
-                // 远端屏幕共享（A4）：有直播流时提供观看入口
-                remoteStreams.values.forEach { stream ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    ) {
-                        Row(
+                // 远端屏幕共享（A4）：顶栏下方直接显示实时预览（仿桌面端共享卡片）。
+                // 用户点「退出观看」后收回到一行入口卡片，可随时重新观看。
+                val previewStreams = remoteStreams.values
+                    .filter { it.streamId !in dismissedStreamIds }
+                if (previewStreams.isNotEmpty()) {
+                    ScreenSharePreviewSection(
+                        streams = previewStreams,
+                        displayNameOf = ::streamDisplayName,
+                        phases = viewerPhases,
+                        stats = viewerStats,
+                        activeStreamId = fullscreenStream?.streamId,
+                        resumed = resumed,
+                        onExpand = { stream ->
+                            dismissedStreamIds = dismissedStreamIds - stream.streamId
+                            fullscreenStream = stream
+                        },
+                        onInfo = { stream -> infoStream = stream },
+                        onStop = { stream ->
+                            fullscreenStream = null
+                            dismissedStreamIds = dismissedStreamIds + stream.streamId
+                            ScreenShareController.leaveStream(stream.streamId)
+                        },
+                    )
+                }
+                // 已退出的流：保留一行「昵称 · 屏幕共享 → 观看」入口
+                remoteStreams.values
+                    .filter { it.streamId in dismissedStreamIds }
+                    .forEach { stream ->
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         ) {
-                            Icon(
-                                AppIcons.ScreenShare,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.screen_share_watching_title) +
-                                    ": " + stream.name,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            TextButton(onClick = { viewingStream = stream }) {
-                                Text(stringResource(R.string.screen_share_watch))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    AppIcons.ScreenShare,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = streamDisplayName(stream) + " · " +
+                                        stringResource(R.string.screen_share_watching_title),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                TextButton(onClick = {
+                                    dismissedStreamIds = dismissedStreamIds - stream.streamId
+                                    fullscreenStream = stream
+                                }) {
+                                    Text(stringResource(R.string.screen_share_watch))
+                                }
                             }
                         }
                     }
-                }
                 // Connection / microphone health, so a silent failure is never invisible again
                 if (reconnectStatus.active) {
                     StatusBanner(
@@ -585,7 +648,8 @@ fun ServerScreen(
                 streamingUserIds = streamingClientIds,
                 onWatchStream = { user ->
                     remoteStreams.values.firstOrNull { it.clientId == user.id }?.let { stream ->
-                        viewingStream = stream
+                        dismissedStreamIds = dismissedStreamIds - stream.streamId
+                        fullscreenStream = stream
                     }
                 },
                 modifier = Modifier
@@ -713,7 +777,8 @@ fun ServerScreen(
             val user = panelUser
             if (user != null) {
                 remoteStreams.values.firstOrNull { it.clientId == user.id }?.let { stream ->
-                    viewingStream = stream
+                    dismissedStreamIds = dismissedStreamIds - stream.streamId
+                    fullscreenStream = stream
                 }
             }
             userPanelUserId = null
@@ -722,14 +787,40 @@ fun ServerScreen(
         wallpaper = glassWallpaper,
     )
 
-    // 屏幕共享观看窗口（A4）：全屏沉浸 + 阶段提示；置于所有内容之上
-    viewingStream?.let { stream ->
+    // 屏幕共享全屏观看窗口（A4）：与首页预览共用同一个 WebRTC 会话；置于所有内容之上
+    fullscreenStream?.let { stream ->
         ScreenShareViewerOverlay(
             streamId = stream.streamId,
             sourceClientId = stream.clientId,
-            name = stream.name,
+            name = streamDisplayName(stream),
             phase = viewerPhases[stream.streamId] ?: ScreenShareController.ViewerPhase.JOINING,
-            onDismiss = { viewingStream = null },
+            stats = viewerStats[stream.streamId],
+            resumed = resumed,
+            onDismiss = {
+                val phase = viewerPhases[stream.streamId]
+                fullscreenStream = null
+                // 正常观看中关闭全屏 = 回到预览；终态（已结束/被拒/失败）关闭则停止观看
+                if (phase == null || phase.isTerminalPhase()) {
+                    dismissedStreamIds = dismissedStreamIds + stream.streamId
+                    ScreenShareController.leaveStream(stream.streamId)
+                }
+            },
+            onInfo = { infoStream = stream },
+            onStopWatching = {
+                dismissedStreamIds = dismissedStreamIds + stream.streamId
+                fullscreenStream = null
+                ScreenShareController.leaveStream(stream.streamId)
+            },
+        )
+    }
+
+    // 连接信息面板（视频 / 音频实时指标）
+    infoStream?.let { stream ->
+        ScreenShareConnectionInfoDialog(
+            displayName = streamDisplayName(stream),
+            audioSupported = stream.audio,
+            stats = viewerStats[stream.streamId],
+            onDismiss = { infoStream = null },
         )
     }
 

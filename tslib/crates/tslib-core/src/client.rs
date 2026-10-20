@@ -370,6 +370,14 @@ impl Client {
         ))
     }
 
+    /// 主动停止观看某人的屏幕共享（观看者视角；发布端收到 `ViewerLeft`）。
+    pub fn leave_screen_share(&mut self, stream_id: &str, source_client_id: u16) -> Result<()> {
+        self.send_screen_share_command(crate::screen_share::leave_stream_request(
+            stream_id,
+            source_client_id,
+        ))
+    }
+
     /// 接受观看请求并下发 offer（发布者视角）
     pub fn respond_screen_share_join(
         &mut self, stream_id: &str, viewer_id: u16, offer_sdp: &str,

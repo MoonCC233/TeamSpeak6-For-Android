@@ -144,6 +144,20 @@ pub fn join_stream_request(stream_id: &str, source_client_id: u16) -> OutCommand
     cmd
 }
 
+/// C3（主动退订）：停止观看某人的流。与加入使用同一条 `joinstreamrequest`，
+/// 仅把 `is_remove` 置为 1；发布端会收到 `notifystreamclientleft` 并关闭对应 PC。
+pub fn leave_stream_request(stream_id: &str, source_client_id: u16) -> OutCommand {
+    let mut cmd = new_command("joinstreamrequest");
+    cmd.write_arg("id", &stream_id);
+    cmd.write_arg("clid", &source_client_id);
+    cmd.write_arg("msg", &"");
+    cmd.write_arg("is_remove", &1);
+    cmd.write_arg("muted", &0);
+    cmd.write_arg("volume", &0);
+    cmd.write_arg("hidden", &0);
+    cmd
+}
+
 /// C4：接受观看请求并下发 offer（发布者视角，回应 `notifyjoinstreamrequest`）
 ///
 /// 同 C3，`msg=""` 必填。
@@ -524,6 +538,11 @@ mod tests {
         // 注意：空串值经 write_arg 序列化为裸键（无 `=`，协议解析等价于空串）
         let join = command_content(&join_stream_request("7", 42));
         assert!(join.contains("joinstreamrequest id=7 clid=42 msg is_remove=0 muted=0 volume=0 hidden=0"));
+
+        let leave = command_content(&leave_stream_request("7", 42));
+        assert!(leave.contains(
+            "joinstreamrequest id=7 clid=42 msg is_remove=1 muted=0 volume=0 hidden=0"
+        ));
 
         let respond = command_content(&respond_join_stream_request("7", 42, "v=0 o=-"));
         assert!(respond.contains(r"respondjoinstreamrequest id=7 clid=42 msg offer=v=0\so=- decision=1"));
