@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
+import androidx.compose.material.icons.rounded.ScreenShare
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,10 +56,12 @@ fun MemberActionsDialog(
     mutedLocally: Boolean,
     volumeDb: Float,
     canDm: Boolean,
+    isStreaming: Boolean,
     onDismiss: () -> Unit,
     onToggleLocalMute: () -> Unit,
     onVolumeChange: (Float, Boolean) -> Unit,
     onOpenDm: () -> Unit,
+    onWatchStream: () -> Unit,
 ) {
     var volume by remember(member.id) { mutableFloatStateOf(volumeDb) }
     val presence = when {
@@ -120,6 +123,58 @@ fun MemberActionsDialog(
                 }
 
                 HorizontalDivider(color = PadColors.Border)
+
+                if (isStreaming) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 14.dp)
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(PadColors.Red.copy(alpha = 0.09f))
+                            .border(
+                                1.dp,
+                                PadColors.Red.copy(alpha = 0.28f),
+                                RoundedCornerShape(13.dp),
+                            )
+                            .clickable(onClick = onWatchStream)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(PadColors.Red.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Rounded.ScreenShare,
+                                contentDescription = null,
+                                tint = PadColors.Red,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(11.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                stringResource(R.string.member_action_watch_stream),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = PadColors.Text,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                stringResource(R.string.member_action_watch_stream_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PadColors.Muted,
+                            )
+                        }
+                        PadLiveBadge(
+                            label = stringResource(R.string.share_live),
+                            compact = true,
+                        )
+                    }
+                    HorizontalDivider(color = PadColors.Border)
+                }
 
                 Column(
                     Modifier.padding(horizontal = 20.dp, vertical = 16.dp),

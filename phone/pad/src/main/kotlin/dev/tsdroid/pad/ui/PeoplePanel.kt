@@ -90,6 +90,7 @@ fun PeoplePanel(
     myClientId: Int?,
     talkingIds: Set<Int>,
     mutedUserIds: Set<Int>,
+    streamingUserIds: Set<Int>,
     avatars: Map<String, ImageBitmap>,
     onSelectChannel: (Channel) -> Unit,
     onMemberClick: (User) -> Unit,
@@ -211,6 +212,7 @@ fun PeoplePanel(
                     myClientId = myClientId,
                     talkingIds = talkingIds,
                     mutedUserIds = mutedUserIds,
+                    streamingUserIds = streamingUserIds,
                     avatars = avatars,
                     onSelectChannel = onSelectChannel,
                     onMemberClick = onMemberClick,
@@ -244,6 +246,7 @@ private fun ChannelGroup(
     myClientId: Int?,
     talkingIds: Set<Int>,
     mutedUserIds: Set<Int>,
+    streamingUserIds: Set<Int>,
     avatars: Map<String, ImageBitmap>,
     onSelectChannel: (Channel) -> Unit,
     onMemberClick: (User) -> Unit,
@@ -295,6 +298,7 @@ private fun ChannelGroup(
                     isSelf = member.id == myClientId,
                     speaking = member.id in talkingIds,
                     locallyMuted = member.id in mutedUserIds,
+                    streaming = member.id in streamingUserIds,
                     avatar = member.uid?.let { avatars[it] },
                     onClick = { onMemberClick(member) },
                 )
@@ -310,6 +314,7 @@ private fun MemberRow(
     isSelf: Boolean,
     speaking: Boolean,
     locallyMuted: Boolean,
+    streaming: Boolean,
     avatar: ImageBitmap?,
     onClick: () -> Unit,
 ) {
@@ -357,6 +362,12 @@ private fun MemberRow(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (streaming) {
+                PadLiveBadge(
+                    label = stringResource(R.string.share_live_short),
+                    compact = true,
+                )
+            }
             if (member.isAway) {
                 TinyFlag(Icons.Rounded.Schedule, stringResource(R.string.presence_away), PadColors.Amber)
             }

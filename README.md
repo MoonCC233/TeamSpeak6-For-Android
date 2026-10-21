@@ -61,7 +61,9 @@ cd phone
 
 产物路径：`phone/app/build/outputs/apk/debug/app-debug.apk`、`phone/pad/build/outputs/apk/debug/pad-debug.apk`。
 
-> Pad 目前没有独立的 CI 发布流水线；`.github/workflows/release.yml` 只构建/发布手机端 `:app`。
+> 双端均已接入 GitHub Actions 发布流水线（见下一节），一次 Release 同时提供手机与 Pad 安装包。
+>
+> Pad 端已支持原生屏幕共享：顶栏一键发布、工作区直播货架、全员 LIVE 标记、全屏观看与实时媒体统计，复用 `:core` 的 TS6/WebRTC 能力，不依赖 WebView。
 
 ## 快速开始
 
@@ -71,15 +73,22 @@ cd phone
 
 ## 构建与发布（GitHub Actions）
 
-发布流水线：`.github/workflows/release.yml`（当前只发布手机端 `phone/`，Pad 端成熟后再接入）。
+发布流水线：`.github/workflows/release.yml`，一次构建同时发布手机端 `:app` 与 Pad 端 `:pad` 两个 APK。
 
 | 触发方式 | 行为 |
 | --- | --- |
-| 推送 tag `v<版本>`（如 `v2.1.7-Han`） | 校验 tag 与 `phone/app/build.gradle.kts` 的 `versionName` 一致 → 构建 → 发布 Release |
-| Actions 页面手动触发（`workflow_dispatch`） | 版本号留空则按 `patch/minor/major` 自动递增并同步 `versionCode`；构建通过后自动提交版本号、打 tag、发布 Release；取消勾选 `publish` 则只构建到 Artifacts |
+| 推送 tag `v<手机版本>`（如 `v2.1.7-Han`） | 校验 tag 与 `phone/app/build.gradle.kts` 的 `versionName` 一致 → 构建双端 → 发布 Release；Pad 版本沿用仓库当前值（tag 触发不改仓库） |
+| Actions 页面手动触发（`workflow_dispatch`） | 手机端 `version` 留空按 `patch/minor/major` 递增，Pad 端 `pad_version` 留空按 patch 递增，双端 `versionCode` 各 +1；构建通过后自动提交两个 `build.gradle.kts` 的版本号、打 tag、发布 Release；取消勾选 `publish` 则只构建到 Artifacts |
 
-Release 资产：`TS6_Droid_Han-<版本>.apk`（arm64-v8a）、同名 `.sha256` 校验文件、`mapping-<版本>.txt`（R8 混淆映射表）。
-签名使用以下 4 个仓库 Secrets；缺失时回退 CI 临时 debug 密钥（**每次运行的证书都不同，无法覆盖安装**），并自动把 Release 标记为 Pre-release（仅供测试）：
+Release 资产（同一 Release）：
+
+| 端 | 安装包 | 版本 | 许可证 |
+| --- | --- | --- | --- |
+| 手机 | `TS6_Droid_Han-<主.次.修订>.apk`（如 `TS6_Droid_Han-2.1.7.apk`） | `versionName`（如 `2.1.7-Han`） | GPL-3.0 |
+| Pad | `TS6_Pad-<主.次.修订>.apk`（如 `TS6_Pad-0.1.1.apk`） | `versionName`（如 `0.1.1-native`） | AGPL-3.0-only |
+
+两个 APK 均为 arm64-v8a，各附同名 `.sha256` 校验文件；R8 混淆映射表为 `mapping-phone-<主.次.修订>.txt` / `mapping-pad-<主.次.修订>.txt`。
+签名使用以下 4 个仓库 Secrets（双端共用一组密钥）；缺失时回退 CI 临时 debug 密钥（**每次运行的证书都不同，无法覆盖安装**），并自动把 Release 标记为 Pre-release（仅供测试）：
 
 ```powershell
 # 生成密钥（只需一次，务必离线备份；丢失后无法覆盖安装旧版本）
@@ -98,6 +107,7 @@ keytool -genkeypair -v -keystore release.keystore -alias ts6droid -keyalg RSA -k
 > 注意：`phone/gradle.properties`（`android.useAndroidX` 等）未纳入版本控制，工作流会在 CI 中自动生成；
 > `phone/core/src/main/jniLibs/arm64-v8a/libtslib_jni.so` 是预编译产物，改动 `tslib/` 后需先在本机执行
 > `gradlew buildRustLibs` 重建并提交，CI 不会重新编译 Rust。
+> tag 触发不会改动仓库，若需同步升级 Pad 版本，请在打 tag 前把两个 `build.gradle.kts` 的版本号一起提交（手动触发则会自动改写双端版本号）。
 
 ## 许可证说明
 

@@ -83,6 +83,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 加入页显示的应用版本号来自 BuildConfig.VERSION_NAME，随构建版本自动更新
+        buildConfig = true
     }
 
     sourceSets {

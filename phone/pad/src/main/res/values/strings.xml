@@ -149,8 +149,8 @@
     <string name="join_feature_chat_title">频道与私聊</string>
     <string name="join_feature_chat_subtitle">文字消息随频道切换同步，掉线恢复后历史仍在。</string>
     <string name="join_local_only">连接信息仅保存在本设备</string>
-    <string name="join_version">v0.1.0-native · AGPL-3.0</string>
-    <string name="join_version_local">v0.1.0-native · AGPL-3.0 · 连接信息仅保存在本设备</string>
+    <string name="join_version">v%1$s · AGPL-3.0</string>
+    <string name="join_version_local">v%1$s · AGPL-3.0 · 连接信息仅保存在本设备</string>
     <string name="join_welcome">欢迎回来</string>
     <string name="join_welcome_subtitle">输入昵称，选择要进入的频道。</string>
     <string name="join_save_bookmark">保存为常用服务器</string>
@@ -174,4 +174,85 @@
 
     <!-- Shared input chrome -->
     <string name="field_optional">可选</string>
+
+    <!-- Screen sharing -->
+    <string name="share_button_start">共享屏幕</string>
+    <string name="share_button_stop">停止共享</string>
+    <string name="share_stream_name">%1$s 的屏幕</string>
+    <string name="share_fallback_name">我</string>
+    <string name="share_live">LIVE</string>
+    <string name="share_live_short">直播</string>
+    <string name="share_shelf_kicker">正在直播</string>
+    <string name="share_shelf_title">屏幕共享</string>
+    <string name="share_shelf_count">%1$d 路</string>
+    <string name="share_publishing_title">正在共享屏幕</string>
+    <string name="share_publishing_subtitle">对端可在直播列表中观看你的屏幕</string>
+    <string name="share_stop">停止共享</string>
+    <string name="share_watching">正在观看</string>
+    <string name="share_watch">观看直播</string>
+    <string name="share_watch_fullscreen">全屏观看</string>
+    <string name="share_exit_fullscreen">退出全屏</string>
+    <string name="share_fit">适应画面</string>
+    <string name="share_fill">填满画面</string>
+    <string name="share_info">连接信息</string>
+    <string name="share_close">关闭</string>
+    <string name="share_stop_watching">停止观看</string>
+    <string name="share_quality_format">%1$d × %2$d · %3$d fps</string>
+    <string name="share_resolution_format">%1$d × %2$d</string>
+    <string name="share_bitrate_format">%1$d Kbps</string>
+    <string name="share_fps_format">%1$d fps</string>
+    <string name="share_ms_format">%1$d ms</string>
+    <string name="share_decode_time_format">%1$.1f ms</string>
+    <string name="share_percent_format">%1$.2f%%</string>
+    <string name="share_mb_format">%1$.1f MB</string>
+    <string name="share_meta_format">%1$s · %2$s</string>
+    <string name="share_decoder_kind_format">%1$s · %2$s</string>
+    <string name="share_value_none">—</string>
+    <string name="share_quality_unknown">等待画面…</string>
+    <string name="share_controls_hint">点按画面显示控制</string>
+    <string name="share_error_not_connected">尚未连接到服务器</string>
+    <string name="share_error_permission">未获得屏幕录制权限</string>
+    <string name="share_error_no_manager">此设备不支持屏幕录制</string>
+    <string name="share_error_start">无法开始屏幕共享</string>
+    <string name="share_error_join">无法加入屏幕共享</string>
+    <string name="share_error_generic">屏幕共享操作失败</string>
+
+    <!-- Screen-share viewer phases -->
+    <string name="viewer_joining">正在请求加入直播…</string>
+    <string name="viewer_connecting">正在连接画面…</string>
+    <string name="viewer_watching">画面传输中</string>
+    <string name="viewer_reconnecting">连接中断，正在恢复…</string>
+    <string name="viewer_ended">直播已经结束</string>
+    <string name="viewer_rejected">发布者拒绝了观看请求</string>
+    <string name="viewer_failed">无法连接到此直播</string>
+
+    <!-- Screen-share information dialog -->
+    <string name="share_info_title">连接信息</string>
+    <string name="share_info_subtitle">媒体链路与实时质量</string>
+    <string name="share_info_video">画面</string>
+    <string name="share_info_audio">声音</string>
+    <string name="share_info_resolution">分辨率</string>
+    <string name="share_info_fps">帧率</string>
+    <string name="share_info_codec">编码</string>
+    <string name="share_info_decoder">解码器</string>
+    <string name="share_info_bitrate">下行码率</string>
+    <string name="share_info_loss">丢包率</string>
+    <string name="share_info_jitter">抖动</string>
+    <string name="share_info_rtt">往返时延</string>
+    <string name="share_info_decode">解码耗时</string>
+    <string name="share_info_packets">已收数据包</string>
+    <string name="share_info_received">累计接收</string>
+    <string name="share_info_audio_bitrate">音频码率</string>
+    <string name="share_info_no_audio">该直播未包含系统声音</string>
+    <string name="share_info_waiting">正在采集链路数据…</string>
+    <string name="share_info_hw">硬件解码</string>
+    <string name="share_info_sw">软件解码</string>
+
+    <!-- Join hero features -->
+    <string name="join_feature_screen_title">原生屏幕共享</string>
+    <string name="join_feature_screen_subtitle">共享平板画面，或加入他人的直播，支持全屏观看与实时链路信息。</string>
+
+    <!-- Member live actions -->
+    <string name="member_action_watch_stream">观看屏幕共享</string>
+    <string name="member_action_watch_stream_hint">该成员正在直播，点击立即加入观看。</string>
 </resources>

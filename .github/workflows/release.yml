@@ -1,35 +1,33 @@
 name: Release
 
 # =============================================================================
-# 手机端（phone/）release APK 全自动打包发布流水线
+# 双端（手机 :app + Pad :pad）release APK 全自动打包发布流水线
 #
 # 触发方式
-#   A. 推送 tag：`v<版本>`（如 `v2.1.7-Han`，也接受省略后缀的 `v2.1.7`）。
+#   A. 推送 tag：`v<手机版本>`（如 `v2.1.7-Han`，也接受省略后缀的 `v2.1.7`）。
 #      tag 必须与 phone/app/build.gradle.kts 的 versionName 一致，否则「解析版本号」
-#      步骤会直接失败（防止打出与应用内版本号不符的包）。
+#      步骤会直接失败。tag 触发不改动仓库，Pad 版本沿用已提交值。
 #   B. Actions 页面手动触发（workflow_dispatch）——一键发布：
-#      · version 留空 → 按 bump（patch/minor/major）自动递增版本号，versionCode 同步 +1；
-#      · 构建与校验全部通过后，自动提交版本号改动、打 tag、推送并创建 Release；
+#      · 手机端 version 留空 → 按 bump（patch/minor/major）自动递增，versionCode +1；
+#      · Pad 端 pad_version 留空 → 当前 Pad 版本 patch +1，versionCode +1；
+#      · 构建与校验全部通过后，自动提交两个模块的版本号、打 tag、推送并创建 Release；
 #      · 取消勾选 publish → 只构建，产物保留在本次运行的 Artifacts 中（不动仓库）。
 #
-# 产物（Release 资产）
-#   · TS6_Droid_Han-<版本>.apk   arm64-v8a，release + R8 精简
-#   · TS6_Droid_Han-<版本>.apk.sha256
-#   · mapping-<版本>.txt         R8 混淆映射表（还原崩溃堆栈用）
+# 产物（同一 Release）
+#   · TS6_Droid_Han-<手机版本>.apk   arm64-v8a，release + R8 精简（GPL-3.0）
+#   · TS6_Pad-<Pad 版本>.apk         arm64-v8a，release + R8 精简（AGPL-3.0-only）
+#   · 两个 .apk 各自的 .sha256 校验文件
+#   · mapping-phone-<手机版本>.txt / mapping-pad-<Pad 版本>.txt（R8 混淆映射表）
 #
 # 签名
-#   配置以下 4 个 Secrets 时使用正式密钥签名；缺失任何一个则回退 debug 签名，并自动把
-#   Release 标记为 Pre-release（仅供测试，切勿分发）：
+#   两个模块共用同一组签名配置。配置以下 4 个 Secrets 时使用正式密钥签名；缺失任何一个
+#   则回退 debug 签名，并自动把 Release 标记为 Pre-release（仅供测试，切勿分发）：
 #     SIGNING_KEYSTORE_BASE64 / SIGNING_STORE_PASSWORD / SIGNING_KEY_ALIAS / SIGNING_KEY_PASSWORD
 #
 # 前置说明
 #   phone/core/src/main/jniLibs/arm64-v8a/libtslib_jni.so 是提交进仓库的预编译产物，
 #   本流水线不做 Rust 交叉编译（`-x buildRustLibs`）。改动 tslib/ 之后务必先在本机执行
 #   `gradlew buildRustLibs` 重建 .so 并提交，否则发布包内仍是旧的协议库。
-#
-# 注意：phone/gradle 现在同时包含 :app（手机）与 :pad（平板）。本流水线只发布手机端，
-#   因此所有 Gradle 调用都显式限定 :app（测试额外带上 :core），避免 :pad 的 release
-#   构建拖慢发布或引入无关失败。
 # =============================================================================
 
 on:
@@ -39,12 +37,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '目标版本号（如 2.1.7；留空则按下面的 bump 自动递增，后缀 -Han 会自动继承）'
+        description: '手机端目标版本号（如 2.1.7；留空则按下面的 bump 自动递增，后缀 -Han 自动继承）'
         required: false
         default: ''
         type: string
       bump:
-        description: 'version 留空时自动递增的位数'
+        description: '手机端 version 留空时自动递增的位数'
         required: true
         default: patch
         type: choice
@@ -52,6 +50,11 @@ on:
           - patch
           - minor
           - major
+      pad_version:
+        description: 'Pad 端目标版本号（如 0.1.1；留空则当前 Pad 版本 patch +1，后缀 -native 自动继承）'
+        required: false
+        default: ''
+        type: string
       publish:
         description: '构建成功后提交版本号、打 tag 并发布 Release（不勾选＝只构建到 Artifacts）'
         required: true
@@ -73,11 +76,12 @@ concurrency:
 
 env:
   PHONE_DIR: phone
-  GRADLE_FILE: phone/app/build.gradle.kts
+  PHONE_GRADLE_FILE: phone/app/build.gradle.kts
+  PAD_GRADLE_FILE: phone/pad/build.gradle.kts
 
 jobs:
   release:
-    name: 构建并发布 phone APK
+    name: 构建并发布双端 APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -93,19 +97,36 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_PAD_VERSION: ${{ inputs.pad_version }}
           INPUT_PUBLISH: ${{ inputs.publish }}
         run: |
           set -euo pipefail
 
-          CURRENT_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE_FILE")"
-          CURRENT_CODE="$(grep -oP 'versionCode\s*=\s*\K[0-9]+' "$GRADLE_FILE")"
-          if [ -z "$CURRENT_NAME" ] || [ -z "$CURRENT_CODE" ]; then
-            echo "::error::未能从 $GRADLE_FILE 解析 versionName/versionCode"
-            exit 1
-          fi
-          CURRENT_BARE="${CURRENT_NAME%%-*}"
-          # 版本后缀（如 "-Han"）；输入省略后缀时自动继承，保持与本仓库既有版本号一致
-          CURRENT_SUFFIX="${CURRENT_NAME#"$CURRENT_BARE"}"
+          read_name() { grep -oP 'versionName\s*=\s*"\K[^"]+' "$1"; }
+          read_code() { grep -oP 'versionCode\s*=\s*\K[0-9]+' "$1"; }
+          bare_of() { printf '%s' "${1%%-*}"; }
+          suffix_of() { local bare="${1%%-*}"; printf '%s' "${1#"$bare"}"; }
+          bump_version() { # <主.次.修订> <patch|minor|major>
+            awk -v bump="$2" -F. '
+              { major=$1+0; minor=$2+0; patch=$3+0 }
+              bump == "major" { major=major+1; minor=0; patch=0 }
+              bump == "minor" { minor=minor+1; patch=0 }
+              bump == "patch" { patch=patch+1 }
+              END { print major "." minor "." patch }' <<< "$1"
+          }
+          fail() { echo "::error::$*"; exit 1; }
+
+          PHONE_NAME="$(read_name "$PHONE_GRADLE_FILE")"
+          PHONE_CODE="$(read_code "$PHONE_GRADLE_FILE")"
+          PAD_NAME="$(read_name "$PAD_GRADLE_FILE")"
+          PAD_CODE="$(read_code "$PAD_GRADLE_FILE")"
+          { [ -n "$PHONE_NAME" ] && [ -n "$PHONE_CODE" ]; } || fail "未能从 $PHONE_GRADLE_FILE 解析 versionName/versionCode"
+          { [ -n "$PAD_NAME" ] && [ -n "$PAD_CODE" ]; } || fail "未能从 $PAD_GRADLE_FILE 解析 versionName/versionCode"
+
+          PHONE_BARE="$(bare_of "$PHONE_NAME")"
+          PHONE_SUFFIX="$(suffix_of "$PHONE_NAME")"
+          PAD_BARE="$(bare_of "$PAD_NAME")"
+          PAD_SUFFIX="$(suffix_of "$PAD_NAME")"
 
           MODE="manual"
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then MODE="tag"; fi
@@ -116,54 +137,65 @@ jobs:
           if [ "$MODE" = "tag" ]; then
             TAG="$GITHUB_REF_NAME"
             REQ="${TAG#v}"
-            # 允许两种 tag 形式：v<versionName>（推荐，如 v2.1.7-Han）或 v<主.次.修订>
-            if [ "$REQ" != "$CURRENT_NAME" ] && [ "$REQ" != "$CURRENT_BARE" ]; then
-              echo "::error::tag $TAG 与 phone/app/build.gradle.kts 的 versionName ($CURRENT_NAME) 不一致：期望 v$CURRENT_NAME 或 v$CURRENT_BARE。请先把 versionName 改为 $REQ 并提交，再对该提交打 tag。"
-              exit 1
+            # 允许两种 tag 形式：v<手机 versionName>（推荐，如 v2.1.7-Han）或 v<主.次.修订>
+            if [ "$REQ" != "$PHONE_NAME" ] && [ "$REQ" != "$PHONE_BARE" ]; then
+              fail "tag $TAG 与 phone/app/build.gradle.kts 的 versionName ($PHONE_NAME) 不一致：期望 v$PHONE_NAME 或 v$PHONE_BARE。请先把 versionName 改为 $REQ 并提交，再对该提交打 tag。"
             fi
-            VERSION_NAME="$CURRENT_NAME"
-            VERSION_CODE="$CURRENT_CODE"
+            NEW_PHONE_NAME="$PHONE_NAME"
+            NEW_PHONE_CODE="$PHONE_CODE"
+            NEW_PAD_NAME="$PAD_NAME"
+            NEW_PAD_CODE="$PAD_CODE"
             PUBLISH=true
           else
+            # 手机端：显式版本优先，否则按 bump 递增（后缀沿用当前值，如 -Han）
             if [ -n "${INPUT_VERSION:-}" ]; then
               REQ="${INPUT_VERSION#v}"
+              REQ_BARE="$(bare_of "$REQ")"
+              REQ_SUFFIX="$(suffix_of "$REQ")"
+              if [ -n "$REQ_SUFFIX" ]; then NEW_PHONE_NAME="$REQ"; else NEW_PHONE_NAME="${REQ_BARE}${PHONE_SUFFIX}"; fi
             else
-              REQ="$(awk -v bump="${INPUT_BUMP:-patch}" -F. '
-                { major=$1+0; minor=$2+0; patch=$3+0 }
-                bump == "major" { major=major+1; minor=0; patch=0 }
-                bump == "minor" { minor=minor+1; patch=0 }
-                bump == "patch" { patch=patch+1 }
-                END { print major "." minor "." patch }' <<< "$CURRENT_BARE")"
+              NEW_PHONE_NAME="$(bump_version "$PHONE_BARE" "${INPUT_BUMP:-patch}")${PHONE_SUFFIX}"
             fi
-            REQ_BARE="${REQ%%-*}"
-            REQ_SUFFIX="${REQ#"$REQ_BARE"}"
-            if [ -n "$REQ_SUFFIX" ]; then VERSION_NAME="$REQ"; else VERSION_NAME="${REQ_BARE}${CURRENT_SUFFIX}"; fi
-            VERSION_CODE=$((CURRENT_CODE + 1))
-            TAG="v${VERSION_NAME}"
+            # Pad 端：显式版本优先，否则 patch +1（后缀沿用当前值，如 -native）
+            if [ -n "${INPUT_PAD_VERSION:-}" ]; then
+              PREQ="${INPUT_PAD_VERSION#v}"
+              PREQ_BARE="$(bare_of "$PREQ")"
+              PREQ_SUFFIX="$(suffix_of "$PREQ")"
+              if [ -n "$PREQ_SUFFIX" ]; then NEW_PAD_NAME="$PREQ"; else NEW_PAD_NAME="${PREQ_BARE}${PAD_SUFFIX}"; fi
+            else
+              NEW_PAD_NAME="$(bump_version "$PAD_BARE" patch)${PAD_SUFFIX}"
+            fi
+            NEW_PHONE_CODE=$((PHONE_CODE + 1))
+            NEW_PAD_CODE=$((PAD_CODE + 1))
+            TAG="v${NEW_PHONE_NAME}"
             PUBLISH="${INPUT_PUBLISH:-false}"
             NEED_PATCH=true
           fi
 
           # 严格校验版本号格式，同时杜绝外部输入被拼进 shell 命令/文件名
-          if ! [[ "$VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::版本号格式不合法：$VERSION_NAME（期望 主.次.修订 或 主.次.修订-后缀）"
-            exit 1
-          fi
-          VERSION_BARE="${VERSION_NAME%%-*}"
+          for V in "$NEW_PHONE_NAME" "$NEW_PAD_NAME"; do
+            if ! [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+              fail "版本号格式不合法：$V（期望 主.次.修订 或 主.次.修订-后缀）"
+            fi
+          done
+          NEW_PHONE_BARE="$(bare_of "$NEW_PHONE_NAME")"
+          NEW_PAD_BARE="$(bare_of "$NEW_PAD_NAME")"
 
           # 手动发布时 tag 不能已存在，否则打 tag/发布必然失败
           if [ "$PUBLISH" = "true" ] && [ "$MODE" = "manual" ]; then
             if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-              echo "::error::tag ${TAG} 已存在于远端，不能重复发布：请换一个版本号，或确认该版本是否已经发布过。"
-              exit 1
+              fail "tag ${TAG} 已存在于远端，不能重复发布：请换一个手机端版本号，或确认该版本是否已经发布过。"
             fi
           fi
 
           {
             echo "mode=$MODE"
-            echo "version_name=$VERSION_NAME"
-            echo "version_bare=$VERSION_BARE"
-            echo "version_code=$VERSION_CODE"
+            echo "phone_name=$NEW_PHONE_NAME"
+            echo "phone_bare=$NEW_PHONE_BARE"
+            echo "phone_code=$NEW_PHONE_CODE"
+            echo "pad_name=$NEW_PAD_NAME"
+            echo "pad_bare=$NEW_PAD_BARE"
+            echo "pad_code=$NEW_PAD_CODE"
             echo "tag=$TAG"
             echo "publish=$PUBLISH"
             echo "need_patch=$NEED_PATCH"
@@ -172,25 +204,32 @@ jobs:
           {
             echo "### 发布计划"
             echo ""
-            echo "| 项 | 值 |"
-            echo "| --- | --- |"
-            echo "| 触发方式 | $MODE |"
-            echo "| 仓库当前版本 | \`$CURRENT_NAME\`（versionCode $CURRENT_CODE） |"
-            echo "| 本次发布版本 | \`$VERSION_NAME\`（versionCode $VERSION_CODE） |"
-            echo "| tag | \`$TAG\` |"
-            echo "| 发布 Release | $PUBLISH |"
+            echo "| 项 | 手机端 :app | Pad 端 :pad |"
+            echo "| --- | --- | --- |"
+            echo "| 仓库当前版本 | \`$PHONE_NAME\`（code $PHONE_CODE） | \`$PAD_NAME\`（code $PAD_CODE） |"
+            echo "| 本次发布版本 | \`$NEW_PHONE_NAME\`（code $NEW_PHONE_CODE） | \`$NEW_PAD_NAME\`（code $NEW_PAD_CODE） |"
+            echo ""
+            echo "- 触发方式：$MODE"
+            echo "- tag：\`$TAG\`"
+            echo "- 发布 Release：$PUBLISH"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: 改写 build.gradle.kts 版本号
+      - name: 改写 build.gradle.kts 版本号（双端）
         if: steps.version.outputs.need_patch == 'true'
         env:
-          VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          PHONE_NAME: ${{ steps.version.outputs.phone_name }}
+          PHONE_CODE: ${{ steps.version.outputs.phone_code }}
+          PAD_NAME: ${{ steps.version.outputs.pad_name }}
+          PAD_CODE: ${{ steps.version.outputs.pad_code }}
         run: |
           set -euo pipefail
-          sed -i -E "s/^([[:space:]]*)versionCode = [0-9]+/\1versionCode = ${VERSION_CODE}/" "$GRADLE_FILE"
-          sed -i -E "s/^([[:space:]]*)versionName = \"[^\"]+\"/\1versionName = \"${VERSION_NAME}\"/" "$GRADLE_FILE"
-          git --no-pager diff -- "$GRADLE_FILE"
+          patch_version() { # <gradle 文件> <versionName> <versionCode>
+            sed -i -E "s/^([[:space:]]*)versionCode = [0-9]+/\1versionCode = $3/" "$1"
+            sed -i -E "s/^([[:space:]]*)versionName = \"[^\"]+\"/\1versionName = \"$2\"/" "$1"
+          }
+          patch_version "$PHONE_GRADLE_FILE" "$PHONE_NAME" "$PHONE_CODE"
+          patch_version "$PAD_GRADLE_FILE" "$PAD_NAME" "$PAD_CODE"
+          git --no-pager diff -- "$PHONE_GRADLE_FILE" "$PAD_GRADLE_FILE"
 
       - name: 安装 JDK 17
         uses: actions/setup-java@v6
@@ -263,69 +302,99 @@ jobs:
 
       - name: 单元测试
         working-directory: ${{ env.PHONE_DIR }}
-        run: ./gradlew :app:testDebugUnitTest :core:testDebugUnitTest -x buildRustLibs
+        run: ./gradlew testDebugUnitTest -x buildRustLibs
 
-      - name: 构建 release APK
+      - name: 构建 release APK（手机 + Pad）
         working-directory: ${{ env.PHONE_DIR }}
-        run: ./gradlew :app:assembleRelease -x buildRustLibs
+        run: ./gradlew :app:assembleRelease :pad:assembleRelease -x buildRustLibs
 
       - name: 校验 APK（签名 / ABI / 版本号）
         working-directory: ${{ env.PHONE_DIR }}
         env:
-          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          PHONE_NAME: ${{ steps.version.outputs.phone_name }}
+          PHONE_CODE: ${{ steps.version.outputs.phone_code }}
+          PAD_NAME: ${{ steps.version.outputs.pad_name }}
+          PAD_CODE: ${{ steps.version.outputs.pad_code }}
           SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
           set -euo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK 环境变量缺失}}"
           BT="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -1)"
-          APK="app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK"
 
-          echo "== 签名信息 =="
-          "$BT/apksigner" verify --print-certs "$APK" | tee "$RUNNER_TEMP/signer.txt"
-          if [ "$SIGNED" = "true" ] && grep -q "CN=Android Debug" "$RUNNER_TEMP/signer.txt"; then
-            echo "::error::已配置 SIGNING_* Secrets，但 APK 仍是 debug 签名——请检查密钥文件、别名与密码。"
-            exit 1
-          fi
+          verify_apk() { # <apk> <期望包名> <期望 versionName> <期望 versionCode> <标签>
+            local apk="$1" pkg="$2" want="$3" code="$4" label="$5" badging signer
+            [ -f "$apk" ] || { echo "::error::$label APK 不存在：$apk"; exit 1; }
 
-          echo "== 版本信息 =="
-          BADGING="$("$BT/aapt2" dump badging "$APK" | head -1)"
-          echo "$BADGING"
-          if ! grep -qF "versionName='${VERSION_NAME}'" <<< "$BADGING"; then
-            echo "::error::APK 内的 versionName 不是 $VERSION_NAME"
-            exit 1
-          fi
+            echo "== $label 签名 =="
+            signer="$RUNNER_TEMP/signer-$label.txt"
+            "$BT/apksigner" verify --print-certs "$apk" | tee "$signer"
+            if [ "$SIGNED" = "true" ] && grep -q "CN=Android Debug" "$signer"; then
+              echo "::error::已配置 SIGNING_* Secrets，但 $label APK 仍是 debug 签名——请检查密钥文件、别名与密码。"
+              exit 1
+            fi
 
-          echo "== 原生库 =="
-          unzip -l "$APK" | grep "lib/" || true
-          if ! unzip -l "$APK" | grep -q "lib/arm64-v8a/libtslib_jni.so"; then
-            echo "::error::APK 内缺少 lib/arm64-v8a/libtslib_jni.so（jniLibs 未被正确打包）"
-            exit 1
-          fi
+            echo "== $label 包名 / 版本 =="
+            badging="$("$BT/aapt2" dump badging "$apk" | head -1)"
+            echo "$badging"
+            if ! grep -qF "package: name='${pkg}'" <<< "$badging"; then
+              echo "::error::$label APK 的包名不是 $pkg"
+              exit 1
+            fi
+            if ! grep -qF "versionName='${want}'" <<< "$badging"; then
+              echo "::error::$label APK 内的 versionName 不是 $want"
+              exit 1
+            fi
+            if ! grep -qF "versionCode='${code}'" <<< "$badging"; then
+              echo "::error::$label APK 内的 versionCode 不是 $code"
+              exit 1
+            fi
+
+            echo "== $label 原生库 =="
+            unzip -l "$apk" | grep "lib/arm64-v8a/" || true
+            if ! unzip -l "$apk" | grep -q "lib/arm64-v8a/libtslib_jni.so"; then
+              echo "::error::$label APK 内缺少 lib/arm64-v8a/libtslib_jni.so（jniLibs 未被正确打包）"
+              exit 1
+            fi
+          }
+
+          verify_apk app/build/outputs/apk/release/app-release.apk "com.yuaxi.ts6droid.cn" "$PHONE_NAME" "$PHONE_CODE" "phone"
+          verify_apk pad/build/outputs/apk/release/pad-release.apk "com.yuaxi.ts6pad" "$PAD_NAME" "$PAD_CODE" "pad"
 
       - name: 整理发布产物
         working-directory: ${{ env.PHONE_DIR }}
         env:
-          VERSION_BARE: ${{ steps.version.outputs.version_bare }}
+          PHONE_BARE: ${{ steps.version.outputs.phone_bare }}
+          PAD_BARE: ${{ steps.version.outputs.pad_bare }}
         run: |
           set -euo pipefail
-          ASSET="TS6_Droid_Han-${VERSION_BARE}.apk"
+          PHONE_ASSET="TS6_Droid_Han-${PHONE_BARE}.apk"
+          PAD_ASSET="TS6_Pad-${PAD_BARE}.apk"
           OUT="$GITHUB_WORKSPACE/release-assets"
           mkdir -p "$OUT"
-          cp app/build/outputs/apk/release/app-release.apk "$OUT/$ASSET"
-          ( cd "$OUT" && sha256sum "$ASSET" > "$ASSET.sha256" )
+
+          cp app/build/outputs/apk/release/app-release.apk "$OUT/$PHONE_ASSET"
+          cp pad/build/outputs/apk/release/pad-release.apk "$OUT/$PAD_ASSET"
+          ( cd "$OUT" \
+            && sha256sum "$PHONE_ASSET" > "$PHONE_ASSET.sha256" \
+            && sha256sum "$PAD_ASSET" > "$PAD_ASSET.sha256" )
+
           # R8 混淆映射表：发布后用于还原崩溃堆栈
-          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
-            cp app/build/outputs/mapping/release/mapping.txt "$OUT/mapping-${VERSION_BARE}.txt"
-          else
-            echo "::warning::未找到 mapping.txt，本次不附带混淆映射表"
-          fi
+          attach_mapping() { # <mapping 路径> <资产名>
+            if [ -f "$1" ]; then
+              cp "$1" "$OUT/$2"
+            else
+              echo "::warning::未找到 $1，本次不附带该映射表"
+            fi
+          }
+          attach_mapping app/build/outputs/mapping/release/mapping.txt "mapping-phone-${PHONE_BARE}.txt"
+          attach_mapping pad/build/outputs/mapping/release/mapping.txt "mapping-pad-${PAD_BARE}.txt"
+
           ls -lh "$OUT"
 
       - name: 上传工作流产物
         uses: actions/upload-artifact@v7
         with:
-          name: TS6_Droid_Han-${{ steps.version.outputs.version_bare }}
+          name: TS6_Droid_Han-${{ steps.version.outputs.phone_bare }}-Pad-${{ steps.version.outputs.pad_bare }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30
@@ -333,19 +402,20 @@ jobs:
       - name: 提交版本号并打 tag
         if: steps.version.outputs.publish == 'true' && steps.version.outputs.need_patch == 'true'
         env:
-          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          PHONE_NAME: ${{ steps.version.outputs.phone_name }}
+          PAD_NAME: ${{ steps.version.outputs.pad_name }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$GRADLE_FILE"
+          git add "$PHONE_GRADLE_FILE" "$PAD_GRADLE_FILE"
 
           if git diff --cached --quiet; then
             # 输入版本与仓库当前版本相同：无需提交，直接对当前提交打 tag
             echo "版本号未变化，跳过版本号提交"
           else
-            git commit -m "chore(release): 手机端 ${VERSION_NAME} [skip ci]"
+            git commit -m "chore(release): 手机端 ${PHONE_NAME} / Pad ${PAD_NAME} [skip ci]"
 
             # 版本号提交推回触发分支；若期间有他人推送则 rebase 后重试一次
             if ! git push origin "HEAD:${GITHUB_REF_NAME}"; then
@@ -357,7 +427,7 @@ jobs:
           fi
 
           # tag 打在版本号提交之上，保证 Release 源码与包内版本号一致
-          git tag -a "$TAG" -m "TS6 Droid 简中版（手机端）${VERSION_NAME}"
+          git tag -a "$TAG" -m "TS6 Droid 双端 ${PHONE_NAME} / Pad ${PAD_NAME}"
           git push origin "refs/tags/${TAG}"
 
       - name: 发布 GitHub Release
@@ -365,18 +435,23 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: TS6 Droid 简中版（手机端）v${{ steps.version.outputs.version_name }}
+          name: TS6 Droid 双端 v${{ steps.version.outputs.phone_name }}（Pad ${{ steps.version.outputs.pad_name }}）
           prerelease: ${{ steps.flags.outputs.prerelease }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: release-assets/*
           body: |
-            TS6 Droid 简中版（手机端）v${{ steps.version.outputs.version_name }}
+            TS6 Droid 双端发布
 
-            - 安装包：`TS6_Droid_Han-${{ steps.version.outputs.version_bare }}.apk`（arm64-v8a，可直接覆盖安装）
-            - SHA-256 校验值见同名 `.sha256` 文件
-            - 混淆映射表 `mapping-${{ steps.version.outputs.version_bare }}.txt`，用于还原崩溃堆栈
-            - 本 tag 对应完整源码（GPL-3.0）
+            | 端 | 安装包 | 版本 | 许可证 |
+            | --- | --- | --- | --- |
+            | 手机 | `TS6_Droid_Han-${{ steps.version.outputs.phone_bare }}.apk` | `${{ steps.version.outputs.phone_name }}`（versionCode ${{ steps.version.outputs.phone_code }}） | GPL-3.0 |
+            | Pad | `TS6_Pad-${{ steps.version.outputs.pad_bare }}.apk` | `${{ steps.version.outputs.pad_name }}`（versionCode ${{ steps.version.outputs.pad_code }}） | AGPL-3.0-only |
+
+            - 两个 APK 均为 arm64-v8a；使用同一签名时可直接覆盖安装
+            - SHA-256 校验值见各自同名 `.sha256` 文件
+            - 混淆映射表 `mapping-phone-${{ steps.version.outputs.phone_bare }}.txt` / `mapping-pad-${{ steps.version.outputs.pad_bare }}.txt`，用于还原崩溃堆栈
+            - 本 tag 对应完整源码
             ${{ steps.signing.outputs.signed != 'true' && '⚠️ 本次构建未配置签名密钥，使用 **debug 密钥** 签名（每次运行的 debug 证书都不同，无法覆盖安装），仅供测试，请勿分发。' || '' }}
 
       - name: 清理临时密钥
@@ -386,8 +461,8 @@ jobs:
       - name: 结果汇总
         if: always()
         env:
-          VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          VERSION_BARE: ${{ steps.version.outputs.version_bare }}
+          PHONE_NAME: ${{ steps.version.outputs.phone_name }}
+          PAD_NAME: ${{ steps.version.outputs.pad_name }}
           TAG: ${{ steps.version.outputs.tag }}
           JOB_STATUS: ${{ job.status }}
         run: |
@@ -395,7 +470,9 @@ jobs:
             echo ""
             echo "### 结果"
             echo ""
-            echo "- 版本：\`${VERSION_NAME:-未知}\`（tag \`${TAG:-未知}\`）"
+            echo "- 手机端：\`${PHONE_NAME:-未知}\`"
+            echo "- Pad 端：\`${PAD_NAME:-未知}\`"
+            echo "- tag：\`${TAG:-未知}\`"
             echo "- 签名：${{ steps.signing.outputs.signed == 'true' && '正式密钥' || 'debug 回退' }}"
             echo "- 发布：${{ steps.version.outputs.publish == 'true' && '已创建 Release' || '仅构建（见 Artifacts）' }}"
             echo "- 任务状态：$JOB_STATUS"

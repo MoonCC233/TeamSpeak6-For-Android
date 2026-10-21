@@ -35,6 +35,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.ScreenShare
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Visibility
@@ -71,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tsdroid.data.ServerBookmark
+import dev.tsdroid.pad.BuildConfig
 import dev.tsdroid.pad.R
 import dev.tsdroid.viewmodel.ConnectionViewModel
 import dev.tslib.ConnectionState
@@ -323,6 +325,11 @@ private fun JoinHero(compact: Boolean, modifier: Modifier = Modifier) {
                 title = stringResource(R.string.join_feature_chat_title),
                 subtitle = stringResource(R.string.join_feature_chat_subtitle),
             )
+            HeroFeature(
+                icon = Icons.Rounded.ScreenShare,
+                title = stringResource(R.string.join_feature_screen_title),
+                subtitle = stringResource(R.string.join_feature_screen_subtitle),
+            )
         }
 
         if (!compact) {
@@ -345,7 +352,7 @@ private fun JoinHero(compact: Boolean, modifier: Modifier = Modifier) {
                 )
                 Spacer(Modifier.width(18.dp))
                 Text(
-                    stringResource(R.string.join_version),
+                    stringResource(R.string.join_version, BuildConfig.VERSION_NAME),
                     style = MaterialTheme.typography.bodySmall,
                     color = PadColors.Muted.copy(alpha = 0.55f),
                 )
@@ -353,7 +360,7 @@ private fun JoinHero(compact: Boolean, modifier: Modifier = Modifier) {
         } else {
             Spacer(Modifier.height(18.dp))
             Text(
-                stringResource(R.string.join_version_local),
+                stringResource(R.string.join_version_local, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodySmall,
                 color = PadColors.Muted.copy(alpha = 0.6f),
             )

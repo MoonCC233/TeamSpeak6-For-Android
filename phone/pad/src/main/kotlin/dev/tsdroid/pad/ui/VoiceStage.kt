@@ -46,6 +46,7 @@ fun VoiceStage(
     talkingIds: Set<Int>,
     localTalking: Boolean,
     mutedUserIds: Set<Int>,
+    streamingUserIds: Set<Int>,
     avatars: Map<String, ImageBitmap>,
     onMemberClick: (User) -> Unit,
     modifier: Modifier = Modifier,
@@ -121,6 +122,7 @@ fun VoiceStage(
                             isSelf = member.id == myClientId,
                             speaking = speaking,
                             muted = member.id in mutedUserIds || member.isInputMuted,
+                            streaming = member.id in streamingUserIds,
                             avatar = member.uid?.let { avatars[it] },
                             onClick = { onMemberClick(member) },
                             modifier = Modifier.width(cardWidth),
@@ -138,6 +140,7 @@ private fun MemberCard(
     isSelf: Boolean,
     speaking: Boolean,
     muted: Boolean,
+    streaming: Boolean,
     avatar: ImageBitmap?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -150,7 +153,11 @@ private fun MemberCard(
             .background(if (speaking) PadColors.Green.copy(alpha = 0.055f) else PadColors.Surface)
             .border(
                 1.dp,
-                if (speaking) PadColors.Green.copy(alpha = 0.5f) else PadColors.Border,
+                when {
+                    streaming -> PadColors.Red.copy(alpha = 0.42f)
+                    speaking -> PadColors.Green.copy(alpha = 0.5f)
+                    else -> PadColors.Border
+                },
                 shape,
             )
             .clickable(onClick = onClick)
@@ -158,17 +165,28 @@ private fun MemberCard(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.fillMaxWidth()) {
-            if (isSelf) {
-                Text(
-                    text = stringResource(R.string.common_you),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PadColors.Accent,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .clip(RoundedCornerShape(50))
-                        .background(PadColors.Accent.copy(alpha = 0.12f))
-                        .padding(horizontal = 7.dp, vertical = 2.dp),
-                )
+            Row(
+                Modifier.align(Alignment.TopStart),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isSelf) {
+                    Text(
+                        text = stringResource(R.string.common_you),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PadColors.Accent,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(PadColors.Accent.copy(alpha = 0.12f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+                if (streaming) {
+                    PadLiveBadge(
+                        label = stringResource(R.string.share_live_short),
+                        compact = true,
+                    )
+                }
             }
             if (muted) {
                 Box(

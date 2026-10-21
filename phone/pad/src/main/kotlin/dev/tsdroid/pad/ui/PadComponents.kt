@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.tsdroid.pad.R
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -216,6 +220,80 @@ fun StatusPill(
             fontWeight = FontWeight.SemiBold,
         )
     }
+}
+
+/**
+ * A small live marker used both in the member list and on video cards. The
+ * dark variant is for overlaying the video surface; the tinted variant matches
+ * the rest of the Pad chrome.
+ */
+@Composable
+fun PadLiveBadge(
+    label: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    dark: Boolean = false,
+) {
+    val accent = PadColors.Red
+    val background = if (dark) Color.Black.copy(alpha = 0.55f) else accent.copy(alpha = 0.14f)
+    val foreground = if (dark) Color.White else accent
+    Row(
+        modifier
+            .clip(CircleShape)
+            .background(background)
+            .then(
+                if (dark) Modifier else Modifier.border(
+                    1.dp,
+                    accent.copy(alpha = 0.32f),
+                    CircleShape,
+                ),
+            )
+            .padding(
+                horizontal = if (compact) 6.dp else 8.dp,
+                vertical = if (compact) 1.dp else 3.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(if (compact) 4.dp else 6.dp)
+                .clip(CircleShape)
+                .background(accent),
+        )
+        Spacer(Modifier.width(if (compact) 4.dp else 5.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = foreground,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.4.sp,
+        )
+    }
+}
+
+/**
+ * Activity resume state for media previews. Screen-share viewers should release
+ * their peer connection when the Pad is in the background, just like the phone
+ * client, and rejoin when the user comes back.
+ */
+@Composable
+fun rememberPadResumed(): Boolean {
+    val owner = LocalLifecycleOwner.current
+    var resumed by remember(owner) {
+        mutableStateOf(owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> resumed = true
+                Lifecycle.Event.ON_PAUSE -> resumed = false
+                else -> Unit
+            }
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    return resumed
 }
 
 @Composable

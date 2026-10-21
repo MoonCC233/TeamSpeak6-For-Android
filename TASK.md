@@ -316,6 +316,22 @@ AI 代理接到本指令后的参考执行顺序：
   - Pad 每个连接使用独立 `ViewModelStore`，避免 `ServerViewModel` 二次绑定复用旧收集器；
   - 全部 Pad UI 文案入 `res/values/strings.xml`；
   - `:pad:assembleDebug`、`:pad:assembleRelease`、`:pad:lintDebug` 通过；APK 含 `lib/arm64-v8a/libtslib_jni.so`；
-  - `.github/workflows/release.yml` 显式限定 `:app`/`:core`，不会误构建 Pad。
+  - `.github/workflows/release.yml` 显式限定 `:app`/`:core`，不会误构建 Pad（2026-10-21 已扩展为手机 + Pad 双端发布）。
 - ✅ **Pad release 真机连接修复**：release 经 R8 混淆后，`libjingle_peerconnection_so.so` 的 `JNI_OnLoad` 找不到被重命名的 `org.webrtc` / `org.jni_zero` 类，连接即 SIGABRT。`:core` 的 `consumer-rules.pro` 现显式保留二者；修复后 release APK 在 iQOO Pad5c（Android 15）实机完成连接、退出与重连，`PeerConnectionFactory` 正常初始化。
 - 🔄 **Pad 真机验收（iQOO Pad5c / Android 15）**：连接/退出/重连已通过；频道切换、成员操作、频道/私聊、PTT/VAD、静音、后台/通知仍待逐项验收。A3 发布端抖动/重传优化暂缓。
+
+### 2026-10-21：Pad 屏幕共享与直播观看
+
+- ✅ **发布端**：Pad 顶栏新增「共享屏幕 / 停止共享」入口，使用系统 MediaProjection 授权，复用 `:core` 的 `ScreenShareController` / `ScreenShareService` 启动 `mediaProjection` 前台服务；新增发布状态条、直播中指示与停止入口。
+- ✅ **观看端**：工作区新增固定「屏幕共享」直播货架，自动加入远端流、显示实时画面/分辨率/码率；支持单路大卡与多路横向滚动；支持全屏观看、适应/填满切换、连接信息弹窗与停止观看。
+- ✅ **成员入口**：频道成员与语音舞台显示 LIVE 标记；成员操作弹窗新增「观看屏幕共享」，可直接进入直播。
+- ✅ **生命周期**：Pad 退到后台时释放观看会话，回到前台自动重新加入；全屏观看与货架预览共用同一 WebRTC 会话，退出全屏不会重新协商；直播结束后自动关闭全屏。
+- ✅ **界面**：Join 页新增原生屏幕共享能力介绍；工作区加入低对比环境背景、直播货架、发布状态条和统一 Pad 配色；全部新增文案位于 `phone/pad/src/main/res/values/strings.xml`。
+- ✅ **验证**：`:pad:assembleDebug`、`:pad:assembleRelease -x buildRustLibs`、`:pad:lintDebug`、`:core:testDebugUnitTest`、`:app:testDebugUnitTest` 通过；release APK 已生成。
+- ⏳ **设备验收**：2026-10-21 当前 adb 无连接设备；待 iQOO Pad5c 恢复连接后验证发布/观看、横竖屏、后台恢复、通知停止与对端互通。
+
+### 2026-10-21：双端发布流水线
+
+- ✅ **Release 扩展**：`.github/workflows/release.yml` 改为同一 Release 同时构建/发布手机端 `:app` 与 Pad 端 `:pad`；tag 触发校验手机版本号，手动触发按 `version` / `pad_version` 自动递增双端版本号与 `versionCode`；产物为 `TS6_Droid_Han-<ver>.apk` / `TS6_Pad-<ver>.apk`，各附 SHA-256 与 R8 mapping。
+- ✅ **Pad 版本显示**：`:pad` 启用 `buildConfig`，加入页版本号改用 `BuildConfig.VERSION_NAME`（`v%1$s · AGPL-3.0`），不再硬编码 `v0.1.0-native`。
+- ✅ **验证**：本地 `:app:assembleRelease :pad:assembleRelease -x buildRustLibs` 与 `testDebugUnitTest` 通过；工作流版本解析/改写逻辑 75 项模拟校验、APK 校验与产物整理 15 项检查通过。

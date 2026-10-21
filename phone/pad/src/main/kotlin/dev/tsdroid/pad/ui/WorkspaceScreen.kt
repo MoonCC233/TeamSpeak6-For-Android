@@ -1,5 +1,10 @@
 package dev.tsdroid.pad.ui
 
+import android.app.Activity
+import android.content.Context
+import android.media.projection.MediaProjectionManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +36,8 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,10 +66,14 @@ import dev.tsdroid.bridge.AudioBridge
 import dev.tsdroid.bridge.MicMode
 import dev.tsdroid.data.ServerBookmark
 import dev.tsdroid.pad.R
+import dev.tsdroid.screen.ScreenShareController
+import dev.tsdroid.service.ScreenShareService
+import dev.tsdroid.service.TsConnectionService
 import dev.tsdroid.viewmodel.ConnectionViewModel
 import dev.tsdroid.viewmodel.ServerViewModel
 import dev.tslib.ConnectionState
 import dev.tslib.User
+import kotlinx.coroutines.launch
 
 @Composable
 fun WorkspaceScreen(
@@ -91,6 +104,24 @@ fun WorkspaceScreen(
     val micStatus by serverViewModel.micStatus.collectAsStateWithLifecycle()
     val bookmarks by connectionViewModel.bookmarks.collectAsStateWithLifecycle()
     val bookmarkIcons by connectionViewModel.bookmarkIcons.collectAsStateWithLifecycle()
+    val isPublishing by ScreenShareController.publishing.collectAsStateWithLifecycle()
+    val remoteStreams by ScreenShareController.remoteStreams.collectAsStateWithLifecycle()
+    val viewerPhases by ScreenShareController.viewerPhases.collectAsStateWithLifecycle()
+    val viewerStats by ScreenShareController.viewerStats.collectAsStateWithLifecycle()
+    val screenShareError by ScreenShareController.lastError.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val resumed = rememberPadResumed()
+
+    var fullscreenStream by remember {
+        mutableStateOf<ScreenShareController.RemoteStream?>(null)
+    }
+    var infoStream by remember {
+        mutableStateOf<ScreenShareController.RemoteStream?>(null)
+    }
+    var dismissedStreamIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val myId = serverViewModel.myClientId
     val myUser = users.firstOrNull { it.id == myId }
@@ -103,6 +134,102 @@ fun WorkspaceScreen(
                 .thenByDescending { it.id in talkingIds }
                 .thenBy { it.nickname.lowercase() },
         )
+    val streamingClientIds = remember(remoteStreams) {
+        remoteStreams.values.map { it.clientId }.toSet()
+    }
+    val visibleStreams = remoteStreams.values
+        .filter { it.streamId !in dismissedStreamIds }
+        .sortedBy { it.name.lowercase() }
+
+    fun streamDisplayName(stream: ScreenShareController.RemoteStream): String =
+        users.firstOrNull { it.id == stream.clientId }?.nickname ?: stream.name
+
+    fun showNotice(message: String) {
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    val screenCaptureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val data = result.data
+        when {
+            result.resultCode == Activity.RESULT_OK && data != null -> {
+                if (TsConnectionService.instance?.tsClient?.isConnected != true) {
+                    showNotice(context.getString(R.string.share_error_not_connected))
+                } else {
+                    val streamName = context.getString(
+                        R.string.share_stream_name,
+                        myUser?.nickname ?: context.getString(R.string.share_fallback_name),
+                    )
+                    runCatching {
+                        ScreenShareService.start(
+                            context = context,
+                            resultCode = result.resultCode,
+                            data = data,
+                            streamName = streamName,
+                            withAudio = false,
+                        )
+                    }.onFailure {
+                        showNotice(context.getString(R.string.share_error_start))
+                    }
+                }
+            }
+
+            result.resultCode == Activity.RESULT_OK -> {
+                showNotice(context.getString(R.string.share_error_permission))
+            }
+
+            else -> {
+                showNotice(context.getString(R.string.share_error_permission))
+            }
+        }
+    }
+
+    fun toggleScreenShare() {
+        if (isPublishing) {
+            ScreenShareService.stop(context)
+            return
+        }
+        if (reconnectStatus.active || TsConnectionService.instance?.tsClient?.isConnected != true) {
+            showNotice(context.getString(R.string.share_error_not_connected))
+            return
+        }
+        val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+            as? MediaProjectionManager
+        if (manager == null) {
+            showNotice(context.getString(R.string.share_error_no_manager))
+            return
+        }
+        screenCaptureLauncher.launch(manager.createScreenCaptureIntent())
+    }
+
+    fun watchStream(stream: ScreenShareController.RemoteStream) {
+        dismissedStreamIds = dismissedStreamIds - stream.streamId
+        fullscreenStream = stream
+    }
+
+    LaunchedEffect(remoteStreams.keys) {
+        dismissedStreamIds = dismissedStreamIds.intersect(remoteStreams.keys)
+        val fullscreenId = fullscreenStream?.streamId
+        if (fullscreenId != null && fullscreenId !in remoteStreams) {
+            fullscreenStream = null
+        }
+        val infoId = infoStream?.streamId
+        if (infoId != null && infoId !in remoteStreams) {
+            infoStream = null
+        }
+    }
+
+    LaunchedEffect(screenShareError) {
+        val error = screenShareError ?: return@LaunchedEffect
+        val message = when (error) {
+            "start_failed" -> R.string.share_error_start
+            "join_rejected" -> R.string.share_error_join
+            else -> R.string.share_error_generic
+        }
+        showNotice(context.getString(message))
+        ScreenShareController.clearError()
+    }
 
     var chatTarget by remember { mutableStateOf<ChatTarget>(ChatTarget.Channel) }
     var selectedMember by remember { mutableStateOf<User?>(null) }
@@ -168,126 +295,209 @@ fun WorkspaceScreen(
     // same bookmark again (switching to it would needlessly reconnect).
     val railBookmarks = bookmarks.filterNot { it.address.equals(serverAddress, ignoreCase = true) }
 
-    Row(
+    Box(
         Modifier
             .fillMaxSize()
-            .background(PadColors.Page)
-            .windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.safeDrawing),
+            .background(PadColors.Page),
     ) {
-        ServerRail(
-            serverName = serverInfo?.name ?: stringResource(R.string.server_name_fallback),
-            serverIcon = serverIcon,
-            bookmarks = railBookmarks,
-            bookmarkIcons = bookmarkIcons,
-            onSwitchServer = { pendingSwitch = it },
-            onAddServer = { showAddServerConfirm = true },
-            onOpenSettings = { showSettings = true },
-        )
-
-        Column(
+        Row(
             Modifier
-                .width(322.dp)
-                .fillMaxHeight()
-                .background(PadColors.Surface)
-                .drawBehind {
-                    drawLine(
-                        color = PadColors.Border,
-                        start = Offset(size.width, 0f),
-                        end = Offset(size.width, size.height),
-                        strokeWidth = 1.dp.toPx(),
-                    )
-                },
+                .fillMaxSize()
+                .background(PadColors.Page)
+                .windowInsetsPadding(
+                    androidx.compose.foundation.layout.WindowInsets.safeDrawing,
+                ),
         ) {
-            PeoplePanel(
-                users = users,
-                channels = channels,
-                currentChannelId = currentChannelId,
-                myClientId = myId,
-                talkingIds = talkingIds,
-                mutedUserIds = mutedUserIds,
-                avatars = avatars,
-                onSelectChannel = { channel -> serverViewModel.moveToChannel(channel.id) },
-                onMemberClick = { member ->
-                    if (member.id == myId) showSettings = true else selectedMember = member
-                },
-                modifier = Modifier.weight(1f),
-            )
-            AudioDock(
-                micMode = micMode,
-                micMuted = micMuted,
-                outputMuted = outputMuted,
-                micStatus = micStatus,
-                onToggleMic = { serverViewModel.toggleMicMute() },
-                onPushToTalk = { pressed -> serverViewModel.setPushToTalk(pressed) },
-                onToggleOutput = { serverViewModel.toggleOutputMute() },
-                onOpenSettings = { showSettings = true },
-            )
-        }
-
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            WorkspaceTopBar(
+            ServerRail(
                 serverName = serverInfo?.name ?: stringResource(R.string.server_name_fallback),
-                address = serverAddress,
-                channelName = currentChannel?.name
-                    ?: stringResource(R.string.workspace_channel_connecting),
-                reconnecting = reconnectStatus.active,
-                reconnectAttempt = reconnectStatus.attempt,
-                nextRetrySeconds = reconnectStatus.nextRetrySeconds,
+                serverIcon = serverIcon,
+                bookmarks = railBookmarks,
+                bookmarkIcons = bookmarkIcons,
+                onSwitchServer = { pendingSwitch = it },
+                onAddServer = { showAddServerConfirm = true },
                 onOpenSettings = { showSettings = true },
-                onLeave = { showLeaveConfirm = true },
             )
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 28.dp, vertical = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp),
-                ) {
-                    item {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                            VoiceStage(
-                                members = currentMembers,
-                                channelName = currentChannel?.name
-                                    ?: stringResource(R.string.workspace_channel_voice),
-                                myClientId = myId,
-                                talkingIds = talkingIds,
-                                localTalking = isLocalTalking,
-                                mutedUserIds = mutedUserIds,
-                                avatars = avatars,
-                                onMemberClick = { member ->
-                                    if (member.id == myId) showSettings = true else selectedMember = member
-                                },
-                                modifier = Modifier
-                                    .widthIn(max = 1120.dp)
-                                    .fillMaxWidth(),
-                            )
+
+            Column(
+                Modifier
+                    .width(322.dp)
+                    .fillMaxHeight()
+                    .background(PadColors.Surface)
+                    .drawBehind {
+                        drawLine(
+                            color = PadColors.Border,
+                            start = Offset(size.width, 0f),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    },
+            ) {
+                PeoplePanel(
+                    users = users,
+                    channels = channels,
+                    currentChannelId = currentChannelId,
+                    myClientId = myId,
+                    talkingIds = talkingIds,
+                    mutedUserIds = mutedUserIds,
+                    streamingUserIds = streamingClientIds,
+                    avatars = avatars,
+                    onSelectChannel = { channel -> serverViewModel.moveToChannel(channel.id) },
+                    onMemberClick = { member ->
+                        if (member.id == myId) {
+                            showSettings = true
+                        } else {
+                            selectedMember = member
                         }
-                    }
-                    item {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-                            ChatPanel(
-                                target = chatTarget,
-                                threads = privateThreads,
-                                channelName = currentChannel?.name
-                                    ?: stringResource(R.string.workspace_channel_default),
-                                channelMessages = channelMessages,
-                                privateMessages = privateMessages,
-                                unreadChannel = unreadChannel,
-                                users = users,
-                                onSelectTarget = { chatTarget = it },
-                                onSend = { text ->
-                                    when (val target = chatTarget) {
-                                        ChatTarget.Channel -> serverViewModel.sendChannelMessage(text)
-                                        is ChatTarget.Private -> serverViewModel.sendPrivateMessage(target.key, text)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .widthIn(max = 1120.dp)
-                                    .fillMaxWidth(),
-                            )
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                AudioDock(
+                    micMode = micMode,
+                    micMuted = micMuted,
+                    outputMuted = outputMuted,
+                    micStatus = micStatus,
+                    onToggleMic = { serverViewModel.toggleMicMute() },
+                    onPushToTalk = { pressed -> serverViewModel.setPushToTalk(pressed) },
+                    onToggleOutput = { serverViewModel.toggleOutputMute() },
+                    onOpenSettings = { showSettings = true },
+                )
+            }
+
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                WorkspaceTopBar(
+                    serverName = serverInfo?.name ?: stringResource(R.string.server_name_fallback),
+                    address = serverAddress,
+                    channelName = currentChannel?.name
+                        ?: stringResource(R.string.workspace_channel_connecting),
+                    reconnecting = reconnectStatus.active,
+                    reconnectAttempt = reconnectStatus.attempt,
+                    nextRetrySeconds = reconnectStatus.nextRetrySeconds,
+                    isPublishing = isPublishing,
+                    onToggleShare = { toggleScreenShare() },
+                    onOpenSettings = { showSettings = true },
+                    onLeave = { showLeaveConfirm = true },
+                )
+                if (isPublishing) {
+                    PadSharePublishingBar(
+                        onStop = { ScreenShareService.stop(context) },
+                    )
+                }
+                if (visibleStreams.isNotEmpty()) {
+                    PadScreenShareShelf(
+                        streams = visibleStreams,
+                        liveCount = remoteStreams.size,
+                        displayNameOf = { streamDisplayName(it) },
+                        phases = viewerPhases,
+                        stats = viewerStats,
+                        activeStreamId = fullscreenStream?.streamId,
+                        resumed = resumed,
+                        onExpand = { watchStream(it) },
+                        onInfo = { infoStream = it },
+                        onStop = { stream ->
+                            fullscreenStream = null
+                            dismissedStreamIds = dismissedStreamIds + stream.streamId
+                            ScreenShareController.leaveStream(stream.streamId)
+                        },
+                    )
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    PadAmbientBackground(Modifier.fillMaxSize())
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 28.dp,
+                            end = 28.dp,
+                            top = 22.dp,
+                            bottom = 28.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                    ) {
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                                VoiceStage(
+                                    members = currentMembers,
+                                    channelName = currentChannel?.name
+                                        ?: stringResource(R.string.workspace_channel_voice),
+                                    myClientId = myId,
+                                    talkingIds = talkingIds,
+                                    localTalking = isLocalTalking,
+                                    mutedUserIds = mutedUserIds,
+                                    streamingUserIds = streamingClientIds,
+                                    avatars = avatars,
+                                    onMemberClick = { member ->
+                                        if (member.id == myId) {
+                                            showSettings = true
+                                        } else {
+                                            selectedMember = member
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .widthIn(max = 1120.dp)
+                                        .fillMaxWidth(),
+                                )
+                            }
+                        }
+                        item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                                ChatPanel(
+                                    target = chatTarget,
+                                    threads = privateThreads,
+                                    channelName = currentChannel?.name
+                                        ?: stringResource(R.string.workspace_channel_default),
+                                    channelMessages = channelMessages,
+                                    privateMessages = privateMessages,
+                                    unreadChannel = unreadChannel,
+                                    users = users,
+                                    onSelectTarget = { chatTarget = it },
+                                    onSend = { text ->
+                                        when (val target = chatTarget) {
+                                            ChatTarget.Channel ->
+                                                serverViewModel.sendChannelMessage(text)
+                                            is ChatTarget.Private ->
+                                                serverViewModel.sendPrivateMessage(target.key, text)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .widthIn(max = 1120.dp)
+                                        .fillMaxWidth(),
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
+        )
+
+        fullscreenStream?.let { stream ->
+            PadScreenShareViewer(
+                stream = stream,
+                displayName = streamDisplayName(stream),
+                phase = viewerPhases[stream.streamId]
+                    ?: ScreenShareController.ViewerPhase.JOINING,
+                stats = viewerStats[stream.streamId],
+                resumed = resumed,
+                onDismiss = {
+                    val phase = viewerPhases[stream.streamId]
+                    fullscreenStream = null
+                    if (phase == null || phase.isShareTerminal()) {
+                        dismissedStreamIds = dismissedStreamIds + stream.streamId
+                        ScreenShareController.leaveStream(stream.streamId)
+                    }
+                },
+                onInfo = { infoStream = stream },
+                onStopWatching = {
+                    fullscreenStream = null
+                    dismissedStreamIds = dismissedStreamIds + stream.streamId
+                    ScreenShareController.leaveStream(stream.streamId)
+                },
+            )
         }
     }
 
@@ -349,6 +559,15 @@ fun WorkspaceScreen(
         )
     }
 
+    infoStream?.let { stream ->
+        PadStreamInfoDialog(
+            displayName = streamDisplayName(stream),
+            audioSupported = stream.audio,
+            stats = viewerStats[stream.streamId],
+            onDismiss = { infoStream = null },
+        )
+    }
+
     selectedMember?.let { member ->
         MemberActionsDialog(
             member = member,
@@ -357,10 +576,17 @@ fun WorkspaceScreen(
             mutedLocally = member.id in mutedUserIds,
             volumeDb = userVolumes[member.id] ?: 0f,
             canDm = !member.uid.isNullOrEmpty(),
+            isStreaming = member.id in streamingClientIds,
             onDismiss = { selectedMember = null },
             onToggleLocalMute = { serverViewModel.toggleMuteUser(member.id) },
             onVolumeChange = { db, commit -> serverViewModel.setUserVolumeDb(member.id, db, commit) },
             onOpenDm = { openDm(member) },
+            onWatchStream = {
+                selectedMember = null
+                remoteStreams.values.firstOrNull { it.clientId == member.id }?.let {
+                    watchStream(it)
+                }
+            },
         )
     }
 }
@@ -479,6 +705,8 @@ private fun WorkspaceTopBar(
     reconnecting: Boolean,
     reconnectAttempt: Int,
     nextRetrySeconds: Int,
+    isPublishing: Boolean,
+    onToggleShare: () -> Unit,
     onOpenSettings: () -> Unit,
     onLeave: () -> Unit,
 ) {
@@ -553,6 +781,12 @@ private fun WorkspaceTopBar(
             StatusPill(stringResource(R.string.common_connected), PadColors.Green)
         }
         Spacer(Modifier.width(12.dp))
+        PadShareButton(
+            publishing = isPublishing,
+            enabled = isPublishing || !reconnecting,
+            onClick = onToggleShare,
+        )
+        Spacer(Modifier.width(8.dp))
         PadIconButton(
             icon = Icons.Rounded.Settings,
             contentDescription = stringResource(R.string.audio_settings),
