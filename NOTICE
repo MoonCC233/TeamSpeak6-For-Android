@@ -1,0 +1,58 @@
+TeamSpeak6-For-Android
+Copyright (C) 2026 MoonCC233 and contributors
+
+本仓库是多个独立上游项目的聚合开发仓。根目录 LICENSE 为
+GNU Affero General Public License v3.0 only（AGPL-3.0-only），
+适用于仓库中未另行声明许可的项目原创代码与文档。
+
+根目录许可证不改变、也不替代任何子目录或文件中保留的上游许可证。
+若某个文件/目录带有自己的 LICENSE 或版权声明，则以该声明为准。
+
+--------------------------------------------------------------------
+许可范围
+--------------------------------------------------------------------
+
+路径                          许可证                  说明
+---------------------------   ----------------------  ------------------------------
+LICENSE                       AGPL-3.0-only           根目录默认许可（本项目原创部分）
+README.md / TASK.md / docs/   AGPL-3.0-only           项目原创文档
+.github/                       AGPL-3.0-only           项目原创 CI 配置
+phone/                        GPL-3.0                 源自 YUAXI/TS6_Droid_CN
+  phone/LICENSE               GPL-3.0                 上游许可证全文
+  phone/app/                  GPL-3.0                 手机端应用
+  phone/core/                 GPL-3.0 / AGPL-3.0      双端共享模块；上游派生部分按
+                                                      GPL-3.0，随 Pad 分发时作为
+                                                      AGPL-3.0 组合作品的一部分
+  phone/pad/                  AGPL-3.0-only           Pad 原生应用
+  phone/pad/LICENSE           AGPL-3.0-only           上游许可证全文
+tslib/                        MIT OR Apache-2.0       源自 flamme-demon/tslib_multi
+  tslib/LICENSE-MIT           MIT
+  tslib/LICENSE-APACHE        Apache-2.0
+  tslib/vendor/tsclientlib/   MIT OR Apache-2.0       vendored 第三方依赖
+pad/                          AGPL-3.0-only           源自 EchoSixHIYA/WebSpeak-client-for-TeamSpeak
+  pad/LICENSE                 AGPL-3.0-only           上游许可证全文
+references/teamspeak-js/      MIT                     协议参考实现
+  references/teamspeak-js/LICENSE
+                                                      MIT 许可证全文
+
+GPL-3.0 与 AGPL-3.0-only 的组合依据 GPLv3 第 13 条 / AGPLv3 第 13 条处理：
+GPL 部分仍受 GPL-3.0 约束，包含 AGPL 部分的组合作品整体按 AGPL-3.0 分发。
+详见 docs/adr/0002-licensing-and-workspace.md。
+
+--------------------------------------------------------------------
+第三方依赖
+--------------------------------------------------------------------
+
+通过 Gradle、npm、Cargo 等包管理器引入但未纳入本仓库的依赖，
+其版权与许可证归各自作者所有，并受各自许可证条款约束。
+分发 APK、服务端包或其他二进制产物前，应保留相应的第三方许可声明。
+
+--------------------------------------------------------------------
+商标
+--------------------------------------------------------------------
+
+TeamSpeak 是 TeamSpeak Systems GmbH 的商标。本项目是独立的、
+非官方客户端项目，与 TeamSpeak Systems GmbH 无隶属关系，也未获得其
+背书或赞助。本仓库的开源许可证不授予任何商标使用权。
+
+Android 是 Google LLC 的商标。其他名称和商标归各自所有者所有。

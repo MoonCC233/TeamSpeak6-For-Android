@@ -111,6 +111,6 @@ keytool -genkeypair -v -keystore release.keystore -alias ts6droid -keyalg RSA -k
 
 ## 许可证说明
 
-本仓库是多个独立上游项目的**聚合开发仓**，各子目录遵循其原始许可证（见上表），版权归各上游作者所有；新增的跨端文档与工具以 GPL-3.0-or-later 授权。组合分发与共享模块的合规要求见 [`docs/adr/0002-licensing-and-workspace.md`](./docs/adr/0002-licensing-and-workspace.md)。
+本仓库是多个独立上游项目的**聚合开发仓**。根目录 [`LICENSE`](./LICENSE) 为 **AGPL-3.0-only**，适用于未在子目录或文件中另行声明许可的项目原创代码与文档；各子目录保留其上游许可证（见上表），版权归各上游作者所有。完整的许可范围、第三方依赖与商标说明见 [`NOTICE`](./NOTICE)。组合分发与共享模块的合规要求见 [`docs/adr/0002-licensing-and-workspace.md`](./docs/adr/0002-licensing-and-workspace.md)。
 
-具体到两个 Android 应用：`phone/app/` 单独分发时按 GPL-3.0；`phone/core/` 是双端共享模块；`phone/pad/` 按 **AGPL-3.0-only** 分发，Pad 整体分发按 AGPL-3.0 处理（模块内附 [`LICENSE`](./phone/pad/LICENSE)）。
+具体到两个 Android 应用：`phone/app/` 单独分发时按 GPL-3.0；`phone/core/` 是双端共享模块（上游派生部分按 GPL-3.0，随 Pad 分发时作为 AGPL-3.0 组合作品的一部分）；`phone/pad/` 按 **AGPL-3.0-only** 分发，Pad 整体分发按 AGPL-3.0 处理（模块内附 [`LICENSE`](./phone/pad/LICENSE)）。

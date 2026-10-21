@@ -2,6 +2,7 @@
 
 - 状态：**已采纳（Accepted）**
 - 日期：2026-10-18
+- 修订：2026-10-21（根目录统一为 AGPL-3.0-only，新增根 `LICENSE` 与 `NOTICE`）
 
 ## 背景
 
@@ -16,9 +17,9 @@
 | tsclientlib（协议实现，仅被 tslib 引用） | 外部依赖 | Apache-2.0 | 与 tslib 许可相容 |
 | WebSpeak（Pad 端参照/基线） | `pad/` | **AGPL-3.0-only** | 面向网络提供服务时须向用户提供对应源码（本项目全程开源，天然满足）；保留版权声明 |
 | teamspeak-js（协议参考/SDK） | `references/teamspeak-js/` | **MIT** | 保留版权与许可声明 |
-| 本项目新增（文档/脚本/跨端代码） | 根目录、`docs/` | GPL-3.0-or-later | 与两端许可均兼容 |
+| 本项目新增（文档/脚本/跨端代码） | 根目录、`docs/`、`.github/` | **AGPL-3.0-only** | 与两端许可均兼容；作为根目录默认许可 |
 
-各子目录内**保留上游 LICENSE 文件**，任何分发物（APK、服务端包）不得移除。
+各子目录内**保留上游 LICENSE 文件**，任何分发物（APK、服务端包）不得移除。根目录新增 [`LICENSE`](../../LICENSE)（AGPL-3.0-only）与 [`NOTICE`](../../NOTICE)（许可范围、第三方依赖与商标说明）；子目录的许可证不因根目录许可证而改变。
 
 ## 关键合规判断
 
@@ -41,6 +42,7 @@
 ## 影响
 
 - 新增代码按所在目录归属许可：`phone/` 内新增 → GPL-3.0；`pad/` 内新增 → AGPL-3.0-only；`tslib/` 内新增 → MIT OR Apache-2.0。
-- 根目录与 `docs/` 下的项目文档、工具脚本 → GPL-3.0-or-later。
+- 根目录与 `docs/`、`.github/` 下的项目原创文档、工具脚本 → AGPL-3.0-only（自 2026-10-21 修订起；此前已发布版本仍按发布时的 GPL-3.0-or-later 授权）。
 - 未来若新增"双端共享模块"目录，默认按 AGPL-3.0-only 授权（满足第 13 条组合要求），并在目录内注明。
+- 根目录 AGPL-3.0-only 不改变 `phone/`（GPL-3.0）、`tslib/`（MIT OR Apache-2.0）、`pad/` 与 `phone/pad/`（AGPL-3.0-only）、`references/teamspeak-js/`（MIT）等子目录的上游许可；整体分发时的义务以各组件的许可证为准。
 - 本项目所有产物最终以开源方式分发；如未来出现闭源分发需求，需重新评估本 ADR。
