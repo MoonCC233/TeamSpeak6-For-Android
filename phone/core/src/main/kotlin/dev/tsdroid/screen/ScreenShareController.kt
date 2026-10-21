@@ -932,9 +932,12 @@ object ScreenShareController {
                     signal.mLine ?: 0,
                     signal.candidate,
                 )
+                // 同时发布 + 观看时，同一 clid 既可能是「观看我们流的观众」，也可能是
+                // 「我们正在观看的发布者」，仅按 peerId 查找会把观看端的候选误投给
+                // 发布端的 PeerConnection。流 id 是唯一可靠的区分依据。
                 val state = publisher
-                val publisherPc = state?.peers?.get(event.peerId)
-                if (state != null && publisherPc != null) {
+                if (state != null && state.streamId == event.streamId) {
+                    val publisherPc = state.peers[event.peerId] ?: return
                     if (state.remoteDescriptionSet[event.peerId] == true) {
                         runCatching { publisherPc.addIceCandidate(candidate) }
                     } else {

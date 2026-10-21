@@ -113,7 +113,7 @@ Rust 1.99.1（含 `aarch64-linux-android` 目标）、cargo-ndk 4.1.2、VS Build
 | B2s | ~~WebView 兼容性与发布桥 spike~~ | ~~`pad/shell/` + `docs/B2s-pad-webview-spike.md`~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：Pad 改原生 Compose，WebView 壳与 spike 文档已删除 |
 | B3 | ~~壳应用体验打磨~~ | ~~壳应用~~ | 已随原生路线取消 | ❌ 2026-10-20 取消：WebView 壳已删除；后台语音/安全区能力在原生 Pad 中由 `:core` + Compose 重新实现 |
 | B4 | 原生 UI/功能对齐 WebSpeak：按 F1–F14 逐项复刻并验证（管理台/皮肤编辑器按产品决策降级） | 验证清单 + 原生页面 | 清单逐项与 Web 版一致 | 🔄 2026-10-20 首版 UI 完成，待真机逐项验收 |
-| B5 | Pad 屏幕共享（后置）：观看 + 发布，直接复用 `:core` 的 A3/A4 MediaProjection/WebRTC 实现 | 可互通的功能 | 与 TS6 原生客户端/WebSpeak 互通验收通过 | ⬜ |
+| B5 | Pad 屏幕共享（后置）：观看 + 发布，直接复用 `:core` 的 A3/A4 MediaProjection/WebRTC 实现 | 可互通的功能 | 与 TS6 原生客户端/WebSpeak 互通验收通过 | ✅ 2026-10-21：iQOO Pad5c（Android 15）真机验收通过——Pad 发布整屏可被 TS6 桌面客户端观看；Pad 可观看桌面 2560×1600@约30fps 直播，预览/全屏/成员 LIVE/前后台恢复/通知停止均通过；修复同时发布+观看时 ICE 候选误路由（按 streamId 分流） |
 | B6 | 双端共享：抽取 `:core`（tslib/JNI、bridge、data、screen、service、viewmodel），手机端与 Pad 共用 | `phone/core/` | 减少重复实现，两端独立可发布 | ✅ 2026-10-20：`:core` 抽取完成，手机端构建/单测通过（`af30332`）；Pad 已接入 |
 | B7 | Pad 原生工程 + WebSpeak 风格 UI：Compose 平板布局、深色主题、频道树/成员卡片/聊天/底部语音栏 | `phone/pad/` | 大屏界面与 WebSpeak 视觉/交互一致，debug APK 可安装 | 🔄 2026-10-20 首版完成：debug/release 构建与 lint 通过，待真机视觉/交互验收 |
 | B8 | Pad 连接/语音接入：真实 TS6 连接、频道/成员、文字聊天、语音收发与音频控制 | Pad 功能 | 与手机端共用 `:core`，真机连接 `ts.mooncc.cn` 验证通过 | 🔄 2026-10-20 代码接入完成（连接/频道/成员/聊天/语音/音频设置），待真机联调 |
@@ -327,8 +327,10 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **成员入口**：频道成员与语音舞台显示 LIVE 标记；成员操作弹窗新增「观看屏幕共享」，可直接进入直播。
 - ✅ **生命周期**：Pad 退到后台时释放观看会话，回到前台自动重新加入；全屏观看与货架预览共用同一 WebRTC 会话，退出全屏不会重新协商；直播结束后自动关闭全屏。
 - ✅ **界面**：Join 页新增原生屏幕共享能力介绍；工作区加入低对比环境背景、直播货架、发布状态条和统一 Pad 配色；全部新增文案位于 `phone/pad/src/main/res/values/strings.xml`。
-- ✅ **验证**：`:pad:assembleDebug`、`:pad:assembleRelease -x buildRustLibs`、`:pad:lintDebug`、`:core:testDebugUnitTest`、`:app:testDebugUnitTest` 通过；release APK 已生成。
-- ⏳ **设备验收**：2026-10-21 当前 adb 无连接设备；待 iQOO Pad5c 恢复连接后验证发布/观看、横竖屏、后台恢复、通知停止与对端互通。
+- ✅ **验证**：`:pad:assembleDebug`、`:pad:assembleRelease -x buildRustLibs`、`:pad:lintDebug`、`:core:testDebugUnitTest`、`:app:testDebugUnitTest` 通过；release APK 已生成。ICE 路由修复后重新执行构建与上述测试，全部通过。
+- ✅ **设备验收**（iQOO Pad5c / Android 15）：Pad 发布整屏 → `MoonCC233` 桌面客户端观看；Pad 观看桌面 2560×1600@约30fps（预览 + 全屏）；成员 LIVE、双路货架、横竖屏、后台恢复、通知栏「停止」均通过；权限取消提示正常。
+- ✅ **同时发布 + 观看修复**：ICE 候选原先只按 clid 查找，双端互看时会误投到发布端 peer，导致观看端停在 CONNECTING；现优先按 stream id 分流（仅 `event.streamId == publisher.streamId` 走发布端，否则走 `viewers[event.streamId]`）。修复后 Pad 同时发布并观看桌面流稳定在约 30fps。
+- ⚠️ 外部客户端 `V2505A-Android` 的直播可被发现，但其发布端未完成 WebRTC 应答，Pad 观看端按超时显示「无法连接到此直播」；该问题不在 Pad 观看链路。
 
 ### 2026-10-21：双端发布流水线
 

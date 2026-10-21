@@ -258,6 +258,18 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
 - **实测**：连续两轮退出 → 紧凑入口 → 重看均 `WATCHING`，无 `SDP set failure`；前后台切换
   同样通过。发布端抖动/重传优化暂缓（A3 侧独立事项）。
 
+### 6.7 同时发布 + 观看的 ICE 路由（2026-10-21）
+
+- **现象**：Pad 同时发布自己的屏幕并观看远端直播时，双方均能发现直播、观看端也已生成并发送
+  answer，但画面停在「正在连接画面…」，20 秒后判定失败；只观看不发布时正常。
+- **根因**：`notifystreamsignaling` 的 ICE 候选原先只按 `clid` 查找发布端的 `peers`。当同一位
+  对端既在观看我们、又被我们观看时，该 `clid` 同时存在于 `publisher.peers` 与 `viewers`；
+  观看端收到的候选被误投到发布端的 `PeerConnection`，观看端 PC 始终拿不到候选。
+- **修复**：ICE 候选先按 stream id 判断归属——仅当 `event.streamId == publisher.streamId`
+  时走发布端 `peers[event.peerId]`，否则走 `viewers[event.streamId]`；answer 仍只属于发布端。
+- **实测**：iQOO Pad5c（Android 15）同时发布整屏并观看 `MoonCC233` 桌面流，货架与全屏均稳定
+  在 2560×1600@约 30fps；后台返回后发布与观看自动恢复；通知栏「停止」只停止发布，观看画面继续。
+
 ## 7. 后续工作
 
 1. 系统声音采集（`AudioPlaybackCapture`，`withAudio=true`）——协议与 JS 侧已支持；
@@ -271,6 +283,9 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
 >
 > 已完成（2026-10-20）：首页实时预览卡片、观看端 VP8 offer 裁剪（黑屏修复）、
 > `joinstreamrequest is_remove=1` 主动退订与重看/前后台稳定性，见 §3.2、§6.4、§6.6。
+>
+> 已完成（2026-10-21）：Pad 同时发布 + 观看的 ICE 候选按 stream id 分流，
+> 修复双端互看卡在 CONNECTING；iQOO Pad5c 真机验证通过，见 §6.7。
 
 ## 8. 真机验证步骤（设备接入后执行）
 
