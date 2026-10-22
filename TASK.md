@@ -337,3 +337,16 @@ AI 代理接到本指令后的参考执行顺序：
 - ✅ **Release 扩展**：`.github/workflows/release.yml` 改为同一 Release 同时构建/发布手机端 `:app` 与 Pad 端 `:pad`；tag 触发校验手机版本号，手动触发按 `version` / `pad_version` 自动递增双端版本号与 `versionCode`；产物为 `TS6_Droid_Han-<ver>.apk` / `TS6_Pad-<ver>.apk`，各附 SHA-256 与 R8 mapping。
 - ✅ **Pad 版本显示**：`:pad` 启用 `buildConfig`，加入页版本号改用 `BuildConfig.VERSION_NAME`（`v%1$s · AGPL-3.0`），不再硬编码 `v0.1.0-native`。
 - ✅ **验证**：本地 `:app:assembleRelease :pad:assembleRelease -x buildRustLibs` 与 `testDebugUnitTest` 通过；工作流版本解析/改写逻辑 75 项模拟校验、APK 校验与产物整理 15 项检查通过。
+
+### 2026-10-22：Pad 直播质量、双向互看信令与出流统计
+
+- ✅ **own-stream 认领竞态**：`notifystreamstarted` 先比较 `event.clientId == tsClient.clientId`，不再因为 `publisher.streamId == null` 就认领先到的流；`notifystreaminfo` 忽略 own client；误认领时由后续属于自己的 `StreamStarted` 关闭旧 peers 自愈。修复双方近同时开始共享时“互相当成对方流、加入请求对不上”的问题。
+- ✅ **信令容错**：发布端在 answer 的 `setRemoteDescription` 成功后再 flush 挂起的 ICE；观看端处理 `JoinResponse` 携带的 offer；重复 JoinRequest 替换陈旧 viewer PC；重复 offer 按 `lastOfferSdp` 去重；SDP / ICE 失败时释放对应 PC，避免 UI 永久转圈。
+- ✅ **ICE 分流**：候选按 streamId 区分发布端 / 观看端（`054aad9`），同时发布 + 观看时不再把观看端候选误投给发布端 PC。
+- ✅ **出流统计**：`outbound-rtp` 取主视频流（排除 RTX）；`remote-inbound-rtp` 按 `localId` / SSRC 配对；区间码率 / 丢包 / RTT / NACK 输出到 logcat。码率公式修正为 `Δbytes × 8 / Δt(ms)`（旧实现多除 1000，导致 `tx=0kbps`）；viewer 重连时清空旧采样，避免负码率。
+- ✅ **发布参数**：1440 长边 / 24fps / 4Mbps 上限 / 150kbps 下限，`MAINTAIN_RESOLUTION`；连续两个统计周期 `lim=cpu` 时输出长边自动降 15%（下限 1080，12 秒冷却）。
+- ✅ **构建回归**：`:core:compileDebugKotlin`、`:core:testDebugUnitTest`、`:pad:assembleDebug`、`:app:assembleDebug`、`:pad:lintDebug`、`:app:lintDebug` 通过；`pad-debug.apk` / `app-debug.apk` 已重新生成。
+- ✅ **Pad↔桌面真机复测**：Pad 发布 → 桌面 `MoonCC233` 观看，日志 `Our stream started` / `Answer applied`，无 own-stream 误认领；Pad 观看桌面 2560×1600@约 30fps；同时发布 + 观看、全屏、后台恢复、通知「停止」、权限取消、LIVE 角标、双路货架、隐藏流重开均通过。
+- ⚠️ **网络拓扑**：Pad 使用手机热点 `czx`（192.168.43.105/24）时与桌面 / 手机（校园 Wi-Fi `10.15.73.0/22`）跨网段，桌面观看为 `pair=prflx-srflx/udp`、RTT 150–300ms；切到校园 Wi-Fi `伊犁师范大学` 后 Pad 为 `10.15.75.147/22`，具备 host-host 直连条件。热点场景不适合作为画质基线。
+- ⚠️ **手机互看待完成**：手机 `:app:assembleDebug` 已产出（`com.yuaxi.ts6droid.cn`），但 vivo 安装反复被 `INSTALL_FAILED_ABORTED: User rejected permissions` 阻断；Pad 的 tx 修正 APK 因 ADB 掉线尚未安装。手机发布 → Pad 观看、Pad 发布 → 手机观看、手机 + Pad 同时互看仍待复测。
+- ⚠️ **重复 Pad 会话**：切换 Wi-Fi 后服务器一度出现两个同名 `MoonCC233-pad` 客户端（clid 219 / 220），伴随成员数 3、UI 陈旧、共享按钮无响应；需强制停止并重启 Pad 应用后复核，暂未定位是旧连接超时残留还是重连生命周期问题。

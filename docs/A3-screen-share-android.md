@@ -1,7 +1,10 @@
 # A3 交付：Android 屏幕共享媒体层与 UI（发布端 + 观看端）
 
 > 状态：**实现完成；真机与 TS6 原生客户端双向互通验收通过**（2026-10-18）；
-> A4 首页实时预览 / 主动退订重看 / 前后台恢复真机验收通过（2026-10-20）。
+> A4 首页实时预览 / 主动退订重看 / 前后台恢复真机验收通过（2026-10-20）；
+> Pad 原生端发布 / 观看 / 同时双流真机验收通过（2026-10-21）；
+> 发布参数与出流统计修正（2026-10-22，见 §6.8）。
+> 手机端 ↔ Pad 互看仍需在手机 APK 安装后复测（当前被 vivo 安装闸门阻断）。
 > 协议事实来源见 `docs/A2-screen-share-protocol.md`；本文只描述媒体层与 UI 设计。
 > SDP 兼容性根因与单因素变体矩阵见 §6。
 
@@ -40,7 +43,8 @@
 2. 授权通过 → `ScreenShareService.start(...)` 启动 `mediaProjection` 前台服务（**先 startForeground，再
    getMediaProjection/createVirtualDisplay**，Android 14+ 合规；每次会话均需重新授权）；
 3. 控制器创建 `ScreenCapturerAndroid`（`SurfaceTextureHelper` + `VideoSource(isScreencast=true)`），
-   分辨率等比缩放至 ≤1280×720（偶数对齐）、30 fps；
+   分辨率等比缩放至长边 ≤1440（偶数对齐）、24 fps；运行期连续两个统计周期命中
+   `qualityLimitationReason=cpu` 时，再把输出长边降 15%（下限 1080，12 秒冷却）；
 4. 发送 `setupstream(name, has_audio=false, bitrate=4608, ...)`；服务端回 `notifystreamstarted`（含
    `stream_id`）后进入直播态；
 5. 每收到 `notifystreamjoinrequest(viewer_id)`：为该观看者创建 PC → `addTransceiver` 添加视频轨
@@ -104,7 +108,7 @@
 | 前台服务拆分 | 新增独立 `ScreenShareService`，不改动 `TsConnectionService`（避免与语音/悬浮窗生命周期纠缠；`TsConnectionService` 仅负责 `attach/detach/warmUp`） |
 | 事件流 replay | `screenShareEvents` 使用 `replay=16`，UI 订阅晚于事件到达时仍能恢复直播列表；断线时 `resetReplayCache()` |
 | WebRTC 依赖 | `io.github.webrtc-sdk:android:150.7871.01`（Maven Central / aliyun public 镜像可解析；125+ 支持 16 KB 页大小） |
-| 编码器 | 默认 `DefaultVideoEncoderFactory`（软/硬 VP8/H.264 自适应） |
+| 编码器 | `DefaultVideoEncoderFactory`；码表剔除 H.264/H.265 并把 VP8 置顶（对端兼容性要求，见 §6.5） |
 
 ## 5. 构建与验证现状
 
@@ -120,6 +124,8 @@
 - **单测**：`ScreenShareEventParserTest`（15 项：7 种事件 + 5 种信令 + null `mid`/`m_line` + 未知/畸形负载）通过；
   `gradlew :app:testDebugUnitTest` 全量 61 项通过（Android 单测经 `testImplementation(org.json:json)`
   提供真实 JSON 实现——android.jar 内的 org.json 是抛异常的桩）。
+- **2026-10-22 回归**：`:core:compileDebugKotlin`、`:core:testDebugUnitTest`、`:pad:assembleDebug`、
+  `:app:assembleDebug`、`:pad:lintDebug`、`:app:lintDebug` 均通过（发布统计 / CPU 降档修正后）。
 
 ## 6. TS6 对端 SDP 兼容性（真机实测，2026-10-18）
 
@@ -270,13 +276,49 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
 - **实测**：iQOO Pad5c（Android 15）同时发布整屏并观看 `MoonCC233` 桌面流，货架与全屏均稳定
   在 2560×1600@约 30fps；后台返回后发布与观看自动恢复；通知栏「停止」只停止发布，观看画面继续。
 
+### 6.8 双向互看的信令竞态与出流统计（2026-10-21/22）
+
+Pad 原生端与桌面端同时发布后，暴露出几类只在「近同时开始 / 双向互看」时出现的信令竞态；
+同时发布端 `getStats` 的 `tx` 长期显示 `0kbps`。修正如下：
+
+- **own-stream 认领**：`notifystreamstarted` 不能因为 `publisher.streamId == null` 就认领；
+  先比较 `event.clientId == tsClient.clientId`。双方几乎同时开始共享时，先到的事件可能是
+  对方的流；误认领会把自己的流当成远端流，双向都卡在「无法连接」。`StreamInfo` 同样忽略
+  own client 的条目；若已误认领，后续属于自己的 `StreamStarted` 会关闭旧 peers 并自愈。
+- **answer 后 ICE**：发布端 `setRemoteDescription(answer)` 的 `onSetSuccess` 之前收到观看端
+  ICE，先放入 `pendingCandidates`，成功后统一 flush；避免移动端信令稍慢时候选被静默丢弃，
+  表现为 `Answer applied` 后仍停在 CONNECTING。
+- **JoinRequest / offer 容错**：`notifystreamstarted` 丢失时用 JoinRequest 的 streamId 兜底；
+  同一 viewer 的陈旧 PeerConnection（FAILED/CLOSED/DISCONNECTED 或创建超过 8 秒）在
+  重复 JoinRequest 时替换；重复 offer 用 `lastOfferSdp` 去重；`JoinResponse` 里携带的
+  offer 也走同一 `handleViewerOffer` 路径（TS6 原生发布端可能把首个 SDP 放在这里）。
+- **ICE 分流**：见 §6.7；发布 / 观看双向同时存在时按 streamId 而非仅 clid 路由。
+- **失败清理**：观看端 SDP / ICE 失败走 `failViewer` 释放 PC；发布端 answer 失败关闭对应
+  viewer peer；`closePublisherPeer` 同时清掉该 viewer 的统计采样，防止重连后累计字节
+  归零导致负码率。
+- **出流统计**：`outbound-rtp` 同时存在 RTX 时取 `bytesSent` 最大的主视频流；
+  `remote-inbound-rtp` 先按 `localId == outbound.id`、再按 SSRC 配对，区间丢包用
+  `packetsLost` / `packetsSent` 的增量。码率公式为 `Δbytes × 8 / Δt(ms)`——单位就是
+  kbit/s；旧实现多除了一次 1000，所有 <1Mbps 的区间都被截断为 `tx=0kbps`。
+- **参数默认值**：发布 1440 长边 / 24fps / 4Mbps 上限 / 150kbps 下限，
+  `MAINTAIN_RESOLUTION`（带宽波动优先降帧率、保文字清晰）；软件 VP8 在 1080p 级
+  持续 `lim=cpu` 时自动降档到 1080 长边。
+
+真机观测（iQOO Pad5c）：Pad 发布 + 同时观看桌面流时 1440×1012@24、`lim=none`，
+上传约 1.2Mbps；纯静态画面约 0.3Mbps；连续 CPU 受限后自动降到 1080×756。
+
+> **网络拓扑**：Pad 曾连接手机热点 `czx`（192.168.43.105/24），桌面 / 手机在校园 Wi-Fi
+> `10.15.73.0/22`；跨网段只能走 srflx，桌面观看统计为 `pair=prflx-srflx/udp`、
+> RTT 150–300ms。Pad 切到同一校园 Wi-Fi（10.15.75.147/22）后才具备 host-host 直连条件。
+> 手机 ↔ Pad 互看的最终复测需两端处于同一可互通的 Wi-Fi（AP 客户端隔离会阻断 host 候选）。
+
 ## 7. 后续工作
 
 1. 系统声音采集（`AudioPlaybackCapture`，`withAudio=true`）——协议与 JS 侧已支持；
 2. 自定义 ICE/TURN 设置项（对齐 WebSpeak 的管理端配置语义）；
-3. 发布码率自适应与统计（`getStats` 指标上屏）；
+3. 发布端统计上屏（当前 `getStats` 指标输出到 logcat；观看端已有实时统计面板）；
 4. B6：与 Pad 端发布桥共享媒体层设计（信令结构与控制器接口保持一致）；
-5. 发布端抖动/重传优化（A3；暂缓，待观看侧验收稳定后单独排期）。
+5. 发布端抖动/重传优化（A3；已加入码率 / 丢包 / RTT 观测与 CPU 降档，弱网策略仍待真机调优）。
 
 > 已完成（2026-10-19）：观看入口增强（成员「直播」角标 / 频道直播标记 / 用户面板入口）
 > 与观看窗口打磨（沉浸全屏、旋转、缩放、断流与异常提示），见 §3.2。
@@ -286,6 +328,9 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
 >
 > 已完成（2026-10-21）：Pad 同时发布 + 观看的 ICE 候选按 stream id 分流，
 > 修复双端互看卡在 CONNECTING；iQOO Pad5c 真机验证通过，见 §6.7。
+>
+> 已完成（2026-10-22）：own-stream 认领、answer 后 ICE、JoinResponse / 重复 offer
+> 容错、失败清理与出流统计修正，发布参数收敛到 1440/24 + CPU 自适应降档，见 §6.8。
 
 ## 8. 真机验证步骤（设备接入后执行）
 
@@ -319,7 +364,15 @@ m=audio 9 UDP/TLS/RTP/SAVPF 111 63 9 0 8 13 110 126
      且无 `SDP set failure`；
    - 按 Home 退后台 → 日志 `Left stream`；回前台 → 自动重新 join 并出画面；
    - 全屏下 `adb shell input keyevent KEYCODE_BACK` 退出全屏，应回到预览且会话继续。
-6. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
+6. **Pad 原生端（B5，2026-10-21 增补）**：`cd phone && ./gradlew.bat :pad:assembleDebug` →
+   `adb install -r pad/build/outputs/apk/debug/pad-debug.apk`；
+   - Pad 发布 → 桌面观看：日志 `Publisher started` → `Our stream started` →
+     `Offer sent to viewer ...` → `Answer applied`；
+   - Pad 观看桌面：`Join requested` → `Answer sent` → `Viewer ICE connected` →
+     `Viewer phase ... -> WATCHING`；
+   - 同时发布 + 观看：检查 `Stats v=... pair=host-host/udp tx=...kbps ... lim=...` 与
+     `Viewer stats ... rx=...kbps`；两端应在同一可互通 Wi-Fi（避免热点 / AP 客户端隔离）。
+7. **协议层闭环（A2b，无需手机）**：`cd tslib && cargo run -p screen-share-probe -- <server>:<port> --publish probe`
    应收到 `StreamStarted`；再用两个探针实例（`--publish` / `--join --source-clid <clid>`）交叉验证
    `JoinRequest`、offer/answer 与 ICE 中继。
-7. **验收记录**：结果追加到 TASK.md 第 8 节进度记录（含机型 / 系统版本 / 对端类型）。
+8. **验收记录**：结果追加到 TASK.md 第 8 节进度记录（含机型 / 系统版本 / 对端类型）。

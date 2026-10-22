@@ -27,6 +27,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RTCStats
 import org.webrtc.RtpParameters
 import org.webrtc.RtpTransceiver
 import org.webrtc.ScreenCapturerAndroid
@@ -70,22 +71,33 @@ object ScreenShareController {
      *
      * 历史配置是 1280x720 的「盒子」——竖屏手机（如 1080x2384）等比缩放后
      * 宽度只剩 ~326px，文字完全不可读，这是「画质堪忧」的直接原因。
-     * 现按长边上限缩放：1920 长边兼顾文字清晰度与软件编码（VP8）吞吐
-     * （本机竖屏输出约 868x1920，接近原生 1080x2384 的 80% 线性分辨率）。
-     * 若 Stats 观测到 fps 明显低于 30 且 lim=cpu，可下调此值。
+     * 1920 长边虽然清晰，但 Android 端只有 VP8 软件编码器（无 VP8/VP9
+     * 硬件编码），1080p 级别 + 30fps 会让编码器长期处于 lim=cpu，
+     * 表现为高延迟、抖动和重传。现折中为 1440 长边 + 24fps：
+     * 竖屏手机输出约 652x1440（文字仍可读），编码像素吞吐比 1920/30
+     * 降低约 55%；Pad 输出约 1440x1010。
+     *
+     * 运行期还会根据 `qualityLimitationReason=cpu` 自动再降一档
+     * （见 [maybeAdaptToCpuLimit]），下限 [MIN_CAPTURE_LONG_SIDE]。
      */
-    private const val MAX_CAPTURE_LONG_SIDE = 1920
-    private const val CAPTURE_FPS = 30
+    private const val MAX_CAPTURE_LONG_SIDE = 1440
+    private const val MIN_CAPTURE_LONG_SIDE = 1080
+    private const val CAPTURE_FPS = 24
 
     /**
      * 发布侧编码参数。
      *
      * 屏幕共享第一优先级是文字清晰：维持分辨率（MAINTAIN_RESOLUTION），
-     * 带宽波动时优先降帧率而非降清晰度；码率上限放开到 5 Mbps
+     * 带宽波动时优先降帧率而非降清晰度；码率上限 4 Mbps
      * （实际上行速率由带宽估计器实时控制，此处只是天花板）。
+     * min 取 150kbps，让弱网时编码器能真正退让，避免队列堆积导致延迟。
      */
-    private const val VIDEO_MAX_BITRATE_BPS = 5_000_000
-    private const val VIDEO_MIN_BITRATE_BPS = 300_000
+    private const val VIDEO_MAX_BITRATE_BPS = 4_000_000
+    private const val VIDEO_MIN_BITRATE_BPS = 150_000
+
+    /** CPU 受限自动降档：连续命中次数 / 两次降档的最小间隔 */
+    private const val CPU_LIMIT_STREAK_REQUIRED = 2
+    private const val CPU_DOWNSCALE_COOLDOWN_MS = 12_000L
 
     /** 出流质量统计的输出间隔（联调观测用） */
     private const val STATS_INTERVAL_MS = 5_000L
@@ -195,13 +207,24 @@ object ScreenShareController {
         /** 出流质量统计任务（每 [STATS_INTERVAL_MS] 输出一次） */
         var statsJob: Job? = null
 
-        /** viewerId -> [已发送字节数, 采样时刻(ms)]，用于计算实时码率 */
-        val lastStats = mutableMapOf<Int, LongArray>()
+        /** viewerId -> 上一次出流采样，用于计算实时码率 / 区间丢包 */
+        val lastStats = mutableMapOf<Int, PublisherSample>()
 
         /** viewerId -> PeerConnection */
         val peers = mutableMapOf<Int, PeerConnection>()
         val remoteDescriptionSet = mutableMapOf<Int, Boolean>()
         val pendingCandidates = mutableMapOf<Int, MutableList<IceCandidate>>()
+
+        /** viewerId -> 创建时刻（elapsedRealtime），用于识别重连/陈旧 PeerConnection */
+        val peerCreatedAt = mutableMapOf<Int, Long>()
+
+        /** 采集原始尺寸 & 当前输出长边（CPU 自适应降档用） */
+        var captureWidth: Int = 0
+        var captureHeight: Int = 0
+        var currentLongSide: Int = 0
+        var lastCpuAdaptAt: Long = 0L
+        var lastQualitySampleAt: Long = 0L
+        var cpuLimitedStreak: Int = 0
     }
 
     /**
@@ -221,9 +244,20 @@ object ScreenShareController {
         val audioBytesReceived: Long?,
     )
 
+    /** 发布端一次出流采样（累计值），用于计算区间码率与区间丢包率 */
+    private class PublisherSample(
+        val atMs: Long,
+        val bytesSent: Double,
+        val packetsSent: Double,
+        val packetsLost: Double,
+    )
+
     private class ViewerState(val streamId: String, val sourceClientId: Int) {
         var peer: PeerConnection? = null
         var remoteVideoTrack: VideoTrack? = null
+
+        /** 最近一次已处理的 offer，用于去重 joinResponse / respondjoinstreamrequest */
+        var lastOfferSdp: String? = null
 
         /** renderer -> 实际挂到轨道上的 sink（含首帧检测包装） */
         val sinks = mutableListOf<ViewerSink>()
@@ -336,6 +370,9 @@ object ScreenShareController {
                 state.surfaceHelper = helper
                 state.videoSource = source
                 state.videoTrack = f.createVideoTrack("screen0", source)
+                state.captureWidth = width
+                state.captureHeight = height
+                state.currentLongSide = maxOf(width, height)
                 publisher = state
                 _publishing.value = true
                 startStatsLogger(state)
@@ -386,6 +423,8 @@ object ScreenShareController {
         state.peers.clear()
         state.pendingCandidates.clear()
         state.remoteDescriptionSet.clear()
+        state.peerCreatedAt.clear()
+        state.lastStats.clear()
         state.capturer?.let {
             runCatching { it.stopCapture() }
             runCatching { it.dispose() }
@@ -399,15 +438,48 @@ object ScreenShareController {
     /** 观看者请求观看：为其创建 PeerConnection 并生成 offer（发布端方向） */
     private fun handleJoinRequest(streamId: String, viewerId: Int) {
         val state = publisher ?: return
-        if (state.streamId != streamId || state.peers.containsKey(viewerId)) return
-        val f = factory ?: return
+        if (state.streamId == null) {
+            // 容错：若自己的 notifystreamstarted 丢失／晚到，但服务器已经把针对该流的
+            // 加入请求路由给我们，则直接采用请求中的 streamId，避免 offer 永远不发。
+            state.streamId = streamId
+            Log.i(TAG, "Adopted stream id from join request: $streamId")
+        }
+        if (state.streamId != streamId) return
 
+        val existing = state.peers[viewerId]
+        if (existing != null) {
+            val ageMs = SystemClock.elapsedRealtime() -
+                (state.peerCreatedAt[viewerId] ?: 0L)
+            val connectionState = existing.connectionState()
+            val stale = connectionState == PeerConnection.PeerConnectionState.FAILED ||
+                connectionState == PeerConnection.PeerConnectionState.CLOSED ||
+                connectionState == PeerConnection.PeerConnectionState.DISCONNECTED ||
+                ageMs > 8_000L
+            if (!stale) {
+                Log.i(
+                    TAG,
+                    "Duplicate join from viewer $viewerId ignored" +
+                        " (age=${ageMs}ms state=$connectionState)",
+                )
+                return
+            }
+            // 旧 PC 已失效（常见于观看端超时/重进，而发布端没收到 ViewerLeft）。
+            // 继续复用会永远等不到 answer，必须换一条新 PC 重新发 offer。
+            Log.i(
+                TAG,
+                "Replacing stale viewer peer $viewerId (age=${ageMs}ms state=$connectionState)",
+            )
+            closePublisherPeer(streamId, viewerId)
+        }
+
+        val f = factory ?: return
         val pc = f.createPeerConnection(rtcConfig(), publisherObserver(state, viewerId))
         if (pc == null) {
             Log.e(TAG, "createPeerConnection failed for viewer $viewerId")
             return
         }
         state.peers[viewerId] = pc
+        state.peerCreatedAt[viewerId] = SystemClock.elapsedRealtime()
         // 发布端视频方向必须是 sendonly：TS6 客户端对收到的 offer 执行
         // 「会话版本改写 + SDP 校验」管线（StreamP2P::HandleRemoteOffer →
         // MangleSessionVersion），其中 a=sendrecv 会被静默拒收、不产生任何
@@ -486,6 +558,10 @@ object ScreenShareController {
         state.peers.remove(viewerId)?.let { runCatching { it.close() } }
         state.pendingCandidates.remove(viewerId)
         state.remoteDescriptionSet.remove(viewerId)
+        state.peerCreatedAt.remove(viewerId)
+        // 重连的观看者会拿到新的 PeerConnection，累计字节从 0 重新开始；
+        // 保留旧采样会算出负码率，必须一并清掉。
+        state.lastStats.remove(viewerId)
         Log.i(TAG, "Viewer peer closed: $viewerId")
     }
 
@@ -603,6 +679,7 @@ object ScreenShareController {
         state.peer?.let { runCatching { it.close() } }
         state.peer = null
         state.pendingCandidates.clear()
+        state.lastOfferSdp = null
         state.lastStatsSample = null
     }
 
@@ -778,6 +855,11 @@ object ScreenShareController {
             Log.w(TAG, "Offer for unknown stream $streamId")
             return
         }
+        if (state.remoteDescriptionSet && offerSdp == state.lastOfferSdp) {
+            Log.i(TAG, "Duplicate offer ignored for stream $streamId")
+            return
+        }
+        state.lastOfferSdp = offerSdp
         val pc = state.peer ?: return
         // 观看端解码偏好：在喂给本地 PeerConnection 之前裁掉 AV1/VP9/H264/H265，
         // 只保留 VP8（及其 rtx / FEC）。这样 libwebrtc 自己生成的 answer 天然只含
@@ -856,9 +938,38 @@ object ScreenShareController {
         when (event) {
             is ScreenShareEvent.StreamStarted -> {
                 val state = publisher
-                if (state != null && state.streamId == null) {
+                val ownClientId = tsClient?.clientId
+                // 关键：不能仅凭「publisher 还没拿到 streamId」就认领任意 StreamStarted。
+                // 双方几乎同时开始共享时，先收到的可能是对方的流；旧逻辑会把对方的
+                // streamId 记成自己的，随后自己的流反被当作远端流，导致加入请求永远
+                // 匹配不上（双方互相看不到）。有自身 clid 时必须严格比对。
+                val isOwnStream = ownClientId == null || event.clientId == ownClientId
+                if (state != null && isOwnStream && state.streamId == null) {
                     state.streamId = event.streamId
                     Log.i(TAG, "Our stream started: ${event.streamId}")
+                } else if (isOwnStream && state != null) {
+                    if (state.streamId != event.streamId) {
+                        // 自愈：极少数情况下 publisher 可能先认领了错误的流 id。
+                        // 收到属于本客户端的新 streamStarted 时纠正，并丢弃旧会话。
+                        signaling.execute {
+                            if (publisher !== state) return@execute
+                            if (state.streamId != event.streamId) {
+                                Log.w(
+                                    TAG,
+                                    "Correcting publisher stream id:" +
+                                        " ${state.streamId} -> ${event.streamId}",
+                                )
+                                state.peers.values.forEach { runCatching { it.close() } }
+                                state.peers.clear()
+                                state.pendingCandidates.clear()
+                                state.remoteDescriptionSet.clear()
+                                state.peerCreatedAt.clear()
+                                state.streamId = event.streamId
+                            }
+                        }
+                    } else {
+                        Log.i(TAG, "Duplicate own stream started: ${event.streamId}")
+                    }
                 } else {
                     upsertRemote(
                         RemoteStream(event.streamId, event.clientId, event.name, event.audio),
@@ -866,9 +977,16 @@ object ScreenShareController {
                 }
             }
 
-            is ScreenShareEvent.StreamInfo -> upsertRemote(
-                RemoteStream(event.streamId, event.clientId, event.name, event.audio),
-            )
+            is ScreenShareEvent.StreamInfo -> {
+                val ownClientId = tsClient?.clientId
+                if (ownClientId != null && event.clientId == ownClientId) {
+                    Log.i(TAG, "Ignoring stream info for own client ${event.streamId}")
+                } else {
+                    upsertRemote(
+                        RemoteStream(event.streamId, event.clientId, event.name, event.audio),
+                    )
+                }
+            }
 
             is ScreenShareEvent.StreamStopped -> {
                 removeRemote(event.streamId)
@@ -887,7 +1005,10 @@ object ScreenShareController {
             }
 
             is ScreenShareEvent.JoinRequest -> {
-                if (publisher?.streamId == event.streamId) {
+                val state = publisher
+                if (state != null &&
+                    (state.streamId == null || state.streamId == event.streamId)
+                ) {
                     signaling.execute { handleJoinRequest(event.streamId, event.viewerId) }
                 }
             }
@@ -910,20 +1031,50 @@ object ScreenShareController {
         when (val signal = event.signal) {
             is ScreenShareSignal.Answer -> {
                 val state = publisher ?: return
-                val pc = state.peers[event.peerId] ?: return
-                pc.setRemoteDescription(
-                    SdpObserverAdapter(),
-                    SessionDescription(SessionDescription.Type.ANSWER, signal.sdp),
-                )
-                state.remoteDescriptionSet[event.peerId] = true
-                state.pendingCandidates.remove(event.peerId)?.forEach {
-                    runCatching { pc.addIceCandidate(it) }
+                val streamId = state.streamId
+                if (streamId != null && streamId != event.streamId) {
+                    Log.w(
+                        TAG,
+                        "Ignoring answer for stream ${event.streamId} (publishing $streamId)",
+                    )
+                    return
                 }
-                // 联调观测：answer 的 m=video 行（桌面端保留的 PT 列表）；
-                // 并重试编码参数（确保在协商完成后生效）。
+                val pc = state.peers[event.peerId] ?: return
+                // 联调观测：answer 的 m=video 行（桌面端保留的 PT 列表）。
                 val videoLine = signal.sdp.split("\r\n").firstOrNull { it.startsWith("m=video") }
                 Log.i(TAG, "Answer from viewer ${event.peerId}: $videoLine")
-                applySenderParams(pc, event.peerId)
+                // setRemoteDescription 是异步的：必须等 onSetSuccess 之后再标记
+                // remoteDescriptionSet / flush pending ICE，否则在 answer 尚未生效时
+                // addIceCandidate 会失败并被静默丢弃（移动端信令慢时尤其明显）。
+                pc.setRemoteDescription(
+                    object : SdpObserverAdapter() {
+                        override fun onSetSuccess() {
+                            state.remoteDescriptionSet[event.peerId] = true
+                            state.pendingCandidates.remove(event.peerId)?.forEach {
+                                runCatching { pc.addIceCandidate(it) }
+                                    .onFailure { e ->
+                                        Log.w(
+                                            TAG,
+                                            "Pending ICE add failed for viewer ${event.peerId}",
+                                            e,
+                                        )
+                                    }
+                            }
+                            // 协商完成后重试编码参数，确保 maxBitrate/fps 生效。
+                            applySenderParams(pc, event.peerId)
+                            Log.i(TAG, "Answer applied for viewer ${event.peerId}")
+                        }
+
+                        override fun onSetFailure(error: String) {
+                            Log.e(
+                                TAG,
+                                "Answer set failed for viewer ${event.peerId}: $error",
+                            )
+                            closePublisherPeer(event.streamId, event.peerId)
+                        }
+                    },
+                    SessionDescription(SessionDescription.Type.ANSWER, signal.sdp),
+                )
             }
 
             is ScreenShareSignal.IceCandidate -> {
@@ -956,7 +1107,18 @@ object ScreenShareController {
             }
 
             is ScreenShareSignal.JoinResponse -> {
-                if (!signal.decision) {
+                if (signal.decision) {
+                    // TS6 原生发布端有时把首个 SDP 放在
+                    // notifystreamsignaling(cmd=joinResponse) 里，而不是
+                    // notifyrespondjoinstreamrequest。忽略它会让观看端一直等到超时。
+                    val offer = signal.offer
+                    if (!offer.isNullOrBlank()) {
+                        Log.i(TAG, "Join response carries offer for ${event.streamId}")
+                        handleViewerOffer(event.streamId, offer)
+                    } else {
+                        Log.w(TAG, "Join accepted but no offer for ${event.streamId}")
+                    }
+                } else {
                     Log.w(TAG, "Join rejected for stream ${event.streamId}")
                     _lastError.value = "join_rejected"
                     signaling.execute {
@@ -1018,7 +1180,22 @@ object ScreenShareController {
         ) {
             return
         }
-        Log.w(TAG, "Viewer failed for $streamId (phase=$phase)")
+        failViewer(streamId, "join timeout / negotiation failure")
+    }
+
+    /**
+     * 将会话标记为 FAILED 并彻底释放（含主动退订），使发布端也能立即回收旧 PC。
+     * 与 [failViewerIfBusy] 不同，本方法允许在 WATCHING 阶段调用（ICE FAILED 时）。
+     */
+    private fun failViewer(streamId: String, reason: String) {
+        val phase = _viewerPhases.value[streamId] ?: return
+        if (phase == ViewerPhase.ENDED ||
+            phase == ViewerPhase.REJECTED ||
+            phase == ViewerPhase.FAILED
+        ) {
+            return
+        }
+        Log.w(TAG, "Viewer failed for $streamId (phase=$phase, $reason)")
         // 先发布 FAILED（setViewerPhase 要求 viewers 中仍有该流），再释放会话。
         setViewerPhase(streamId, ViewerPhase.FAILED)
         viewers.remove(streamId)?.let { state ->
@@ -1050,7 +1227,10 @@ object ScreenShareController {
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState) {
                 if (newState == PeerConnection.IceConnectionState.FAILED) {
                     Log.w(TAG, "ICE failed for viewer $viewerId")
-                    closePublisherPeer(state.streamId, viewerId)
+                    // PeerConnection 回调不在 signaling 线程上，peer map 只能在该线程改。
+                    signaling.execute {
+                        closePublisherPeer(state.streamId, viewerId)
+                    }
                 }
             }
 
@@ -1106,7 +1286,9 @@ object ScreenShareController {
                     }
                     PeerConnection.IceConnectionState.FAILED -> {
                         Log.w(TAG, "Viewer ICE failed: ${state.streamId}")
-                        signaling.execute { setViewerPhase(state.streamId, ViewerPhase.FAILED) }
+                        signaling.execute {
+                            failViewer(state.streamId, "ICE failed")
+                        }
                     }
                     else -> Unit
                 }
@@ -1361,6 +1543,48 @@ object ScreenShareController {
         )
     }
 
+    /**
+     * 软件 VP8 编码器在 1080p/30fps 下长期 `lim=cpu`：编码队列会直接转化为
+     * 端到端延迟和帧丢弃。连续两个统计周期都命中 CPU 限制时，把 VideoSource
+     * 的输出长边降 15%（最低 [MIN_CAPTURE_LONG_SIDE]），并保持 [CAPTURE_FPS]
+     * 不变；降档有冷却时间，避免画质来回抖动。
+     *
+     * 注意：VideoSource 是所有观看者共享的，降档会影响全部出流。
+     */
+    private fun maybeAdaptToCpuLimit(
+        state: PublisherState,
+        limitation: String?,
+        now: Long,
+    ) {
+        // 多观看者时 getStats 回调会连续到达，只按统计周期采样一次。
+        if (now - state.lastQualitySampleAt < STATS_INTERVAL_MS - 500L) return
+        state.lastQualitySampleAt = now
+        if (limitation == "cpu") {
+            state.cpuLimitedStreak += 1
+        } else {
+            state.cpuLimitedStreak = 0
+        }
+        if (state.cpuLimitedStreak < CPU_LIMIT_STREAK_REQUIRED) return
+        if (now - state.lastCpuAdaptAt < CPU_DOWNSCALE_COOLDOWN_MS) return
+        val source = state.videoSource ?: return
+        val nextLongSide = (state.currentLongSide * 0.85).toInt()
+            .coerceAtLeast(MIN_CAPTURE_LONG_SIDE)
+        if (nextLongSide >= state.currentLongSide) return
+        val (width, height) = scaleToLongSide(
+            state.captureWidth,
+            state.captureHeight,
+            nextLongSide,
+        )
+        state.currentLongSide = maxOf(width, height)
+        state.cpuLimitedStreak = 0
+        state.lastCpuAdaptAt = now
+        source.adaptOutputFormat(width, height, CAPTURE_FPS)
+        Log.w(
+            TAG,
+            "CPU limited: source downscaled to ${width}x$height @${CAPTURE_FPS}fps",
+        )
+    }
+
     /** 启动出流质量统计（每 [STATS_INTERVAL_MS] 一次，发布期间持续） */
     private fun startStatsLogger(state: PublisherState) {
         state.statsJob?.cancel()
@@ -1388,15 +1612,21 @@ object ScreenShareController {
                     try {
                         val codecs = mutableMapOf<String, String>()
                         val candidates = mutableMapOf<String, Map<String, Any>>()
-                        var outbound: Map<String, Any>? = null
-                        var remoteIn: Map<String, Any>? = null
+                        var outbound: RTCStats? = null
+                        val remoteIns = mutableListOf<RTCStats>()
                         var pair: Map<String, Any>? = null
                         for (s in report.statsMap.values) {
                             val m = s.members
                             when (s.type) {
                                 "codec" -> codecs[s.id] = m["mimeType"] as? String ?: "?"
-                                "outbound-rtp" -> if (m["kind"] == "video") outbound = m
-                                "remote-inbound-rtp" -> if (m["kind"] == "video") remoteIn = m
+                                "outbound-rtp" -> if (m["kind"] == "video") {
+                                    // 同时可能存在 RTX 出流；取累计发送字节最大的主视频流，
+                                    // 避免把 RTX 的 0 字节/空帧宽当成主编码器统计。
+                                    val bytes = m.statNum("bytesSent") ?: 0.0
+                                    val current = outbound?.members?.statNum("bytesSent") ?: -1.0
+                                    if (bytes > current) outbound = s
+                                }
+                                "remote-inbound-rtp" -> if (m["kind"] == "video") remoteIns.add(s)
                                 "candidate-pair" ->
                                     if (m["state"] == "succeeded" && (m["nominated"] == true || pair == null)) {
                                         pair = m
@@ -1404,7 +1634,8 @@ object ScreenShareController {
                                 "local-candidate", "remote-candidate" -> candidates[s.id] = m
                             }
                         }
-                        val o = outbound
+                        val outboundStats = outbound
+                        val o = outboundStats?.members
                         if (o == null) {
                             Log.i(
                                 TAG,
@@ -1413,19 +1644,57 @@ object ScreenShareController {
                             )
                             return@getStats
                         }
+                        // remote-inbound-rtp.localId 指向对应的 outbound-rtp；多 SSRC/RTX
+                        // 时按该引用配对，保证 jitter/loss/rtt 与主视频流一致。
+                        val remoteInStats = remoteIns.firstOrNull {
+                            it.members["localId"] == outboundStats.id
+                        } ?: remoteIns.firstOrNull {
+                            it.members["ssrc"] == o["ssrc"]
+                        } ?: remoteIns.firstOrNull()
+                        val rm = remoteInStats?.members
                         val bytes = o.statNum("bytesSent")
+                        val sent = o.statNum("packetsSent")
+                        val lost = rm?.statNum("packetsLost")
                         val now = SystemClock.elapsedRealtime()
                         val prev = state.lastStats[viewerId]
-                        val kbps = if (bytes != null && prev != null && now > prev[1]) {
-                            ((bytes - prev[0]) * 8.0 / (now - prev[1]) / 1000.0).toInt()
+                        val kbps = if (bytes != null && prev != null) {
+                            val delta = bytes - prev.bytesSent
+                            if (delta >= 0 && now > prev.atMs) {
+                                // bytes*8/dt(ms) 的单位就是 kbit/s，不能再除 1000。
+                                (delta * 8.0 / (now - prev.atMs)).toInt()
+                            } else {
+                                -1
+                            }
                         } else {
                             -1
                         }
-                        if (bytes != null) state.lastStats[viewerId] = longArrayOf(bytes.toLong(), now)
-                        val loss = remoteIn?.statNum("packetsLost")
-                        val sent = o.statNum("packetsSent")
-                        val lossPct =
-                            if (loss != null && sent != null && sent > 0) loss / sent * 100.0 else null
+                        val sentDelta = if (sent != null && prev != null) {
+                            sent - prev.packetsSent
+                        } else {
+                            null
+                        }
+                        val lostDelta = if (lost != null && prev != null) {
+                            lost - prev.packetsLost
+                        } else {
+                            null
+                        }
+                        val lossPct = if (sentDelta != null && sentDelta > 0 &&
+                            lostDelta != null && lostDelta >= 0
+                        ) {
+                            lostDelta / sentDelta * 100.0
+                        } else {
+                            null
+                        }
+                        if (bytes != null) {
+                            state.lastStats[viewerId] = PublisherSample(
+                                atMs = now,
+                                bytesSent = bytes,
+                                packetsSent = sent ?: prev?.packetsSent ?: 0.0,
+                                packetsLost = lost ?: prev?.packetsLost ?: 0.0,
+                            )
+                        }
+                        val limitation = o["qualityLimitationReason"] as? String
+                        maybeAdaptToCpuLimit(state, limitation, now)
                         val pairDesc = pair?.let { p ->
                             val lc = candidates[p["localCandidateId"] as? String ?: ""]
                             val rc = candidates[p["remoteCandidateId"] as? String ?: ""]
@@ -1439,11 +1708,13 @@ object ScreenShareController {
                                 " fps=${o.statNum("framesPerSecond")?.toInt()}" +
                                 " res=${o.statNum("frameWidth")?.toInt()}x${o.statNum("frameHeight")?.toInt()}" +
                                 " retrans=${o.statNum("retransmittedPacketsSent")?.toInt()}" +
+                                " nack=${o.statNum("nackCount")?.toInt()}" +
+                                " drop=${o.statNum("framesDropped")?.toInt()}" +
                                 " loss=${lossPct?.let { String.format("%.1f%%", it) }}" +
-                                " jit=${remoteIn?.statNum("jitter")?.let { "${(it * 1000).toInt()}ms" }}" +
-                                " rtt=${remoteIn?.statNum("roundTripTime")?.let { "${(it * 1000).toInt()}ms" }}" +
+                                " jit=${rm?.statNum("jitter")?.let { "${(it * 1000).toInt()}ms" }}" +
+                                " rtt=${rm?.statNum("roundTripTime")?.let { "${(it * 1000).toInt()}ms" }}" +
                                 " pair=$pairDesc" +
-                                " lim=${o["qualityLimitationReason"]}",
+                                " lim=$limitation",
                         )
                     } catch (e: Throwable) {
                         Log.w(TAG, "Stats parse failed for viewer $viewerId", e)
